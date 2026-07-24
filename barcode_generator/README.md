@@ -6,7 +6,11 @@ Validates ISBN-13 values, generates EAN-13 barcode PNG images, skips existing
 images, and writes a JSON results file. Packaged for Windows via PyInstaller.
 
 **Package:** `classroom_library_label_maker`  
-**Version:** see [`VERSION`](VERSION) · **Changes:** [`CHANGELOG.md`](CHANGELOG.md)
+**Version:** see [`VERSION`](VERSION) and `metadata.APP_VERSION` · **Changes:** [`CHANGELOG.md`](CHANGELOG.md)
+
+Product identity (name, license, authorship, CLI name) lives in
+`src/classroom_library_label_maker/metadata.py` — treat that module as the
+single source of truth and avoid hardcoding branding strings elsewhere.
 
 ## Requirements
 
@@ -28,11 +32,16 @@ barcode_generator/
 │   └── classroom_library_label_maker/
 │       ├── __init__.py
 │       ├── __main__.py
-│       ├── main.py                 # CLI / startup only
+│       ├── main.py                 # Startup only
+│       ├── metadata.py             # Product identity (single source of truth)
 │       ├── constants.py
 │       ├── config.py               # ApplicationSettings + ProjectPaths
 │       ├── logger.py               # Rotating + console logging
 │       ├── models.py               # Domain dataclasses / enums
+│       ├── exceptions.py           # ApplicationError hierarchy
+│       ├── cli/
+│       │   ├── parser.py           # Argparse + subcommands
+│       │   └── commands.py         # Command handlers + dispatch
 │       ├── services/
 │       │   ├── barcode_generator.py
 │       │   ├── batch_processor.py
@@ -106,24 +115,35 @@ python -m pytest
 
 ## Versioning
 
-- Source of truth: plain-text [`VERSION`](VERSION)
+- Python source of truth for identity: `metadata.py`
+- On-disk SemVer file: [`VERSION`](VERSION) (also used by setuptools)
+- Keep `APP_VERSION` and `VERSION` identical when releasing
 - Human history: Keep a Changelog in [`CHANGELOG.md`](CHANGELOG.md)
-- Align `pyproject.toml` `[project].version` when cutting a release
 - Semantic Versioning: `MAJOR.MINOR.PATCH`
 
 ## Run (CLI)
 
+Commands: `generate` (default), `version`, plus reserved `validate` /
+`clean` / `diagnostics`.
+
 ```powershell
-python -m classroom_library_label_maker `
+# Preferred explicit form
+python -m classroom_library_label_maker generate `
   --input assets\sample-data\sample-books.json `
   --output-dir output\barcodes `
   --results output\results.json `
   --log-file logs\application.log
+
+# Legacy form (still supported; maps to generate)
+python -m classroom_library_label_maker `
+  --input assets\sample-data\sample-books.json `
+  --results output\results.json
+
+python -m classroom_library_label_maker version
 ```
 
 > Core ISBN check-digit validation and PNG generation still raise
 > `NotImplementedError` by design until Sprint 1 feature work.
-
 ## Related documentation
 
 - [Architecture](../docs/Architecture.md)

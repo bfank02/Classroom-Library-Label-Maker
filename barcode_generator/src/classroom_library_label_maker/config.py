@@ -24,6 +24,7 @@ from classroom_library_label_maker.constants import (
     SAMPLE_BOOKS_FILE_NAME,
     VERSION_FILE_NAME,
 )
+from classroom_library_label_maker.metadata import APP_VERSION
 from classroom_library_label_maker.models import ApplicationSettings
 
 
@@ -61,14 +62,22 @@ def find_project_root(start: Path | None = None) -> Path:
 def read_version(project_root: Path | None = None) -> str:
     """Read the component version from the ``VERSION`` file.
 
+    Prefers the on-disk ``VERSION`` file when the project tree is available.
+    Falls back to :data:`~classroom_library_label_maker.metadata.APP_VERSION`
+    when the file cannot be located (for example, a bare wheel install).
+
     Args:
         project_root: Optional project root; discovered automatically when omitted.
 
     Returns:
         Stripped version string (e.g. ``\"0.1.0\"``).
     """
-    root = project_root or find_project_root()
-    return (root / VERSION_FILE_NAME).read_text(encoding="utf-8").strip()
+    try:
+        root = project_root or find_project_root()
+        text = (root / VERSION_FILE_NAME).read_text(encoding="utf-8").strip()
+    except (OSError, FileNotFoundError):
+        return APP_VERSION
+    return text or APP_VERSION
 
 
 class ProjectPaths:

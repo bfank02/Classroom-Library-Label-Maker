@@ -3,8 +3,9 @@ requires = ["setuptools>=75", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
+# Keep name/description/license/authors aligned with
+# classroom_library_label_maker.metadata (Python single source of truth).
 name = "classroom-library-barcode-generator"
-version = "0.1.0"
 description = "Generate EAN-13 barcode PNGs for classroom library books from JSON input."
 readme = "README.md"
 requires-python = ">=3.13"
@@ -12,6 +13,7 @@ license = { text = "MIT" }
 authors = [
     { name = "Classroom Library Label Maker contributors" },
 ]
+dynamic = ["version"]
 dependencies = [
     "python-barcode>=0.15.1",
     "Pillow>=11.0.0",
@@ -33,6 +35,9 @@ barcode-generator = "classroom_library_label_maker.main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.dynamic]
+version = { file = "VERSION" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

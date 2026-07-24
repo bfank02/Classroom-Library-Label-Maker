@@ -1,17 +1,64 @@
 """Classroom Library Label Maker — barcode generator package.
 
-This package validates ISBNs and generates EAN-13 barcode images for
-classroom library inventory workflows.
+Public API exports are intentionally narrow. Prefer importing from the
+specific submodules (``models``, ``config``, ``services``, ``exceptions``,
+``metadata``) in application code; this package root exposes common types
+and version metadata.
 """
 
 from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
 
-__all__ = ["__version__"]
+from classroom_library_label_maker.exceptions import (
+    ApplicationError,
+    BarcodeGenerationError,
+    ConfigurationError,
+    FileSystemError,
+    InvalidISBNError,
+    InvalidWorkbookError,
+    ValidationError,
+)
+from classroom_library_label_maker.metadata import (
+    APP_AUTHOR,
+    APP_CLI_NAME,
+    APP_DESCRIPTION,
+    APP_DISTRIBUTION_NAME,
+    APP_LICENSE,
+    APP_NAME,
+    APP_VERSION,
+)
+from classroom_library_label_maker.models import (
+    ApplicationSettings,
+    BarcodeGenerationResult,
+    BarcodeStatus,
+    Book,
+    ValidationResult,
+)
+
+__all__ = [
+    "APP_AUTHOR",
+    "APP_CLI_NAME",
+    "APP_DESCRIPTION",
+    "APP_LICENSE",
+    "APP_NAME",
+    "APP_VERSION",
+    "ApplicationError",
+    "ApplicationSettings",
+    "BarcodeGenerationError",
+    "BarcodeGenerationResult",
+    "BarcodeStatus",
+    "Book",
+    "ConfigurationError",
+    "FileSystemError",
+    "InvalidISBNError",
+    "InvalidWorkbookError",
+    "ValidationError",
+    "ValidationResult",
+    "__version__",
+]
 
 try:
-    __version__ = version("classroom-library-barcode-generator")
+    __version__ = version(APP_DISTRIBUTION_NAME)
 except PackageNotFoundError:
-    # Editable / source-tree runs before the distribution metadata exists.
-    __version__ = "0.1.0"
+    __version__ = APP_VERSION

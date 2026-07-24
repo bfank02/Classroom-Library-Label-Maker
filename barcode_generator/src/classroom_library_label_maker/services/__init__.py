@@ -1,4 +1,9 @@
-"""Service-layer components for barcode generation."""
+"""Service-layer components for barcode generation.
+
+Prefer importing concrete services from this package for typical call sites.
+Extension protocols live in ``services.protocols``; future providers belong
+under ``services.lookups`` and ``services.covers``.
+"""
 
 from __future__ import annotations
 

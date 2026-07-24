@@ -15,12 +15,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reorganized assets into `icons/`, `templates/`, `sample-data/`, `resources/`
 - Expanded domain models and `ApplicationSettings` / `ProjectPaths`
 - Switched file logging to `RotatingFileHandler` (`logs/application.log`)
+- Moved CLI parsing and command dispatch into `cli/` (`main.py` is startup only)
+- Centralized product identity in `metadata.py` (CLI, logs, package exports)
 
 ### Added
 
 - Extension packages `services/lookups/` and `services/covers/`
 - `services/protocols.py` for future enrichment providers
 - `tests/integration/` placeholder for end-to-end tests
+- `exceptions.py` application error hierarchy
+- CLI subcommands: `generate`, `version`, plus reserved `validate` / `clean` /
+  `diagnostics`
+- `metadata.py` as the single source of truth for application metadata
 
 ## [0.1.0] - 2026-07-24 — Initial Development
 
