@@ -1,0 +1,8 @@
+# Non-Python files included in source distributions.
+include VERSION
+include CHANGELOG.md
+include README.md
+include requirements.txt
+include build.bat
+recursive-include assets *
+recursive-include tests *

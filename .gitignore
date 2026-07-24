@@ -1,0 +1,60 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Testing / coverage
+.pytest_cache/
+pytest-cache-files-*/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Excel temporary / backup files
+~$*
+*.tmp
+*.bak
+
+# Local secrets / env
+.env
+.env.*
+
+# Release artifacts (keep folder, ignore built packages)
+releases/*
+!releases/.gitkeep
+
+# Barcode generator runtime output (preserve folder structure via .gitkeep)
+barcode_generator/output/barcodes/*
+!barcode_generator/output/barcodes/.gitkeep
+
+barcode_generator/logs/*
+!barcode_generator/logs/.gitkeep
+!barcode_generator/logs/archive/
+!barcode_generator/logs/archive/.gitkeep
+
+barcode_generator/temp/*
+!barcode_generator/temp/.gitkeep
+
+# PyInstaller / local build leftovers under barcode_generator
+barcode_generator/dist/
+barcode_generator/build/
+barcode_generator/*.spec

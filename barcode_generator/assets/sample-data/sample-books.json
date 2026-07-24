@@ -1,0 +1,14 @@
+{
+  "books": [
+    {
+      "isbn": "9780064400558",
+      "title": "Sample Book Title",
+      "author": "Sample Author",
+      "copies": 1,
+      "genre": "Fiction",
+      "reading_level": null,
+      "location": null,
+      "condition": null
+    }
+  ]
+}
