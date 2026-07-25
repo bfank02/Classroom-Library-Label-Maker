@@ -2,6 +2,7 @@
 
 All openpyxl interaction for output workbooks stays in this module. Layout
 still goes through :class:`OpenPyxlLabelSheetTarget` / :class:`LabelSheetTarget`.
+Workbook presentation (properties, active sheet) is applied at save time.
 """
 
 from __future__ import annotations
@@ -14,12 +15,16 @@ from classroom_library_label_maker.workbooks.label_sheet_target import LabelShee
 from classroom_library_label_maker.workbooks.openpyxl_label_sheet_target import (
     OpenPyxlLabelSheetTarget,
 )
+from classroom_library_label_maker.workbooks.workbook_presentation import (
+    activate_first_label_sheet,
+    apply_workbook_properties,
+)
 
 _logger = get_logger("workbooks.openpyxl_workbook_writer")
 
 
 class OpenPyxlWorkbookWriter:
-    """Create, expose a label sheet target, and save openpyxl workbooks."""
+    """Create, expose a label sheet target, and save print-ready workbooks."""
 
     def __init__(self) -> None:
         """Initialize with no open workbook."""
@@ -38,7 +43,7 @@ class OpenPyxlWorkbookWriter:
         return self._target
 
     def save(self, path: Path) -> Path:
-        """Save the current workbook to ``path``.
+        """Apply presentation, then save the workbook to ``path``.
 
         Args:
             path: Destination ``.xlsx`` path.
@@ -53,10 +58,14 @@ class OpenPyxlWorkbookWriter:
         if self._target is None:
             raise RuntimeError("create_workbook must be called before save")
 
+        workbook = self._target.workbook
+        apply_workbook_properties(workbook, template=self._target.label_template)
+        activate_first_label_sheet(workbook)
+
         destination = Path(path)
         ensure_directory(destination.parent)
-        self._target.workbook.save(destination)
-        _logger.debug("Saved workbook to %s", destination)
+        workbook.save(destination)
+        _logger.debug("Saved print-ready workbook to %s", destination)
         return destination.resolve()
 
     def close(self) -> None:

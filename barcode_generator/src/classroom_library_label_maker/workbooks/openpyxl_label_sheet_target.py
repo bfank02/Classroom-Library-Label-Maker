@@ -1,4 +1,4 @@
-"""openpyxl-backed :class:`LabelSheetTarget` (placement only).
+"""openpyxl-backed :class:`LabelSheetTarget` (placement + sheet presentation).
 
 Vendor types stay inside this module. The layout service only sees
 :class:`LabelPlacement` and :class:`LabelTemplate`. Persisting the workbook is
@@ -13,6 +13,13 @@ from typing import Any
 from classroom_library_label_maker.label_templates.label_template import LabelTemplate
 from classroom_library_label_maker.logger import get_logger
 from classroom_library_label_maker.workbooks.label_sheet_target import LabelPlacement
+from classroom_library_label_maker.workbooks.workbook_presentation import (
+    apply_worksheet_presentation,
+    label_body_alignment,
+    label_body_font,
+    label_title_alignment,
+    label_title_font,
+)
 
 _logger = get_logger("workbooks.openpyxl_label_sheet")
 
@@ -20,9 +27,12 @@ _logger = get_logger("workbooks.openpyxl_label_sheet")
 _COL_WIDTH_PER_INCH = 12.0
 _ROW_HEIGHT_POINTS_PER_INCH = 72.0
 
+# Consistent sheet title prefix (page number appended).
+LABEL_SHEET_PREFIX = "Labels "
+
 
 class OpenPyxlLabelSheetTarget:
-    """Place labels onto openpyxl worksheets without saving the workbook."""
+    """Place labels onto openpyxl worksheets with print-ready presentation."""
 
     def __init__(self) -> None:
         """Create an empty workbook ready for label pages."""
@@ -41,8 +51,13 @@ class OpenPyxlLabelSheetTarget:
 
     @property
     def workbook(self) -> Any:
-        """Return the underlying openpyxl workbook (for future save adapters)."""
+        """Return the underlying openpyxl workbook."""
         return self._workbook
+
+    @property
+    def label_template(self) -> LabelTemplate | None:
+        """Return the template used for the most recent page, if any."""
+        return self._template
 
     def begin_page(self, page_number: int, *, template: LabelTemplate) -> None:
         """Create a worksheet for ``page_number`` sized from ``template``."""
@@ -52,10 +67,11 @@ class OpenPyxlLabelSheetTarget:
             raise ValueError(f"Page {page_number} already exists")
 
         self._template = template
-        title = f"Labels {page_number}"
+        title = f"{LABEL_SHEET_PREFIX}{page_number}"
         sheet = self._workbook.create_sheet(title=title)
         self._sheets[page_number] = sheet
         self._apply_page_geometry(sheet, template)
+        apply_worksheet_presentation(sheet, template)
         _logger.debug("Created worksheet %r for page %s", title, page_number)
 
     def place_label(self, placement: LabelPlacement) -> None:
@@ -74,19 +90,34 @@ class OpenPyxlLabelSheetTarget:
         start_row = placement.row * block_rows + 1
         start_col = placement.column + 1
 
-        lines = [
-            placement.title,
-            placement.author,
-            placement.isbn,
-        ]
-        if placement.used_placeholder_barcode or placement.barcode_image_path is None:
-            lines.append("[barcode placeholder]")
-        else:
-            lines.append("")  # image occupies visual space below text
+        title_cell = sheet.cell(
+            row=start_row, column=start_col, value=placement.title
+        )
+        title_cell.alignment = label_title_alignment()
+        title_cell.font = label_title_font()
 
-        for offset, text in enumerate(lines):
-            cell = sheet.cell(row=start_row + offset, column=start_col, value=text)
-            cell.alignment = self._center_alignment()
+        author_cell = sheet.cell(
+            row=start_row + 1, column=start_col, value=placement.author
+        )
+        author_cell.alignment = label_body_alignment()
+        author_cell.font = label_body_font()
+
+        isbn_cell = sheet.cell(
+            row=start_row + 2, column=start_col, value=placement.isbn
+        )
+        isbn_cell.alignment = label_body_alignment()
+        isbn_cell.font = label_body_font()
+
+        if placement.used_placeholder_barcode or placement.barcode_image_path is None:
+            barcode_cell = sheet.cell(
+                row=start_row + 3,
+                column=start_col,
+                value="[barcode placeholder]",
+            )
+            barcode_cell.alignment = label_body_alignment()
+            barcode_cell.font = label_body_font()
+        else:
+            sheet.cell(row=start_row + 3, column=start_col, value="")
 
         if (
             placement.barcode_image_path is not None
@@ -137,12 +168,6 @@ class OpenPyxlLabelSheetTarget:
             image.height = int(image.height * ratio)
         image.anchor = f"{self._column_letter(anchor_col)}{anchor_row}"
         sheet.add_image(image)
-
-    @staticmethod
-    def _center_alignment() -> Any:
-        from openpyxl.styles import Alignment
-
-        return Alignment(horizontal="center", vertical="center", wrap_text=True)
 
     @staticmethod
     def _column_letter(index: int) -> str:

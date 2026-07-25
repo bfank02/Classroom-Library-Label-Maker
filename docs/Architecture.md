@@ -163,6 +163,7 @@ barcode_generator/src/classroom_library_label_maker/
 │   ├── openpyxl_workbook_reader.py     OpenPyxlWorkbookReader
 │   ├── workbook_writer.py              WorkbookWriter protocol
 │   ├── openpyxl_workbook_writer.py     OpenPyxlWorkbookWriter
+│   ├── workbook_presentation.py        Print-ready view / page setup
 │   ├── label_sheet_target.py           LabelSheetTarget + LabelPlacement
 │   ├── in_memory_label_sheet_target.py InMemoryLabelSheetTarget
 │   ├── in_memory_workbook_writer.py    InMemoryWorkbookWriter
@@ -424,17 +425,36 @@ openpyxl
 * `OpenPyxlWorkbookReader` — openpyxl backend (plain string cells only)
 * `WorkbookWriter` — protocol: `create_workbook`, `get_label_sheet_target`,
   `save`, `close`
-* `OpenPyxlWorkbookWriter` — create/save adapter (default for generation)
+* `OpenPyxlWorkbookWriter` — create/save adapter (default for generation);
+  applies workbook presentation at save
 * `InMemoryWorkbookWriter` — test writer
 * `LabelSheetTarget` — protocol: `begin_page`, `place_label`
 * `LabelPlacement` — immutable placement payload (title, author, ISBN, barcode)
 * `InMemoryLabelSheetTarget` — records pages/placements for tests
-* `OpenPyxlLabelSheetTarget` — openpyxl placement adapter (used by writer)
+* `OpenPyxlLabelSheetTarget` — openpyxl placement + worksheet presentation
+* `workbook_presentation` — helpers for document properties, page setup,
+  print area, gridlines, zoom (print-ready; does not print)
 
 `iter_rows` yields plain `(str | None, ...)` tuples only — never vendor cell
 objects. Mapping those rows into `Book` instances is the job of
 `ExcelImportService`. Layout writes go through `LabelPlacement` only.
 Workbook persistence goes through `WorkbookWriter.save` only.
+
+### Workbook presentation (print readiness)
+
+Presentation is **separate from** `WorkbookGenerationService` orchestration.
+It lives in the workbook adapters / `workbook_presentation` helpers so a
+teacher can open the saved `.xlsx` and use Excel Print without manual setup.
+
+**Workbook-level (at save):** title/subject/creator (from `metadata`), active
+sheet set to the first `Labels N` worksheet.
+
+**Worksheet-level (at `begin_page`):** hide gridlines, zoom 100%, orientation /
+paper size / margins from `LabelTemplate`, print area covering the label grid,
+fit-to-page width, horizontal centering for print.
+
+**Label cells:** centered Calibri text; titles wrap (`wrap_text=True`) so long
+titles do not spill into neighboring labels. Layout geometry is unchanged.
 
 ### Excel import service (`services/excel_import_service.py`)
 

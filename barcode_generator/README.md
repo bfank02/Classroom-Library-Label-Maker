@@ -75,6 +75,7 @@ barcode_generator/
 │       │   ├── openpyxl_workbook_reader.py
 │       │   ├── workbook_writer.py
 │       │   ├── openpyxl_workbook_writer.py
+│       │   ├── workbook_presentation.py
 │       │   ├── label_sheet_target.py
 │       │   ├── in_memory_label_sheet_target.py
 │       │   ├── in_memory_workbook_writer.py
@@ -289,6 +290,21 @@ python -c "from pathlib import Path; from classroom_library_label_maker.config i
 - Depends on `WorkbookWriter` only for Excel output (never imports openpyxl)
 - Does **not** print or show UI
 - The CLI `generate` command is a thin adapter over this service
+
+### Workbook presentation (print readiness)
+
+Separate from generation orchestration. Applied by openpyxl adapters when
+pages are created / the workbook is saved:
+
+- Document properties (title, subject, author)
+- Active sheet = first `Labels N` worksheet
+- Hidden gridlines, 100% zoom
+- Page orientation, paper size, and margins from `LabelTemplate`
+- Print area covering the label grid; fit-to-width; horizontal print centering
+- Consistent label fonts; long titles wrap in-cell
+
+Teachers can open the `.xlsx` and use Excel **Print** without manual setup.
+This project still does **not** send jobs to a printer.
 
 ## CLI
 

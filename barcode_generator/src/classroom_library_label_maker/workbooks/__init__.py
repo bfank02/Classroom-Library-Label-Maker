@@ -9,6 +9,7 @@ Public API
 * :class:`WorkbookReader` / :class:`OpenPyxlWorkbookReader` — workbook reading
 * :class:`WorkbookWriter` / :class:`OpenPyxlWorkbookWriter` — workbook create/save
 * :class:`LabelSheetTarget` / :class:`LabelPlacement` — label placement contract
+* :mod:`workbook_presentation` — print-ready view/page-setup helpers
 * :class:`InMemoryLabelSheetTarget` / :class:`InMemoryWorkbookWriter` — tests
 * :class:`OpenPyxlLabelSheetTarget` — openpyxl placement (used by writer)
 """
