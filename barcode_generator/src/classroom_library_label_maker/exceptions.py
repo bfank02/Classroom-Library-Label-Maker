@@ -50,11 +50,7 @@ class InvalidISBNError(ValidationError):
 
 
 class InvalidWorkbookError(ValidationError):
-    """Raised when an Excel workbook cannot be read or fails schema checks.
-
-    Reserved for the Excel integration sprint; defined now so call sites can
-    share a stable exception type.
-    """
+    """Raised when an Excel workbook cannot be read or fails schema checks."""
 
 
 class BarcodeGenerationError(ApplicationError):

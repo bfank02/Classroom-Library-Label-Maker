@@ -15,6 +15,12 @@ from classroom_library_label_maker.constants import (
     DEFAULT_LABEL_TYPE,
     DEFAULT_LOG_FILE_NAME,
     DEFAULT_LOG_LEVEL,
+    DEFAULT_WORKBOOK_COLUMN_AUTHOR,
+    DEFAULT_WORKBOOK_COLUMN_COPIES,
+    DEFAULT_WORKBOOK_COLUMN_ISBN,
+    DEFAULT_WORKBOOK_COLUMN_TITLE,
+    DEFAULT_WORKBOOK_HEADER_ROW,
+    DEFAULT_WORKBOOK_SHEET_NAME,
     DIR_ASSETS,
     DIR_BARCODES,
     DIR_ICONS,
@@ -186,6 +192,8 @@ def load_application_settings(
     log_level: str = DEFAULT_LOG_LEVEL,
     log_file: Path | str | None = None,
     default_label_type: str = DEFAULT_LABEL_TYPE,
+    workbook_path: Path | str | None = None,
+    workbook_sheet_name: str = DEFAULT_WORKBOOK_SHEET_NAME,
 ) -> ApplicationSettings:
     """Build :class:`ApplicationSettings` from the project tree and overrides.
 
@@ -198,6 +206,8 @@ def load_application_settings(
         log_level: Logging level name.
         log_file: Optional log file path override.
         default_label_type: Default label template key.
+        workbook_path: Optional Excel workbook path for import.
+        workbook_sheet_name: Worksheet name used by Excel import.
 
     Returns:
         Populated :class:`ApplicationSettings`.
@@ -226,6 +236,13 @@ def load_application_settings(
         barcode_quiet_zone=DEFAULT_BARCODE_QUIET_ZONE,
         barcode_font_size=DEFAULT_BARCODE_FONT_SIZE,
         barcode_dpi=DEFAULT_BARCODE_DPI,
+        workbook_path=Path(workbook_path) if workbook_path is not None else None,
+        workbook_sheet_name=workbook_sheet_name,
+        workbook_column_isbn=DEFAULT_WORKBOOK_COLUMN_ISBN,
+        workbook_column_title=DEFAULT_WORKBOOK_COLUMN_TITLE,
+        workbook_column_author=DEFAULT_WORKBOOK_COLUMN_AUTHOR,
+        workbook_column_copies=DEFAULT_WORKBOOK_COLUMN_COPIES,
+        workbook_header_row=DEFAULT_WORKBOOK_HEADER_ROW,
     )
 
 

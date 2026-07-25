@@ -4,7 +4,8 @@ Public surface of the **Classroom Library Label Maker** barcode generator
 package (`classroom_library_label_maker`).
 
 Prefer importing from documented submodules
-(`models`, `services`, `rendering`, `exceptions`, `config`, `metadata`).
+(`models`, `services`, `rendering`, `workbooks`, `exceptions`, `config`,
+`metadata`).
 The package root re-exports a narrow set of common types.
 
 ## Stability legend
@@ -211,6 +212,7 @@ Package: `classroom_library_label_maker.services`
 | `IsbnValidator` | Stable | External | ISBN validation |
 | `BarcodeGenerationService` | Stable | External | Single-book PNG generation |
 | `BatchProcessingService` | Stable | External | Multi-book orchestration |
+| `ExcelImportService` | Stable | External | Workbook → `Book` import |
 | `BatchProcessor` | Experimental | Internal / transitional | CLI/JSON adapter (`load_books` still stubbed) |
 | `BarcodeGenerator` | Internal | Transitional | Legacy path helpers; superseded by `BarcodeGenerationService` |
 
@@ -244,6 +246,65 @@ Module: `classroom_library_label_maker.services.protocols`
 ### `IsbnLookupService` / `CoverDownloadService` — Experimental — External
 
 **Purpose:** Future enrichment contracts (`lookup`, `download`).
+
+---
+
+## Workbooks
+
+Module: `classroom_library_label_maker.workbooks`
+
+Spreadsheet I/O only. Does **not** map rows to `Book` (that belongs to a
+future Excel import service).
+
+### `WorkbookReader` — Stable — External (protocol)
+
+**Purpose:** Library-agnostic contract for opening workbooks and reading rows
+as plain string cells.
+
+| Method | Inputs | Outputs |
+|--------|--------|---------|
+| `open(path)` | `Path` | — |
+| `close()` | — | — |
+| `sheet_names()` | — | `Sequence[str]` |
+| `iter_rows(sheet_name, *, min_row=1)` | Sheet name, optional start row | Iterator of `(str \| None, ...)` |
+
+### `OpenPyxlWorkbookReader` — Stable — External (default backend)
+
+**Purpose:** openpyxl backend returning plain string cells only.
+
+**External use:** Prefer depending on `WorkbookReader` in services; construct
+`OpenPyxlWorkbookReader` when injecting the concrete backend.
+
+### `ExcelImportService` — Stable — External
+
+Module: `classroom_library_label_maker.services.excel_import_service`
+
+**Purpose:** Import `Book` rows from a workbook via `WorkbookReader`. Does not
+validate ISBNs or generate barcodes.
+
+| Method | Inputs | Outputs / errors |
+|--------|--------|------------------|
+| `__init__(settings, *, reader=None)` | `ApplicationSettings`; optional reader | service |
+| `import_books(workbook_path=None)` | Optional path override | `ImportResult`; may raise `ConfigurationError`, `FileSystemError`, `InvalidWorkbookError` |
+
+Configuration (on `ApplicationSettings`): `workbook_path`, `workbook_sheet_name`,
+`workbook_column_*`, `workbook_header_row`.
+
+### `ImportResult` / `ImportWarning` — Stable — External
+
+**Purpose:** Import outcome (`books`, `source_rows`, row counts, warnings,
+`elapsed_seconds`) and recoverable per-row diagnostics.
+
+Both are **immutable value objects** (`dataclass(frozen=True)`). Callers should
+treat instances as read-only after construction.
+
+### Workbook template versioning — Experimental — Extension point
+
+**Not implemented.** Future template version checks belong in
+`ExcelImportService.import_books` after open/sheet selection and before column
+mapping. Version metadata may live in a Meta sheet cell, document properties,
+or similar — see Architecture.md. Multiple template versions can later select
+different column maps via settings without changing `WorkbookReader`.
 
 ---
 
