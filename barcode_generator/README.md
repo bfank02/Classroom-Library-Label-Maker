@@ -327,10 +327,17 @@ python -m pytest
 ```
 
 - Unit tests live beside fixtures in `tests/`.
-- `tests/integration/` is reserved for end-to-end runs.
+- `tests/integration/` holds the production-readiness end-to-end test (real
+  openpyxl writer + canonical inventory workbook). See
+  [`tests/integration/README.md`](tests/integration/README.md).
 - `tests/golden/` holds optional reference barcode PNGs (non-brittle compares).
 - Remaining `xfail`s are primarily the deprecated CLI JSON `load_books` /
-  `BarcodeGenerator.generate` stubs — not the Feature 1–5 library services.
+  `BarcodeGenerator.generate` stubs — not the Feature 1–7 library services.
+
+```powershell
+# Integration only (real adapters, temp dirs only)
+python -m pytest tests\integration -v
+```
 
 ### ISBN validator benchmarks (manual only)
 
