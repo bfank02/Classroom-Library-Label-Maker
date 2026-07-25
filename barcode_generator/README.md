@@ -306,6 +306,9 @@ python -m classroom_library_label_maker version
 ## Related documentation
 
 - [Architecture](../docs/Architecture.md)
+- [Public API](../docs/PublicAPI.md)
+- [Developer review checklist](../docs/DeveloperReviewChecklist.md)
+- [Feature review template](../docs/templates/FeatureReviewTemplate.md)
 - [Barcode scan verification](../docs/Barcode%20Scan%20Verification.md)
 - [Software Design Specification](../docs/Software%20Design%20Specification.md)
 - [Development Roadmap](../docs/Development%20Roadmap.md)
