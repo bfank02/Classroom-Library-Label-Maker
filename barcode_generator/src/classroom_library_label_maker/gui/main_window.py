@@ -86,16 +86,16 @@ class MainWindow(QMainWindow):
             self.output_path_label,
         ) = self._add_path_row(
             form,
-            mnemonic="&Output workbook:",
+            mnemonic="Label &workbook:",
             browse_name="outputBrowseButton",
             path_name="outputPathLabel",
-            browse_accessible="Browse for output workbook",
+            browse_accessible="Browse for label workbook",
             browse_tooltip="Choose where to save the printable label workbook.",
-            path_accessible="Selected output workbook",
+            path_accessible="Selected label workbook",
             empty_text="No file selected",
         )
 
-        self.template_label = QLabel("&Label template:")
+        self.template_label = QLabel("Label &template:")
         self.template_label.setObjectName("labelTemplateLabel")
         self.label_template_combo = QComboBox()
         self.label_template_combo.setObjectName("labelTemplateCombo")

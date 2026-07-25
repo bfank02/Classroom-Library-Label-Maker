@@ -2,12 +2,23 @@
 
 Create barcode labels for your classroom library.
 
+## For teachers
+
+Start here: [`docs/Quick Start.md`](docs/Quick%20Start.md)
+
+1. Prepare an **inventory workbook** (Excel sheet named `Books` with columns
+   `ISBN`, `Title`, `Author`, `Copies`) — or open `samples/Sample Books.xlsx`.
+2. Run the app, choose your inventory workbook, a barcode folder, and where to
+   save the **label workbook**.
+3. Click **Generate Labels**, then open the label workbook in Excel and print
+   on Avery 5160 sheets.
+
 ## Layout
 
 ```
 ClassroomLibraryLabelMaker/
-├── docs/                         # Architecture, design, roadmap
-├── excel/                        # Excel workbook + VBA
+├── docs/                         # Architecture, design, roadmap, Quick Start
+├── excel/                        # Excel workbook + VBA (future)
 ├── barcode_generator/            # Python barcode engine (src-layout package)
 │   ├── src/classroom_library_label_maker/
 │   ├── tests/
@@ -16,14 +27,14 @@ ClassroomLibraryLabelMaker/
 │   ├── logs/                     # Runtime logs + archive/ (not committed)
 │   └── temp/                     # Scratch files (not committed)
 ├── installer/                    # Packaging / setup
-├── samples/                      # Example workbooks
+├── samples/                      # Example inventory workbook
 ├── releases/                     # Distribution artifacts
 ├── TASKS.md
 ├── LICENSE
 └── README.md
 ```
 
-## Getting started
+## For developers
 
 1. Read [`docs/Architecture.md`](docs/Architecture.md) for system structure and data flow.
 2. Follow [`barcode_generator/README.md`](barcode_generator/README.md) for Python setup, tests, and builds.
@@ -31,6 +42,7 @@ ClassroomLibraryLabelMaker/
 
 Design notes:
 
+- [`docs/Quick Start.md`](docs/Quick%20Start.md) — teacher-facing one-pager
 - [`docs/Architecture.md`](docs/Architecture.md)
 - [`docs/PublicAPI.md`](docs/PublicAPI.md)
 - [`docs/DeveloperReviewChecklist.md`](docs/DeveloperReviewChecklist.md)

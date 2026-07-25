@@ -41,6 +41,7 @@ from classroom_library_label_maker.exceptions import (
     LabelLayoutError,
     WorkbookGenerationError,
 )
+from classroom_library_label_maker.generation_summary import cli_completion_lines
 from classroom_library_label_maker.logger import get_logger
 from classroom_library_label_maker.models import (
     ApplicationSettings,
@@ -158,19 +159,8 @@ def run_generate(
 
 def _print_generation_summary(result: WorkbookGenerationResult) -> None:
     """Print a concise success summary from ``result`` (no recalculation)."""
-    output = result.output_path
-    print("Generation complete")
-    print()
-    print(f"Books imported: {result.books_imported}")
-    print(f"Books processed: {result.books_processed}")
-    print(f"Labels created: {result.labels_created}")
-    print(f"Pages created: {result.pages_created}")
-    print(f"Barcodes generated: {result.barcodes_generated}")
-    print(f"Barcodes reused: {result.barcodes_reused}")
-    print()
-    print(f"Output workbook: {output}")
-    print()
-    print(f"Elapsed time: {result.elapsed_seconds:.3f}s")
+    for line in cli_completion_lines(result):
+        print(line)
 
 
 def _write_results_summary(path: Path, result: WorkbookGenerationResult) -> None:

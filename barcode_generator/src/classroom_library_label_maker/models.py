@@ -607,6 +607,19 @@ class LabelLayoutResult:
         )
 
 
+class GenerationCompletionState(StrEnum):
+    """How a completed (non-failed) generation run should be presented.
+
+    Failures raise exceptions and never produce a
+    :class:`WorkbookGenerationResult`. Adapters map these states to GUI
+    status styling and CLI exit messaging; warning *collection* stays in
+    the engine.
+    """
+
+    SUCCESS = "success"
+    SUCCESS_WITH_WARNINGS = "success_with_warnings"
+
+
 @dataclass(frozen=True, slots=True)
 class WorkbookGenerationWarning:
     """Recoverable issue during end-to-end workbook generation.
@@ -664,6 +677,28 @@ class WorkbookGenerationResult:
     elapsed_seconds: float = 0.0
     warnings: tuple[WorkbookGenerationWarning, ...] = ()
 
+    @property
+    def warning_count(self) -> int:
+        """Number of structured warnings collected by the engine."""
+        return len(self.warnings)
+
+    @property
+    def has_warnings(self) -> bool:
+        """True when the engine recorded one or more warnings."""
+        return self.warning_count > 0
+
+    @property
+    def requires_review(self) -> bool:
+        """True when the workbook should be reviewed before printing."""
+        return self.has_warnings
+
+    @property
+    def completion_state(self) -> GenerationCompletionState:
+        """Presentation state for a completed (non-failed) run."""
+        if self.has_warnings:
+            return GenerationCompletionState.SUCCESS_WITH_WARNINGS
+        return GenerationCompletionState.SUCCESS
+
     def to_dict(self) -> dict[str, Any]:
         """Serialize generation results to a JSON-compatible dictionary."""
         return {
@@ -676,7 +711,9 @@ class WorkbookGenerationResult:
                 "barcodes_reused": self.barcodes_reused,
                 "output_path": str(self.output_path) if self.output_path else None,
                 "elapsed_seconds": self.elapsed_seconds,
-                "warning_count": len(self.warnings),
+                "warning_count": self.warning_count,
+                "requires_review": self.requires_review,
+                "completion_state": self.completion_state.value,
             },
             "warnings": [warning.to_dict() for warning in self.warnings],
         }
@@ -686,6 +723,7 @@ class WorkbookGenerationResult:
         return (
             f"WorkbookGenerationResult(imported={self.books_imported}, "
             f"labels={self.labels_created}, pages={self.pages_created}, "
+            f"warnings={self.warning_count}, "
             f"output_path={self.output_path!r}, "
             f"elapsed_seconds={self.elapsed_seconds!r})"
         )

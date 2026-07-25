@@ -59,5 +59,6 @@ DIR_TEMP = "temp"
 
 VERSION_FILE_NAME = "VERSION"
 SAMPLE_BOOKS_FILE_NAME = "sample-books.json"
+SAMPLE_INVENTORY_FILE_NAME = "Sample Books.xlsx"
 APP_ICON_FILE_NAME = "app.ico"
 LOGO_FILE_NAME = "logo.png"
