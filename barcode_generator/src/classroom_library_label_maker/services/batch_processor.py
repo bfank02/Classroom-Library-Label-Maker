@@ -151,7 +151,7 @@ class BatchProcessor:
                 self._settings.barcode_output_directory,
                 overwrite=self._settings.overwrite,
             )
-        except Exception as exc:  # noqa: BLE001 - surfaced in results JSON
+        except Exception as exc:
             _logger.exception("Failed generating barcode for %s", isbn)
             return BarcodeGenerationResult(
                 isbn=isbn,

@@ -1,0 +1,14 @@
+# Pre-commit hooks for barcode_generator.
+# Install from this directory:
+#   python -m pip install pre-commit
+#   pre-commit install
+# Run on all files:
+#   pre-commit run --all-files
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format

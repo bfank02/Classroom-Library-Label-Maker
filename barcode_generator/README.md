@@ -24,6 +24,8 @@ barcode_generator/
 ├── VERSION
 ├── CHANGELOG.md
 ├── pyproject.toml
+├── .ruff.toml
+├── .pre-commit-config.yaml
 ├── requirements.txt
 ├── build.bat
 ├── README.md
@@ -84,6 +86,31 @@ python -m pytest
 python -m classroom_library_label_maker --version
 ```
 
+### Linting and formatting (Ruff)
+
+Ruff config lives in [`.ruff.toml`](.ruff.toml) (Python 3.13, format, import
+sorting, and common lint rules).
+
+```powershell
+# Check and auto-fix lint issues
+python -m ruff check --fix src tests
+
+# Apply formatter
+python -m ruff format src tests
+```
+
+### Pre-commit hooks
+
+Hooks run Ruff check (with `--fix`) and Ruff format on each commit:
+
+```powershell
+python -m pip install pre-commit
+pre-commit install
+pre-commit run --all-files
+```
+
+Configuration: [`.pre-commit-config.yaml`](.pre-commit-config.yaml).
+
 Coding standards:
 
 - Python 3.13+, PEP 8, PEP 257
@@ -92,6 +119,7 @@ Coding standards:
 - `pathlib.Path` for filesystem paths
 - No wildcard imports; no logging configuration at import time
 - Business logic in `services/`; `main.py` stays thin
+- Use Ruff (via CLI or pre-commit) before opening a PR
 
 ## Build process
 

@@ -1,0 +1,50 @@
+# Ruff configuration for Classroom Library Label Maker (barcode_generator).
+# https://docs.astral.sh/ruff/
+
+target-version = "py313"
+line-length = 88
+src = ["src", "tests"]
+extend-exclude = [
+    ".venv",
+    "dist",
+    "build",
+    "output",
+    "logs",
+    "temp",
+]
+
+[format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = true
+
+[lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort (import sorting)
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "ANN", # flake8-annotations
+    "SIM", # flake8-simplify
+    "RUF", # Ruff-specific rules
+]
+ignore = [
+    # Allow Annotated forward refs / modern typing without forcing every local.
+    "ANN401",
+]
+
+[lint.isort]
+known-first-party = ["classroom_library_label_maker"]
+combine-as-imports = true
+force-sort-within-sections = true
+
+[lint.per-file-ignores]
+# Tests may use fixtures and relaxed annotation strictness on fixtures.
+"tests/**/*.py" = [
+    "ANN001",
+    "ANN201",
+]

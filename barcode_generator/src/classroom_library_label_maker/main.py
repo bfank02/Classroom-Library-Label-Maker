@@ -21,7 +21,7 @@ from classroom_library_label_maker.cli.parser import (
 from classroom_library_label_maker.config import load_application_settings
 from classroom_library_label_maker.exceptions import ApplicationError
 from classroom_library_label_maker.logger import get_logger, setup_logging
-from classroom_library_label_maker.metadata import APP_NAME, APP_COMPONENT_NAME
+from classroom_library_label_maker.metadata import APP_COMPONENT_NAME, APP_NAME
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -345,10 +345,7 @@ class CoverImageResult:
 
     def __repr__(self) -> str:
         """Return a developer-friendly representation."""
-        return (
-            f"CoverImageResult(isbn={self.isbn!r}, "
-            f"image_path={self.image_path!r})"
-        )
+        return f"CoverImageResult(isbn={self.isbn!r}, image_path={self.image_path!r})"
 
 
 def _optional_str(value: Any) -> str | None:

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
+import sys
 
 from classroom_library_label_maker.constants import DEFAULT_LOG_LEVEL
 from classroom_library_label_maker.metadata import (
