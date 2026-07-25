@@ -7,7 +7,8 @@ Responsibilities:
 * update path labels and control enablement
 * lightweight form validation
 * construct :class:`ApplicationSettings` and start a :class:`GenerationWorker`
-* display engine progress / success / failure in the status line
+* display engine progress / success / success-with-warnings / failure in the
+  status line
 
 Does **not** implement ISBN / import / barcode / layout logic or cancellation.
 ``WorkbookGenerationService`` remains Qt-unaware.
@@ -37,6 +38,7 @@ from classroom_library_label_maker.label_templates import (
     TemplateRegistry,
     create_default_template_registry,
 )
+from classroom_library_label_maker.generation_summary import gui_completion_status
 from classroom_library_label_maker.logger import get_logger
 from classroom_library_label_maker.models import (
     ApplicationSettings,
@@ -213,7 +215,7 @@ class GuiController(QObject):
 
         messages = self._state.validation_messages()
         if messages:
-            self._set_status(" ".join(messages), error=True)
+            self._set_status(" ".join(messages), level="error")
             self._window.generate_button.setEnabled(False)
             return
 
@@ -225,7 +227,7 @@ class GuiController(QObject):
         try:
             settings = self.build_application_settings()
         except ApplicationError as exc:
-            self._set_status(exc.message, error=True)
+            self._set_status(exc.message, level="error")
             self._window.generate_button.setEnabled(False)
             return
 
@@ -245,7 +247,7 @@ class GuiController(QObject):
 
         self._is_generating = True
         self._set_inputs_enabled(False)
-        self._set_status("Generating labels…", error=False)
+        self._set_status("Generating labels…", level="ok")
 
         thread = QThread()
         worker = GenerationWorker(
@@ -271,7 +273,7 @@ class GuiController(QObject):
             return
         if not isinstance(progress, GenerationProgress):
             return
-        self._set_status(progress.message, error=False)
+        self._set_status(progress.message, level="ok")
 
     @Slot(object)
     def _on_generation_completed(self, result: object) -> None:
@@ -281,7 +283,8 @@ class GuiController(QObject):
             "Generation complete: %s",
             result.to_dict()["summary"],
         )
-        self._set_status(self._success_status(result), error=False)
+        level = "warning" if result.requires_review else "ok"
+        self._set_status(gui_completion_status(result), level=level)
         self._set_inputs_enabled(True)
 
     @Slot(object)
@@ -295,7 +298,7 @@ class GuiController(QObject):
                     exc.__cause__,
                     exc_info=exc.__cause__,
                 )
-            self._set_status(exc.message, error=True)
+            self._set_status(exc.message, level="error")
         else:
             self._logger.error(
                 "Unhandled error during workbook generation",
@@ -304,7 +307,7 @@ class GuiController(QObject):
             self._set_status(
                 "Something went wrong while generating labels. "
                 "Check the log for details.",
-                error=True,
+                level="error",
             )
         self._set_inputs_enabled(True)
 
@@ -319,24 +322,6 @@ class GuiController(QObject):
             worker.deleteLater()
         if thread is not None:
             thread.deleteLater()
-
-    def _success_status(self, result: WorkbookGenerationResult) -> str:
-        output = result.output_path
-        labels = result.labels_created
-        pages = result.pages_created
-        label_word = "label" if labels == 1 else "labels"
-        page_word = "page" if pages == 1 else "pages"
-        warning_count = len(result.warnings)
-        if warning_count == 1:
-            warning_note = " (1 warning)"
-        elif warning_count > 1:
-            warning_note = f" ({warning_count} warnings)"
-        else:
-            warning_note = ""
-        return (
-            f"Done — {labels} {label_word} on {pages} {page_word}"
-            f"{warning_note}. Saved to {output}."
-        )
 
     def _set_inputs_enabled(self, enabled: bool) -> None:
         window = self._window
@@ -394,9 +379,9 @@ class GuiController(QObject):
         messages = self._state.validation_messages()
         self._set_inputs_enabled(True)
         if messages:
-            self._set_status(messages[0], error=True)
+            self._set_status(messages[0], level="error")
         else:
-            self._set_status("Ready to generate labels.", error=False)
+            self._set_status("Ready to generate labels.", level="ok")
 
     def _sync_template_combo(self) -> None:
         combo = self._window.label_template_combo
@@ -427,10 +412,21 @@ class GuiController(QObject):
             label.setText(text)
             label.setToolTip(text)
 
-    def _set_status(self, message: str, *, error: bool) -> None:
+    def _set_status(self, message: str, *, level: str) -> None:
+        """Update the status label.
+
+        ``level`` is one of ``ok``, ``warning``, or ``error``. Warning is used
+        for completed runs that still require review before printing.
+        """
         self._window.status_label.setText(message)
-        self._window.status_label.setProperty("error", error)
-        color = "#a1260d" if error else "#0b6a0b"
+        self._window.status_label.setProperty("statusLevel", level)
+        self._window.status_label.setProperty("error", level == "error")
+        colors = {
+            "ok": "#0b6a0b",
+            "warning": "#9a6700",
+            "error": "#a1260d",
+        }
+        color = colors.get(level, colors["ok"])
         self._window.status_label.setStyleSheet(f"color: {color};")
 
     def _default_open_inventory(self) -> Path | None:

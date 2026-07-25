@@ -691,6 +691,11 @@ UX notes:
 * Save dialog defaults to `library_labels.xlsx` and applies/preserves Excel
   extensions
 * Status wording is concise and actionable (no Python tracebacks)
+* Completed runs use three presentation states from
+  `WorkbookGenerationResult.completion_state`: clean success, success with
+  warnings (review before printing), or failure via exception. Warning details
+  stay on `result.warnings` for CLI listing / a future details UI; the status
+  line shows only a count + review guidance
 * Application icon loads from `assets/icons/` when a non-empty file is present
 
 Progress originates in the engine (`progress.GenerationStage` /

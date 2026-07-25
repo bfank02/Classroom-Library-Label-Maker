@@ -295,6 +295,8 @@ def test_result_statistics(
     assert summary["barcodes_generated"] == 2
     assert summary["output_path"] is not None
     assert "warning_count" in summary
+    assert summary["requires_review"] is False
+    assert summary["completion_state"] == "success"
 
 
 def test_writer_interaction(

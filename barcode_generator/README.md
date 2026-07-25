@@ -348,8 +348,9 @@ background**:
    `WorkbookGenerationService` on a Qt worker thread
 
 While generating, Browse buttons, the template combo, and Generate are
-disabled. The status line shows engine stage updates, then a concise success
-or friendly error message. Press **Esc** to close the window.
+disabled. The status line shows engine stage updates, then a clean success,
+success-with-warnings (review before printing), or friendly error message.
+Press **Esc** to close the window.
 
 Icon loading uses `assets/icons/app.ico` (then `logo.png`) when non-empty
 placeholder files are replaced with real artwork.

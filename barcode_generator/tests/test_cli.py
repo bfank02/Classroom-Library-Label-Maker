@@ -198,6 +198,7 @@ def test_run_generate_success_summary(
 
     assert code == EXIT_SUCCESS
     assert "Generation complete" in captured.out
+    assert "Ready to print." in captured.out
     assert "Books imported: 2" in captured.out
     assert "Books processed: 2" in captured.out
     assert "Labels created: 2" in captured.out
@@ -206,7 +207,62 @@ def test_run_generate_success_summary(
     assert "Barcodes reused: 0" in captured.out
     assert "Output workbook:" in captured.out
     assert "Elapsed time: 1.250s" in captured.out
+    assert "Warnings" not in captured.out
     mock_service.generate.assert_called_once()
+
+
+def test_run_generate_success_with_warnings_summary(
+    app_settings,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Warned generate should print review guidance and structured warnings."""
+    from classroom_library_label_maker.models import WorkbookGenerationWarning
+
+    result = WorkbookGenerationResult(
+        books_imported=2,
+        books_processed=2,
+        labels_created=2,
+        pages_created=1,
+        barcodes_generated=1,
+        barcodes_reused=0,
+        output_path=tmp_path / "labels.xlsx",
+        elapsed_seconds=1.0,
+        warnings=(
+            WorkbookGenerationWarning(
+                message="ISBN validation failed for 123",
+                code="isbn_validation_failed",
+                isbn="123",
+            ),
+        ),
+    )
+    mock_service = MagicMock()
+    mock_service.generate.return_value = result
+    monkeypatch.setattr(
+        "classroom_library_label_maker.cli.commands.WorkbookGenerationService",
+        lambda settings: mock_service,
+    )
+
+    app_settings.workbook_path = VALID_BOOKS
+    args = parse_args(
+        [
+            "generate",
+            "-i",
+            str(VALID_BOOKS),
+            "-l",
+            str(tmp_path / "labels.xlsx"),
+        ]
+    )
+    code = run_generate(args, app_settings)
+    captured = capsys.readouterr()
+
+    assert code == EXIT_SUCCESS
+    assert "Generation complete with 1 warning" in captured.out
+    assert "Review the workbook before printing." in captured.out
+    assert "Warnings (1):" in captured.out
+    assert "ISBN validation failed for 123" in captured.out
+    assert "Ready to print." not in captured.out
 
 
 def test_run_generate_import_failure(
