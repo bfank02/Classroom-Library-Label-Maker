@@ -45,6 +45,7 @@ barcode_generator/
 │       │   ├── parser.py           # Argparse + subcommands
 │       │   └── commands.py         # Command handlers + dispatch
 │       ├── services/
+│       │   ├── barcode_generation_service.py
 │       │   ├── barcode_generator.py
 │       │   ├── batch_processor.py
 │       │   ├── isbn_validator.py
@@ -141,6 +142,28 @@ python -c "from classroom_library_label_maker.services import IsbnValidator; v=I
 
 Failure text comes from `ValidationErrorCode.message`. See
 [`docs/Architecture.md`](../docs/Architecture.md) for the full contract.
+
+### Barcode generation
+
+`BarcodeGenerationService` creates EAN-13 PNG files for validated books:
+
+```powershell
+python -c "
+from pathlib import Path
+from classroom_library_label_maker.config import load_application_settings
+from classroom_library_label_maker.models import Book
+from classroom_library_label_maker.services import BarcodeGenerationService
+
+settings = load_application_settings()
+book = Book(isbn='9780064400558', title='Demo', author='Author', copies=1)
+result = BarcodeGenerationService(settings).generate_for_book(book)
+print(result.status, result.output_path)
+"
+```
+
+- Output path: `{settings.barcode_output_directory}/{normalized_isbn}.png`
+- Existing files return `ALREADY_EXISTS` (no overwrite)
+- Rendering goes through `BarcodeRenderer` / `PythonBarcodeRenderer`
 
 ## Build process
 

@@ -18,7 +18,7 @@
 - [x] Test framework + fixtures / integration placeholder
 - [x] ISBN-13 check-digit validation
 - [x] Rendering package scaffold (`BarcodeRenderer` / `PythonBarcodeRenderer`)
-- [ ] EAN-13 PNG generation (`python-barcode` + Pillow)
+- [x] EAN-13 PNG generation (`BarcodeGenerationService` + python-barcode / Pillow)
 - [ ] JSON book loading (`BatchProcessor.load_books`)
 - [ ] Package as EXE (`build.bat` / PyInstaller)
 

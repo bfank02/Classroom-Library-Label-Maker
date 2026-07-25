@@ -7,6 +7,9 @@ under ``services.lookups`` and ``services.covers``.
 
 from __future__ import annotations
 
+from classroom_library_label_maker.services.barcode_generation_service import (
+    BarcodeGenerationService,
+)
 from classroom_library_label_maker.services.barcode_generator import BarcodeGenerator
 from classroom_library_label_maker.services.batch_processor import BatchProcessor
 from classroom_library_label_maker.services.isbn_validator import (
@@ -15,6 +18,7 @@ from classroom_library_label_maker.services.isbn_validator import (
 )
 
 __all__ = [
+    "BarcodeGenerationService",
     "BarcodeGenerator",
     "BatchProcessor",
     "ISBNValidator",

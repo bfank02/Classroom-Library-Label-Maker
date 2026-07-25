@@ -227,9 +227,17 @@ Third-party barcode library (e.g. python-barcode + Pillow — future)
 **Public API**
 
 * `BarcodeRenderer` — protocol: `render_to_file(data, output_path, *, symbology) -> Path`
-* `BarcodeSymbology` — `EAN13` (planned), plus reserved `CODE128` / `QR`
-* `PythonBarcodeRenderer` — placeholder; raises `NotImplementedError` until the
-  Barcode Generation Engine sprint
+* `BarcodeSymbology` — `EAN13` (implemented), plus reserved `CODE128` / `QR`
+* `PythonBarcodeRenderer` — EAN-13 PNG backend via python-barcode + Pillow
+
+### Barcode generation service (`services/barcode_generation_service.py`)
+
+`BarcodeGenerationService` is the reusable engine for creating barcode images.
+It accepts a validated `Book`, resolves paths from `ApplicationSettings`, skips
+existing files (`ALREADY_EXISTS`), and delegates encoding to a `BarcodeRenderer`.
+
+It does **not** re-validate ISBNs and does **not** import third-party barcode
+libraries.
 
 ### Future renderer extension points
 

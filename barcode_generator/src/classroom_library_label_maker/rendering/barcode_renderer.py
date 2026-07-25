@@ -1,7 +1,7 @@
-"""Placeholder barcode renderer backed by python-barcode (future).
+"""Barcode renderer backed by the ``python-barcode`` library.
 
-No third-party rendering is performed in this module yet. The class exists to
-reserve the implementation slot for the Barcode Generation Engine sprint.
+Third-party types stay inside this module. Callers only see ``pathlib.Path``
+and application enums from the :class:`BarcodeRenderer` contract.
 """
 
 from __future__ import annotations
@@ -15,14 +15,10 @@ _logger = get_logger("rendering.python_barcode")
 
 
 class PythonBarcodeRenderer:
-    """BarcodeRenderer implementation that will use the ``python-barcode`` library.
+    """Render barcode images using ``python-barcode`` and Pillow.
 
-    This is an architectural placeholder. Methods raise
-    :class:`NotImplementedError` until the barcode generation feature is built.
-
-    The class intentionally exposes no ``python-barcode`` or Pillow types in its
-    public signature so it can satisfy :class:`BarcodeRenderer` without leaking
-    vendor APIs into the service layer.
+    Public methods accept and return only standard library / domain types so
+    the service layer never imports vendor libraries.
     """
 
     def render_to_file(
@@ -32,28 +28,64 @@ class PythonBarcodeRenderer:
         *,
         symbology: BarcodeSymbology = BarcodeSymbology.EAN13,
     ) -> Path:
-        """Render a barcode image to ``output_path`` (not implemented).
+        """Render ``data`` as a barcode PNG at ``output_path``.
 
         Args:
-            data: Payload to encode (e.g. normalized ISBN-13 digits).
-            output_path: Destination image path.
-            symbology: Target symbology (EAN-13 for the initial engine).
+            data: Payload to encode (normalized ISBN-13 digits for EAN-13).
+            output_path: Destination image path (``.png`` expected).
+            symbology: Target symbology. Only :attr:`BarcodeSymbology.EAN13`
+                is supported in this release.
 
         Returns:
-            Never returns; raises until implemented.
+            ``output_path`` after a successful write.
 
         Raises:
-            NotImplementedError: Always, until rendering is implemented.
+            ValueError: If ``symbology`` is unsupported or ``data`` cannot be
+                encoded as the requested symbology.
+            OSError: If the image file cannot be written.
         """
+        output_path = Path(output_path)
         _logger.debug(
-            "PythonBarcodeRenderer.render_to_file placeholder "
-            "(data=%r, output_path=%s, symbology=%s)",
+            "Rendering barcode (data=%r, output_path=%s, symbology=%s)",
             data,
             output_path,
             symbology,
         )
-        # Future: encode with python-barcode + Pillow writer; write PNG bytes
-        # to output_path; return output_path. Keep all vendor types private.
-        raise NotImplementedError(
-            "PythonBarcodeRenderer.render_to_file is not implemented yet"
+
+        if symbology is not BarcodeSymbology.EAN13:
+            raise ValueError(
+                f"Unsupported symbology for PythonBarcodeRenderer: {symbology!s}"
+            )
+
+        try:
+            from barcode import get_barcode_class
+            from barcode.writer import ImageWriter
+        except ImportError as exc:  # pragma: no cover - dependency is required
+            raise ValueError(
+                "python-barcode is required to render barcode images"
+            ) from exc
+
+        barcode_cls = get_barcode_class("ean13")
+        try:
+            barcode = barcode_cls(data, writer=ImageWriter())
+        except Exception as exc:
+            raise ValueError(f"Cannot encode EAN-13 barcode for data={data!r}") from exc
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with output_path.open("wb") as handle:
+                barcode.write(handle)
+        except OSError:
+            raise
+        except Exception as exc:
+            raise ValueError(
+                f"Failed writing EAN-13 barcode image to {output_path}"
+            ) from exc
+
+        if not output_path.is_file() or output_path.stat().st_size <= 0:
+            raise OSError(f"Barcode render produced an empty file: {output_path}")
+
+        _logger.debug(
+            "Rendered barcode to %s (%s bytes)", output_path, output_path.stat().st_size
         )
+        return output_path
