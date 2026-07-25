@@ -3,12 +3,18 @@
 This module is intentionally limited to normalization and validation. It does
 not generate barcodes or interact with workbooks.
 
-Public API overview
--------------------
+Stable public API (frozen)
+--------------------------
+The following methods are the stable ISBN validation interface and should
+remain backward compatible unless a major version change occurs:
+
 * :meth:`IsbnValidator.normalize` — clean an ISBN string without validating
 * :meth:`IsbnValidator.validate` — validate one ISBN; always returns
   :class:`~classroom_library_label_maker.models.ValidationResult`
 * :meth:`IsbnValidator.validate_many` — validate an iterable via ``validate``
+
+Additional public helpers (not part of the frozen surface above):
+
 * :meth:`IsbnValidator.is_valid` — convenience boolean wrapper
 * :meth:`IsbnValidator.compute_check_digit` — ISBN-13 / EAN-13 check digit
 """

@@ -56,6 +56,7 @@ barcode_generator/
 │
 ├── tests/
 │   ├── conftest.py
+│   ├── benchmarks/             # Manual ISBN timing (not CI)
 │   ├── integration/                # Reserved for E2E tests
 │   └── test_*.py
 │
@@ -123,15 +124,20 @@ Coding standards:
 
 ### ISBN validation
 
-`IsbnValidator` lives in `services/isbn_validator.py`:
+`IsbnValidator` lives in `services/isbn_validator.py`.
+
+**Stable public API** (backward compatible unless a major version change):
+
+- `normalize()` — clean input without validating
+- `validate()` — validate one ISBN → `ValidationResult`
+- `validate_many()` — validate many ISBNs via `validate()`
 
 ```powershell
 python -c "from classroom_library_label_maker.services import IsbnValidator; v=IsbnValidator(); print(v.normalize('978-0-06-440055-8'), v.validate('9780064400558').is_valid)"
 ```
 
-- `normalize()` cleans input without validating
-- `validate()` / `validate_many()` return `ValidationResult`
-- Failure text comes from `ValidationErrorCode.message`
+Failure text comes from `ValidationErrorCode.message`. See
+[`docs/Architecture.md`](../docs/Architecture.md) for the full contract.
 
 ## Build process
 
@@ -152,6 +158,44 @@ python -m pytest
 - Unit tests live beside fixtures in `tests/`.
 - `tests/integration/` is reserved for end-to-end runs once generation works.
 - Incomplete engine features remain `xfail` until implemented.
+
+### ISBN validator benchmarks (manual only)
+
+`tests/benchmarks/` holds **engineering performance timings** for
+`IsbnValidator`. They exist to spot accidental slowdowns during refactors, not
+to enforce hard SLAs.
+
+**Why they exist**
+
+- Give developers a quick local signal when changing normalization/validation.
+- Produce comparable timings across machines/commits without coupling CI to
+  wall-clock variance.
+
+**How to run**
+
+```powershell
+# Preferred: run as a script (prints timings only)
+python tests\benchmarks\benchmark_isbn_validator.py
+
+# Optional: invoke via pytest on that file alone
+python -m pytest tests\benchmarks\benchmark_isbn_validator.py -v -s
+```
+
+Default `python -m pytest` does **not** collect these files (they are named
+`benchmark_*.py`, not `test_*.py`).
+
+**How to interpret results**
+
+- Compare relative times on the **same machine** before/after a change.
+- Absolute numbers vary by CPU, power plan, and background load — do not treat
+  them as pass/fail gates.
+- Look for order-of-magnitude regressions (e.g. 10× slower), not millisecond noise.
+
+**CI policy**
+
+- Benchmarks must **never** fail CI.
+- Do not add performance assertions or include `tests/benchmarks/` in required
+  CI test paths.
 
 ## Versioning
 

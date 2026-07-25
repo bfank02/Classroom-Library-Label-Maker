@@ -169,19 +169,32 @@ Root package `__init__` exports a narrow public API (models + exceptions +
 It never raises for expected ISBN failures; it always returns
 `ValidationResult`.
 
-| Method | Role |
-|--------|------|
-| `normalize(isbn)` | Public cleaner: trim + remove spaces/hyphens; **no** validation |
-| `validate(isbn)` | Full ISBN-13 checks in fixed order; returns `ValidationResult` |
-| `validate_many(isbns)` | Applies `validate()` to each item (no duplicated rules) |
-| `is_valid(isbn)` | Boolean wrapper around `validate()` |
-| `compute_check_digit(12 digits)` | GS1 / ISBN-13 check-digit helper |
+### Stable public API (frozen)
+
+The following methods are the **stable public interface** for ISBN validation.
+They are considered feature-complete and **must remain backward compatible**
+unless a **major** version bump intentionally breaks them:
+
+| Method | Contract |
+|--------|----------|
+| `normalize(isbn: str \| None) -> str` | Clean an ISBN string (trim; remove spaces/hyphens). Does **not** validate. |
+| `validate(isbn: str \| None) -> ValidationResult` | Validate one ISBN; always returns a result (never raises for invalid input). |
+| `validate_many(isbns: Iterable[str \| None]) -> list[ValidationResult]` | Validate many values by calling `validate()` per item, preserving order. |
+
+Additional public helpers (`is_valid`, `compute_check_digit`) exist for
+convenience but are not part of the frozen compatibility surface above.
 
 Validation order: empty → numeric → length 13 → prefix `978`/`979` → checksum.
 
 `ValidationErrorCode` is the single source of truth for failure **codes and
 default user-facing messages** (`error_code.message`). `ValidationResult.errors`
 is populated from that message.
+
+### Performance benchmarks
+
+Engineering timings live under `barcode_generator/tests/benchmarks/`. They are
+**not** part of the normal unit-test suite and must **never** fail CI. See the
+barcode generator README for how to run them and how to interpret results.
 
 ## Application metadata (`metadata.py`)
 
