@@ -11,9 +11,14 @@ import sys
 from PySide6.QtWidgets import QApplication
 
 from classroom_library_label_maker.gui.controller import GuiController
+from classroom_library_label_maker.gui.icons import load_application_icon
 from classroom_library_label_maker.gui.main_window import MainWindow
 from classroom_library_label_maker.logger import setup_logging
-from classroom_library_label_maker.metadata import APP_NAME, APP_VERSION
+from classroom_library_label_maker.metadata import (
+    APP_COMPANY,
+    APP_NAME,
+    APP_VERSION,
+)
 
 
 def create_application(argv: list[str] | None = None) -> QApplication:
@@ -34,12 +39,19 @@ def create_application(argv: list[str] | None = None) -> QApplication:
     app = QApplication(args)
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(APP_VERSION)
+    app.setOrganizationName(APP_COMPANY)
+    icon = load_application_icon()
+    if not icon.isNull():
+        app.setWindowIcon(icon)
     return app
 
 
 def create_main_window() -> MainWindow:
     """Construct the main window and its presentation controller."""
     window = MainWindow()
+    icon = QApplication.windowIcon()
+    if not icon.isNull():
+        window.setWindowIcon(icon)
     GuiController(window)
     return window
 

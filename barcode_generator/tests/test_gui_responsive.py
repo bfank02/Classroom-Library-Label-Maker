@@ -173,7 +173,8 @@ def test_controls_disabled_during_generation_and_restored_on_success(
     assert window.barcode_browse_button.isEnabled()
     assert window.output_browse_button.isEnabled()
     assert window.label_template_combo.isEnabled()
-    assert "generated 1 label" in window.status_label.text().lower()
+    assert "1 label" in window.status_label.text().lower()
+    assert "done" in window.status_label.text().lower()
     window.close()
 
 

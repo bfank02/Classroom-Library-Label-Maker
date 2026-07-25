@@ -7,10 +7,10 @@ Responsibilities:
 * update path labels and control enablement
 * lightweight form validation
 * construct :class:`ApplicationSettings` and start a :class:`GenerationWorker`
-  on a ``QThread``
+* display engine progress / success / failure in the status line
 
-Does **not** implement ISBN / import / barcode / layout logic, progress
-reporting, or cancellation. ``WorkbookGenerationService`` remains Qt-unaware.
+Does **not** implement ISBN / import / barcode / layout logic or cancellation.
+``WorkbookGenerationService`` remains Qt-unaware.
 """
 
 from __future__ import annotations
@@ -56,6 +56,7 @@ __all__ = [
     "GenerationServiceFactory",
     "GuiController",
     "WorkbookGenerator",
+    "ensure_excel_workbook_suffix",
     "template_display_name",
 ]
 
@@ -301,7 +302,8 @@ class GuiController(QObject):
                 exc_info=exc if isinstance(exc, BaseException) else False,
             )
             self._set_status(
-                "Generation failed unexpectedly. See the log for details.",
+                "Something went wrong while generating labels. "
+                "Check the log for details.",
                 error=True,
             )
         self._set_inputs_enabled(True)
@@ -320,13 +322,20 @@ class GuiController(QObject):
 
     def _success_status(self, result: WorkbookGenerationResult) -> str:
         output = result.output_path
-        warning_note = (
-            f" ({len(result.warnings)} warning(s))" if result.warnings else ""
-        )
+        labels = result.labels_created
+        pages = result.pages_created
+        label_word = "label" if labels == 1 else "labels"
+        page_word = "page" if pages == 1 else "pages"
+        warning_count = len(result.warnings)
+        if warning_count == 1:
+            warning_note = " (1 warning)"
+        elif warning_count > 1:
+            warning_note = f" ({warning_count} warnings)"
+        else:
+            warning_note = ""
         return (
-            f"Generated {result.labels_created} label(s) on "
-            f"{result.pages_created} page(s){warning_note}. "
-            f"Saved to {output}"
+            f"Done — {labels} {label_word} on {pages} {page_word}"
+            f"{warning_note}. Saved to {output}."
         )
 
     def _set_inputs_enabled(self, enabled: bool) -> None:
@@ -427,7 +436,7 @@ class GuiController(QObject):
     def _default_open_inventory(self) -> Path | None:
         path, _filter = QFileDialog.getOpenFileName(
             self._window,
-            "Select Inventory Workbook",
+            "Choose Inventory Workbook",
             "",
             "Excel workbooks (*.xlsx *.xlsm);;All files (*.*)",
         )
@@ -436,16 +445,39 @@ class GuiController(QObject):
     def _default_open_barcode_folder(self) -> Path | None:
         path = QFileDialog.getExistingDirectory(
             self._window,
-            "Select Barcode Folder",
+            "Choose Barcode Folder",
             "",
         )
         return Path(path) if path else None
 
     def _default_save_output(self) -> Path | None:
-        path, _filter = QFileDialog.getSaveFileName(
+        path, selected_filter = QFileDialog.getSaveFileName(
             self._window,
-            "Select Output Workbook",
+            "Save Label Workbook",
             "library_labels.xlsx",
-            "Excel workbooks (*.xlsx *.xlsm);;All files (*.*)",
+            "Excel workbook (*.xlsx);;Excel macro-enabled workbook (*.xlsm)",
         )
-        return Path(path) if path else None
+        if not path:
+            return None
+        return ensure_excel_workbook_suffix(
+            Path(path),
+            preferred_filter=selected_filter,
+        )
+
+
+def ensure_excel_workbook_suffix(
+    path: Path,
+    *,
+    preferred_filter: str = "",
+) -> Path:
+    """Ensure ``path`` has a sensible Excel suffix for save dialogs.
+
+    Preserves ``.xlsx`` / ``.xlsm`` when already present. Otherwise applies
+    ``.xlsm`` when the chosen filter mentions it, else ``.xlsx``.
+    """
+    suffix = path.suffix.lower()
+    if suffix in {".xlsx", ".xlsm"}:
+        return path
+    if "xlsm" in preferred_filter.lower():
+        return path.with_suffix(".xlsm")
+    return path.with_suffix(".xlsx")

@@ -334,34 +334,33 @@ label-maker-gui
 Both call `classroom_library_label_maker.gui:main`, which creates
 `QApplication`, shows `MainWindow`, and runs the Qt event loop.
 
-### Current user workflow (RC3.4)
+### Current user workflow (RC3.5)
 
 The main window collects generation inputs and runs the engine **in the
 background**:
 
 1. **Inventory workbook** — Browse… (Excel `.xlsx` / `.xlsm`)
-2. **Barcode folder** — Browse… (directory for PNG barcodes)
-3. **Output workbook** — Browse… (save path for label workbook)
+2. **Barcode folder** — Browse… (directory for barcode images)
+3. **Output workbook** — Browse… (defaults to `library_labels.xlsx`; extension
+   preserved / applied automatically)
 4. **Label template** — combo (default **Avery 5160**)
 5. **Generate Labels** — enabled when all fields validate; starts
    `WorkbookGenerationService` on a Qt worker thread
 
 While generating, Browse buttons, the template combo, and Generate are
-disabled (duplicate Generate clicks are ignored). The window stays responsive.
-The status line shows engine stage updates (`Importing workbook...`,
-`Validating books...`, `Generating barcodes...`, `Creating labels...`,
-`Saving workbook...`).
+disabled. The status line shows engine stage updates, then a concise success
+or friendly error message. Press **Esc** to close the window.
 
-On success, the status area shows a concise summary (labels / pages / output
-path). On failure, it shows a user-friendly message (no Python traceback).
-The generated workbook is **not** opened automatically.
+Icon loading uses `assets/icons/app.ico` (then `logo.png`) when non-empty
+placeholder files are replaced with real artwork.
 
 ### Package layout
 
 | Module | Role |
 |--------|------|
-| `gui/app.py` | `QApplication` bootstrap + event loop |
-| `gui/main_window.py` | Widgets / layout / accessibility |
+| `gui/app.py` | `QApplication` bootstrap + event loop + icon |
+| `gui/icons.py` | Application icon discovery (empty placeholders ignored) |
+| `gui/main_window.py` | Widgets / layout / accessibility / Esc to close |
 | `gui/controller.py` | Form actions, validation, start/finish generation |
 | `gui/generation_worker.py` | `QObject` worker: run service, emit progress/completed/failed |
 | `gui/form_state.py` | Immutable selections + validation messages |

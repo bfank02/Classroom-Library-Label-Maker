@@ -25,6 +25,9 @@
 - [x] Workbook generation service (`WorkbookGenerationService` + `WorkbookWriter`)
 - [x] CLI `generate` → `WorkbookGenerationService`
 - [x] Workbook presentation / print readiness (openpyxl adapters)
+- [x] Cross-platform desktop GUI (PySide6) over `WorkbookGenerationService`
+- [x] Background generation + stage progress in the status line
+- [x] Desktop product polish (RC3.5 UX / accessibility pass)
 - [ ] Remove deprecated stubs (`BatchProcessor` / `BarcodeGenerator`) when unused
 - [ ] Package as EXE (`build.bat` / PyInstaller)
 
