@@ -121,6 +121,18 @@ Coding standards:
 - Business logic in `services/`; `main.py` stays thin
 - Use Ruff (via CLI or pre-commit) before opening a PR
 
+### ISBN validation
+
+`IsbnValidator` lives in `services/isbn_validator.py`:
+
+```powershell
+python -c "from classroom_library_label_maker.services import IsbnValidator; v=IsbnValidator(); print(v.normalize('978-0-06-440055-8'), v.validate('9780064400558').is_valid)"
+```
+
+- `normalize()` cleans input without validating
+- `validate()` / `validate_many()` return `ValidationResult`
+- Failure text comes from `ValidationErrorCode.message`
+
 ## Build process
 
 ```powershell

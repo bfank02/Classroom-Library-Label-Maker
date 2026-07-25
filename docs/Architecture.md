@@ -163,6 +163,26 @@ Root package `__init__` exports a narrow public API (models + exceptions +
 | `utils.file_utils` | JSON + directory helpers |
 | `constants` | Operational defaults (paths, log sizes) — not product branding |
 
+## ISBN validator (`services/isbn_validator.py`)
+
+`IsbnValidator` (alias `ISBNValidator`) is a **stateless** normalizer/validator.
+It never raises for expected ISBN failures; it always returns
+`ValidationResult`.
+
+| Method | Role |
+|--------|------|
+| `normalize(isbn)` | Public cleaner: trim + remove spaces/hyphens; **no** validation |
+| `validate(isbn)` | Full ISBN-13 checks in fixed order; returns `ValidationResult` |
+| `validate_many(isbns)` | Applies `validate()` to each item (no duplicated rules) |
+| `is_valid(isbn)` | Boolean wrapper around `validate()` |
+| `compute_check_digit(12 digits)` | GS1 / ISBN-13 check-digit helper |
+
+Validation order: empty → numeric → length 13 → prefix `978`/`979` → checksum.
+
+`ValidationErrorCode` is the single source of truth for failure **codes and
+default user-facing messages** (`error_code.message`). `ValidationResult.errors`
+is populated from that message.
+
 ## Application metadata (`metadata.py`)
 
 Product-facing strings are centralized so installers, CLI help, logs, and

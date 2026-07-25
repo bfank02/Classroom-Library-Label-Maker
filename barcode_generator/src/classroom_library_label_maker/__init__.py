@@ -33,6 +33,7 @@ from classroom_library_label_maker.models import (
     BarcodeGenerationResult,
     BarcodeStatus,
     Book,
+    ValidationErrorCode,
     ValidationResult,
 )
 
@@ -54,6 +55,7 @@ __all__ = [
     "InvalidISBNError",
     "InvalidWorkbookError",
     "ValidationError",
+    "ValidationErrorCode",
     "ValidationResult",
     "__version__",
 ]
