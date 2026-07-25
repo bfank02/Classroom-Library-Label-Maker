@@ -399,6 +399,16 @@ class BatchProcessingResult:
             if r.status == BookProcessingStatus.GENERATION_FAILED
         )
 
+    @property
+    def books_per_second(self) -> float:
+        """Derived throughput: ``total_processed / elapsed_seconds``.
+
+        Returns ``0.0`` when no time has elapsed (avoids division by zero).
+        """
+        if self.elapsed_seconds <= 0.0:
+            return 0.0
+        return self.total_processed / self.elapsed_seconds
+
     def to_dict(self) -> dict[str, Any]:
         """Serialize batch processing results to a JSON-compatible dictionary."""
         return {
@@ -409,6 +419,7 @@ class BatchProcessingResult:
                 "validation_failures": self.validation_failures,
                 "generation_failures": self.generation_failures,
                 "elapsed_seconds": self.elapsed_seconds,
+                "books_per_second": self.books_per_second,
             },
             "results": [result.to_dict() for result in self.results],
         }

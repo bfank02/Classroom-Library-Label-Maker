@@ -12,7 +12,9 @@ from classroom_library_label_maker.models import (
     ApplicationSettings,
     BarcodeGenerationResult,
     BarcodeStatus,
+    BatchProcessingResult,
     Book,
+    BookProcessingResult,
     BookProcessingStatus,
     ValidationErrorCode,
     ValidationResult,
@@ -284,6 +286,132 @@ def test_duration_measurement(app_settings: ApplicationSettings) -> None:
 
     batch = service.process_books([book])
     assert batch.elapsed_seconds >= 0.02
+
+
+def test_results_preserve_input_order(app_settings: ApplicationSettings) -> None:
+    """BookProcessingResult entries must match the input collection order."""
+    books = [
+        Book(isbn="123", title="First", author="A", copies=1),
+        Book(isbn="9780064400558", title="Second", author="A", copies=1),
+        Book(isbn="999", title="Third", author="A", copies=1),
+        Book(isbn="9780140328721", title="Fourth", author="A", copies=1),
+    ]
+    validator = MagicMock()
+    validator.validate.side_effect = [
+        ValidationResult(
+            isbn="123",
+            is_valid=False,
+            errors=["bad"],
+            error_code=ValidationErrorCode.INVALID_LENGTH,
+        ),
+        ValidationResult(isbn="9780064400558", is_valid=True, errors=[]),
+        ValidationResult(
+            isbn="999",
+            is_valid=False,
+            errors=["bad"],
+            error_code=ValidationErrorCode.INVALID_LENGTH,
+        ),
+        ValidationResult(isbn="9780140328721", is_valid=True, errors=[]),
+    ]
+    generator = MagicMock()
+    generator.generate_for_book.side_effect = [
+        BarcodeGenerationResult(
+            isbn="9780064400558",
+            status=BarcodeStatus.GENERATED,
+            output_path=Path("a.png"),
+            message="ok",
+            title="Second",
+        ),
+        BarcodeGenerationResult(
+            isbn="9780140328721",
+            status=BarcodeStatus.ALREADY_EXISTS,
+            output_path=Path("b.png"),
+            message="exists",
+            title="Fourth",
+        ),
+    ]
+    service = BatchProcessingService(
+        app_settings,
+        validator=validator,
+        generator=generator,
+    )
+
+    batch = service.process_books(books)
+
+    assert [result.title for result in batch.results] == [
+        "First",
+        "Second",
+        "Third",
+        "Fourth",
+    ]
+    assert [book.title for book in books] == [result.title for result in batch.results]
+
+
+def test_books_per_second_derived_metric() -> None:
+    """books_per_second should derive from count/elapsed and handle zero time."""
+    empty = BatchProcessingResult(results=[], elapsed_seconds=0.0)
+    assert empty.books_per_second == 0.0
+
+    results = [
+        BookProcessingResult(
+            isbn="9780064400558",
+            title="A",
+            status=BookProcessingStatus.GENERATED,
+        ),
+        BookProcessingResult(
+            isbn="123",
+            title="B",
+            status=BookProcessingStatus.VALIDATION_FAILED,
+        ),
+    ]
+    batch = BatchProcessingResult(results=results, elapsed_seconds=2.0)
+    assert batch.books_per_second == 1.0
+    assert batch.to_dict()["summary"]["books_per_second"] == 1.0
+
+
+def test_cancellation_token_accepted_but_not_enforced(
+    app_settings: ApplicationSettings,
+) -> None:
+    """Cancellation token is accepted for API stability but does not stop the batch."""
+    books = [
+        _valid_book(title="One"),
+        _valid_book(isbn="9780140328721", title="Two"),
+    ]
+    validator = MagicMock()
+    validator.validate.side_effect = [
+        ValidationResult(isbn="9780064400558", is_valid=True, errors=[]),
+        ValidationResult(isbn="9780140328721", is_valid=True, errors=[]),
+    ]
+    generator = MagicMock()
+    generator.generate_for_book.side_effect = [
+        BarcodeGenerationResult(
+            isbn="9780064400558",
+            status=BarcodeStatus.GENERATED,
+            output_path=Path("a.png"),
+            message="ok",
+            title="One",
+        ),
+        BarcodeGenerationResult(
+            isbn="9780140328721",
+            status=BarcodeStatus.GENERATED,
+            output_path=Path("b.png"),
+            message="ok",
+            title="Two",
+        ),
+    ]
+    token = MagicMock()
+    token.is_cancellation_requested.return_value = True
+    service = BatchProcessingService(
+        app_settings,
+        validator=validator,
+        generator=generator,
+        cancellation_token=token,
+    )
+
+    batch = service.process_books(books)
+
+    assert batch.total_processed == 2
+    token.is_cancellation_requested.assert_not_called()
 
 
 def test_progress_reporter_invoked(app_settings: ApplicationSettings) -> None:

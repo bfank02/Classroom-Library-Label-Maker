@@ -1,8 +1,9 @@
-"""Protocols for optional enrichment and progress reporting.
+"""Protocols for optional enrichment, progress reporting, and cancellation.
 
 Implementations will live under ``services.lookups`` and ``services.covers``
-when those features are built. Progress reporters may be supplied by CLI or
-future UI layers without changing :class:`BatchProcessingService`.
+when those features are built. Progress reporters and cancellation tokens may
+be supplied by CLI or future UI layers without changing
+:class:`BatchProcessingService` method signatures.
 """
 
 from __future__ import annotations
@@ -71,4 +72,21 @@ class BatchProgressReporter(Protocol):
 
     def on_batch_completed(self, total: int) -> None:
         """Called once after all books have been processed."""
+        ...
+
+
+class BatchCancellationToken(Protocol):
+    """Extension point for cooperative batch cancellation.
+
+    Future UI layers can supply a token so the operator can stop a long batch
+    between books. :class:`BatchProcessingService` accepts an optional token
+    today so the constructor API stays stable when enforcement is added.
+
+    **Not enforced in this release.** Passing a token has no effect until a
+    future sprint checks ``is_cancellation_requested`` between books and stops
+    gracefully (partial results retained).
+    """
+
+    def is_cancellation_requested(self) -> bool:
+        """Return True when the caller has requested that the batch stop."""
         ...

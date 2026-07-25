@@ -263,15 +263,34 @@ libraries.
 `BatchProcessingService` is the orchestration layer for collections of `Book`
 objects. Future Excel import will feed books into this service.
 
-Flow per book: `IsbnValidator.validate()` → on success
-`BarcodeGenerationService.generate_for_book()` → record
-`BookProcessingResult`. The batch continues after validation or generation
-failures and returns `BatchProcessingResult` with counts and
-`elapsed_seconds`.
+**Orchestration responsibilities**
+
+* Validate each book with `IsbnValidator` (Feature 1)
+* Generate barcodes for valid books with `BarcodeGenerationService` (Feature 2)
+* Continue after per-book validation or generation failures
+* Return `BatchProcessingResult` with counts, `elapsed_seconds`, and derived
+  `books_per_second`
+* Preserve **input order** in `results` (`BookProcessingResult` index `i`
+  always corresponds to input book `i`)
+
+**Progress reporting**
 
 Optional `BatchProgressReporter` hooks (`on_batch_started`,
 `on_book_processed`, `on_batch_completed`) allow future CLI/UI progress
-without changing the service API. No UI is implemented here.
+without changing `process_books()`. No UI is implemented here.
+
+**Future cancellation support**
+
+Optional `BatchCancellationToken` (`is_cancellation_requested`) is accepted on
+the constructor so UI can plug in later **without changing the public API**.
+Cancellation is **not enforced** in this release; the token is retained only
+as a stable extension point.
+
+**Metrics**
+
+`BatchProcessingResult.books_per_second` is derived as
+`total_processed / elapsed_seconds` (returns `0.0` when elapsed time is zero).
+It is not stored separately.
 
 JSON loading / `BatchProcessor.run()` remain separate (workbook/CLI input
 adapters).

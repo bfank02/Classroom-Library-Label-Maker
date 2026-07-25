@@ -8,8 +8,9 @@ and
 without duplicating their logic.
 
 Per-book failures never abort the batch. Optional progress reporting is
-supported via :class:`BatchProgressReporter` so future CLI/UI layers can
-observe progress without API changes.
+supported via :class:`BatchProgressReporter`. An optional
+:class:`BatchCancellationToken` is accepted as a future extension point;
+cancellation is not enforced in this release.
 """
 
 from __future__ import annotations
@@ -31,7 +32,10 @@ from classroom_library_label_maker.services.barcode_generation_service import (
     BarcodeGenerationService,
 )
 from classroom_library_label_maker.services.isbn_validator import IsbnValidator
-from classroom_library_label_maker.services.protocols import BatchProgressReporter
+from classroom_library_label_maker.services.protocols import (
+    BatchCancellationToken,
+    BatchProgressReporter,
+)
 
 _logger = get_logger("batch_processing_service")
 
@@ -44,8 +48,12 @@ class BatchProcessingService:
     * Validate each book with :class:`IsbnValidator`
     * Generate barcodes for valid books with :class:`BarcodeGenerationService`
     * Continue after validation or generation failures
+    * Preserve input order in :class:`BatchProcessingResult.results`
     * Aggregate per-book outcomes into :class:`BatchProcessingResult`
     * Optionally notify a :class:`BatchProgressReporter` after each book
+
+    Cancellation is prepared via an optional :class:`BatchCancellationToken`
+    constructor argument but is **not enforced** yet.
     """
 
     def __init__(
@@ -55,6 +63,7 @@ class BatchProcessingService:
         validator: IsbnValidator | None = None,
         generator: BarcodeGenerationService | None = None,
         progress_reporter: BatchProgressReporter | None = None,
+        cancellation_token: BatchCancellationToken | None = None,
     ) -> None:
         """Initialize the batch processing service.
 
@@ -63,17 +72,25 @@ class BatchProcessingService:
             validator: Optional ISBN validator override.
             generator: Optional barcode generation service override.
             progress_reporter: Optional progress hook for future UI/CLI.
+            cancellation_token: Optional cooperative-cancellation token.
+                Accepted for a stable future API; not consulted in this
+                release (cancellation is not implemented yet).
         """
         self._settings = settings
         self._validator = validator or IsbnValidator()
         self._generator = generator or BarcodeGenerationService(settings)
         self._progress = progress_reporter
+        # Retained for a stable constructor API; enforcement is deferred.
+        self._cancellation = cancellation_token
 
     def process_books(self, books: Sequence[Book]) -> BatchProcessingResult:
         """Validate and generate barcodes for every book in ``books``.
 
         Processing continues after individual validation or generation
         failures. The batch never raises for expected per-book errors.
+
+        ``BookProcessingResult`` entries are always returned in the same
+        order as ``books``.
 
         Args:
             books: Collection of books to process (may be empty).
@@ -90,6 +107,8 @@ class BatchProcessingService:
         results: list[BookProcessingResult] = []
 
         for index, book in enumerate(books, start=1):
+            # Future: honor self._cancellation between books without changing
+            # this method's signature (see BatchCancellationToken).
             result = self._process_one(book)
             results.append(result)
             self._notify_book_processed(index, total, result)
