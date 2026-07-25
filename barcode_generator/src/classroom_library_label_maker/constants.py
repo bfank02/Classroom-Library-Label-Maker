@@ -14,9 +14,12 @@ APP_LOGGER_NAME = APP_PACKAGE_NAME
 DEFAULT_LOG_FILE_NAME = "application.log"
 DEFAULT_LOG_LEVEL = "INFO"
 
-# Label templates (Sprint 3+)
-DEFAULT_LABEL_TYPE = "avery_5160"
+# Label templates
+# Canonical setting / registry id (use ApplicationSettings.label_template_id).
 DEFAULT_LABEL_TEMPLATE_ID = "avery-5160"
+# Deprecated compatibility default for ApplicationSettings.default_label_type
+# (legacy underscore form; not used by LabelLayoutService).
+DEFAULT_LABEL_TYPE = "avery_5160"
 
 # Barcode image files
 DEFAULT_BARCODE_EXTENSION = ".png"

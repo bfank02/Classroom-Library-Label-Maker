@@ -2,8 +2,18 @@
 
 Python component of **Classroom Library Label Maker**.
 
-Validates ISBN-13 values, generates EAN-13 barcode PNG images, skips existing
-images, and writes a JSON results file. Packaged for Windows via PyInstaller.
+Validates ISBN-13 values, imports books from Excel, generates EAN-13 barcode
+PNG images, orchestrates batches, and lays out labels onto worksheet targets.
+Packaged for Windows via PyInstaller.
+
+**Canonical pipeline (Feature 6+):**
+`ExcelImportService` → `BatchProcessingService` → `LabelLayoutService`
+
+**Not implemented yet:** workbook save after layout, printing / print preview,
+Excel VBA UI. Layout exists; print/save do not.
+
+**Deprecated (CLI compatibility only):** `BatchProcessor`, `BarcodeGenerator`,
+`BatchResults` — do not use for new development.
 
 **Package:** `classroom_library_label_maker`  
 **Version:** see [`VERSION`](VERSION) and `metadata.APP_VERSION` · **Changes:** [`CHANGELOG.md`](CHANGELOG.md)
@@ -45,22 +55,26 @@ barcode_generator/
 │       │   ├── parser.py           # Argparse + subcommands
 │       │   └── commands.py         # Command handlers + dispatch
 │       ├── services/
+│       │   ├── isbn_validator.py
 │       │   ├── barcode_generation_service.py
 │       │   ├── batch_processing_service.py
 │       │   ├── excel_import_service.py
-│       │   ├── barcode_generator.py
-│       │   ├── batch_processor.py
-│       │   ├── isbn_validator.py
-│       │   ├── protocols.py        # Lookup / cover contracts
-│       │   ├── lookups/            # Future ISBN APIs
-│       │   └── covers/             # Future cover downloads
-│       ├── rendering/              # Barcode image rendering (protocol + backends)
+│       │   ├── label_layout_service.py
+│       │   ├── barcode_generator.py    # Deprecated CLI helper
+│       │   ├── batch_processor.py      # Deprecated CLI adapter
+│       │   ├── protocols.py            # Lookup / cover / progress contracts
+│       │   ├── lookups/                # Future ISBN APIs
+│       │   └── covers/                 # Future cover downloads
+│       ├── rendering/                  # Barcode image rendering (protocol + backends)
 │       │   ├── renderer.py
 │       │   └── barcode_renderer.py
-│       ├── workbooks/              # Spreadsheet I/O (protocol + placeholder)
+│       ├── workbooks/                  # Spreadsheet read / label-sheet write
 │       │   ├── workbook_reader.py
-│       │   └── openpyxl_workbook_reader.py
-│       ├── label_templates/        # Physical label specs (inches, immutable)
+│       │   ├── openpyxl_workbook_reader.py
+│       │   ├── label_sheet_target.py
+│       │   ├── in_memory_label_sheet_target.py
+│       │   └── openpyxl_label_sheet_target.py
+│       ├── label_templates/            # Physical label specs (inches, immutable)
 │       │   ├── label_template.py
 │       │   ├── avery_5160.py
 │       │   └── template_registry.py
@@ -79,7 +93,7 @@ barcode_generator/
 │   ├── icons/
 │   │   ├── app.ico
 │   │   └── logo.png
-│   ├── templates/
+│   ├── templates/              # Reserved (geometry is in label_templates/)
 │   ├── sample-data/
 │   │   └── sample-books.json
 │   └── resources/
@@ -90,7 +104,6 @@ barcode_generator/
 │   └── archive/
 └── temp/
 ```
-
 ## Development workflow
 
 ```powershell
@@ -194,9 +207,9 @@ print(result.status, result.output_path)
 
 ### Batch processing
 
-`BatchProcessingService` orchestrates Feature 1 + Feature 2 over a collection
-of books: validate each ISBN, generate barcodes for valid books, continue after
-per-book failures, and preserve input order in the results list.
+`BatchProcessingService` is the **canonical** multi-book orchestrator (Feature 1
++ Feature 2): validate each ISBN, generate barcodes for valid books, continue
+after per-book failures, and preserve input order in the results list.
 
 ```powershell
 python -c "from classroom_library_label_maker.config import load_application_settings; from classroom_library_label_maker.models import Book; from classroom_library_label_maker.services import BatchProcessingService; s=load_application_settings(); books=[Book(isbn='9780064400558', title='A', author='B'), Book(isbn='123', title='Bad', author='B')]; r=BatchProcessingService(s).process_books(books); print(r.to_dict()['summary'])"
@@ -234,7 +247,8 @@ Immutable physical sheet specs (inches) live under `label_templates/`:
 python -c "from classroom_library_label_maker.label_templates import create_default_template_registry; t=create_default_template_registry().get('avery-5160'); print(t.template_name, t.labels_per_page, t.label_width)"
 ```
 
-- `ApplicationSettings.label_template_id` defaults to `avery-5160`
+- `ApplicationSettings.label_template_id` is the **single source of truth**
+  (default `avery-5160`); `default_label_type` is deprecated and unused by layout
 - `TemplateRegistry` looks up templates; unknown ids raise `ConfigurationError`
 - `LabelLayoutService` consumes `LabelTemplate` without knowing vendors
 - Add new templates by registering `LabelTemplateSpec` instances (no layout-engine changes)
@@ -254,6 +268,13 @@ python -c "from classroom_library_label_maker.config import load_application_set
 - Optional `barcode_paths` map ISBN → PNG; missing images use placeholders
 - `OpenPyxlLabelSheetTarget` writes centered cells (does **not** save)
 - Does **not** generate barcodes, validate ISBNs, import, print, or save
+- **Printing and workbook save are not implemented** (layout only)
+
+### Deprecated CLI orchestration
+
+The CLI `generate` command still uses `BatchProcessor` + `BarcodeGenerator` +
+`BatchResults`. That path is **deprecated** for new development. Prefer the
+canonical services above. See [`docs/PublicAPI.md`](../docs/PublicAPI.md).
 
 ### Manual barcode verification
 
@@ -287,9 +308,10 @@ python -m pytest
 ```
 
 - Unit tests live beside fixtures in `tests/`.
-- `tests/integration/` is reserved for end-to-end runs once generation works.
+- `tests/integration/` is reserved for end-to-end runs.
 - `tests/golden/` holds optional reference barcode PNGs (non-brittle compares).
-- Incomplete batch/label features may remain `xfail` until implemented.
+- Remaining `xfail`s are primarily the deprecated CLI JSON `load_books` /
+  `BarcodeGenerator.generate` stubs — not the Feature 1–5 library services.
 
 ### ISBN validator benchmarks (manual only)
 

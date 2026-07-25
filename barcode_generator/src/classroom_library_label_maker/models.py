@@ -236,7 +236,10 @@ class BarcodeGenerationResult:
 
 @dataclass(slots=True)
 class BatchResults:
-    """Aggregate results for a full batch processing run.
+    """Deprecated: aggregate results for the legacy CLI :class:`~classroom_library_label_maker.services.batch_processor.BatchProcessor`.
+
+    **Do not use for new features.** Prefer
+    :class:`BatchProcessingResult` with :class:`BookProcessingResult`.
 
     Attributes:
         results: Per-book barcode generation outcomes.
@@ -612,7 +615,8 @@ class ApplicationSettings:
         barcode_output_directory: Directory for generated barcode PNG files.
         log_directory: Directory for application log files.
         template_directory: Directory for label templates.
-        default_label_type: Default label template key (e.g. Avery 5160).
+        default_label_type: Deprecated compatibility field. Not used by
+            LabelLayoutService. Prefer ``label_template_id``.
         app_version: Component version string from the ``VERSION`` file.
         project_root: Root of the ``barcode_generator`` project directory.
         input_path: Optional path to the input books JSON for a run.
@@ -632,7 +636,8 @@ class ApplicationSettings:
         workbook_column_author: Header name for the author column.
         workbook_column_copies: Header name for the copies column.
         workbook_header_row: 1-based header row index.
-        label_template_id: Registered label template id (e.g. ``avery-5160``).
+        label_template_id: Single source of truth for the registered label
+            template id (e.g. ``avery-5160``). Used by LabelLayoutService.
     """
 
     barcode_output_directory: Path

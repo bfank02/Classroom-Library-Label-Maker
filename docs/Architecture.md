@@ -12,20 +12,30 @@ Architecture for **Classroom Library Label Maker**, with emphasis on the
 │  ┌─────────────┐   JSON / CLI/EXE    ┌──────────────────────┐ │
 │  │ excel/      │ ──────────────────► │ barcode_generator/   │ │
 │  │ (.xlsm+VBA) │ ◄────────────────── │ Python package / EXE │ │
-│  └─────────────┘   status / paths    └──────────┬───────────┘ │
-│                                                 │             │
+│  │ (Phase 2)   │   status / paths    └──────────┬───────────┘ │
+│  └─────────────┘                                │             │
 │                                                 ▼             │
 │                                      output/barcodes/*.png    │
 │                                      results JSON             │
 │                                                 │             │
-│  ┌─────────────┐   Avery templates   ┌──────────▼───────────┐ │
-│  │ Label print │ ◄────────────────── │ assets/templates/    │ │
-│  │ (Sprint 3)  │                     └──────────────────────┘ │
-│  └─────────────┘                                              │
+│  ┌─────────────┐   LabelTemplate +   ┌──────────▼───────────┐ │
+│  │ Print/save  │   LabelLayoutService│ label_templates/     │ │
+│  │ (not yet)   │ ◄── (layout done;   │ + LabelSheetTarget   │ │
+│  └─────────────┘     print/save no)  └──────────────────────┘ │
 │                                                               │
 │  installer/ → ships EXE + workbook     releases/ → artifacts  │
 └───────────────────────────────────────────────────────────────┘
 ```
+
+**Canonical library workflow (Feature 6+):**
+
+```
+ExcelImportService → BatchProcessingService → LabelLayoutService
+```
+
+Layout places labels onto a `LabelSheetTarget`. **Workbook save and printing
+are not implemented.** The CLI `generate` command still uses the deprecated
+`BatchProcessor` path (compatibility only).
 
 ## Startup sequence / application lifecycle
 
@@ -44,16 +54,18 @@ Workbook / caller
         │
         ▼
      Command        cli/commands.dispatch()
-        │             generate | version | validate* | clean* | diagnostics*
+        │             generate* | version | validate* | clean* | diagnostics*
         ▼
-     Services       BatchProcessingService → IsbnValidator / BarcodeGenerationService
-        │
+     Services       *generate today: deprecated BatchProcessor (CLI only)
+        │             Library / Feature 6+: ExcelImport → BatchProcessing
+        │             → LabelLayout (see Data flow below)
         ▼
       Output        output/barcodes/*.png  +  results JSON  +  logs/
 ```
 
 \* Reserved commands are registered now and return “not implemented” until
-feature sprints land.
+feature sprints land. `generate` remains on the legacy adapter until a CLI
+migration sprint.
 
 ### Lifecycle notes
 
@@ -102,14 +114,15 @@ ApplicationError
 │   ├── InvalidISBNError
 │   └── InvalidWorkbookError
 ├── BarcodeGenerationError
+├── LabelLayoutError
 └── FileSystemError
 ```
 
 - Defined in `exceptions.py`
 - Support an optional underlying `cause` (set as `__cause__`) for logging
 - CLI catches `ApplicationError` for clean user-facing failures
-- Feature code should raise these instead of bare `Exception` once implemented
-
+- Services raise these for unrecoverable failures; recoverable issues use
+  warning objects on result types (`ImportWarning`, `LabelLayoutWarning`)
 ## Package layout (src-layout)
 
 ```
@@ -131,8 +144,8 @@ barcode_generator/src/classroom_library_label_maker/
 │   ├── batch_processing_service.py
 │   ├── excel_import_service.py
 │   ├── label_layout_service.py
-│   ├── barcode_generator.py
-│   ├── batch_processor.py
+│   ├── barcode_generator.py          # Deprecated CLI helper
+│   ├── batch_processor.py            # Deprecated CLI adapter
 │   ├── protocols.py
 │   ├── lookups/         Future catalog APIs
 │   └── covers/          Future cover downloads
@@ -156,7 +169,7 @@ barcode_generator/src/classroom_library_label_maker/
 Import style (absolute, package-qualified):
 
 ```python
-from classroom_library_label_maker.services import BatchProcessor
+from classroom_library_label_maker.services import BatchProcessingService
 from classroom_library_label_maker.config import load_application_settings
 from classroom_library_label_maker.exceptions import InvalidISBNError
 ```
@@ -223,7 +236,7 @@ service can orchestrate skip rules and results without depending on a specific
 barcode library.
 
 ```
-Application (CLI / future Excel)
+Application (CLI / Excel / library callers)
         ↓
 BarcodeGenerationService  (services/barcode_generation_service.py)
         ↓
@@ -274,8 +287,9 @@ libraries.
 
 ### Batch processing service (`services/batch_processing_service.py`)
 
-`BatchProcessingService` is the orchestration layer for collections of `Book`
-objects. Future Excel import will feed books into this service.
+`BatchProcessingService` is the **canonical** orchestration layer for
+collections of `Book` objects. `ExcelImportService` feeds books into this
+service; `LabelLayoutService` consumes barcode paths afterward.
 
 **Orchestration responsibilities**
 
@@ -306,9 +320,13 @@ as a stable extension point.
 `total_processed / elapsed_seconds` (returns `0.0` when elapsed time is zero).
 It is not stored separately.
 
-JSON loading / `BatchProcessor.run()` remain separate (workbook/CLI input
-adapters).
+### Deprecated CLI orchestration (compatibility only)
 
+`BatchProcessor`, `BarcodeGenerator`, and `BatchResults` remain for the current
+CLI `generate` command. They are **not** the public Feature 6+ pipeline.
+New work must use `BatchProcessingService` + `BarcodeGenerationService`.
+`BatchProcessor.load_books()` and `BarcodeGenerator.generate()` are still
+stubs (`NotImplementedError`).
 ### Manual barcode verification
 
 Generated PNGs should scan back to the normalized ISBN-13 (13 digits, no
@@ -486,8 +504,10 @@ LabelSheetTarget
 * `TemplateRegistry` / `create_default_template_registry()`
 * `AVERY_5160` (`template_id`: `avery-5160`) — built-in Avery 5160 data
 
-`ApplicationSettings.label_template_id` defaults to `avery-5160`.
-
+`ApplicationSettings.label_template_id` defaults to `avery-5160` and is the
+**single source of truth** for which template `LabelLayoutService` uses.
+`ApplicationSettings.default_label_type` is a deprecated compatibility field
+(legacy underscore id) and is **not** read by the layout service.
 ### Label layout service (`services/label_layout_service.py`)
 
 `LabelLayoutService` arranges already-imported `Book` objects onto worksheet
@@ -538,19 +558,18 @@ ship that file beside the package and path discovery would couple metadata to
 `config`. At runtime, `read_version()` still prefers the on-disk `VERSION`
 when the project tree is present and falls back to `APP_VERSION`.
 
-## Data flow (generate command)
+## Data flow (canonical library pipeline)
 
 ```
-Excel workbook                    books JSON
-    │                                  │
-    ▼                                  │
-ExcelImportService.import_books()      │
-    │                                  │
-    └──────────────┬───────────────────┘
-                   ▼
-              list[Book]
-                   │
-                   ▼
+Excel workbook
+    │
+    ▼
+ExcelImportService.import_books()
+    │
+    ▼
+list[Book]
+    │
+    ▼
 BatchProcessingService.process_books()
     │
     ├─ IsbnValidator.validate()
@@ -562,7 +581,7 @@ BatchProcessingResult + barcode PNG paths
     ▼
 LabelLayoutService.layout_books()
     │
-    ├─ TemplateRegistry / LabelTemplate
+    ├─ TemplateRegistry / LabelTemplate  (settings.label_template_id)
     └─ LabelSheetTarget.place_label()
     │
     ▼
@@ -570,9 +589,24 @@ LabelLayoutResult  (pages, labels, empty slots, warnings)
 logs/application.log (rotating)
 ```
 
+**Implemented today:** import, validation, barcode generation, batch
+orchestration, and label **layout**.
+
+**Not implemented:** workbook **save** after layout, **printing** / print
+preview, Excel VBA UI (Phase 2).
+
+### CLI `generate` (legacy, compatibility only)
+
+```
+CLI generate → BatchProcessor → IsbnValidator + BarcodeGenerator (stub)
+             → BatchResults JSON + (intended) PNG paths
+```
+
+Do not extend this path for Feature 6. Migrate callers to the canonical
+pipeline above.
+
 `ExcelImportService` only produces `Book` + `ImportResult`. Validation,
 barcode generation, and label layout remain separate services.
-
 ## Folder purposes
 
 | Path | Tracked? | Purpose |
@@ -582,7 +616,7 @@ barcode generation, and label layout remain separate services.
 | `tests/golden/` | Yes | Optional golden barcode PNGs + helpers |
 | `tests/assets/workbooks/` | Yes | Sample `.xlsx` files for Excel import tests |
 | `assets/icons/` | Yes | EXE icon + logo placeholders |
-| `assets/templates/` | Yes | Future Avery / label templates |
+| `assets/templates/` | Yes | Reserved folder (geometry lives in `label_templates/`) |
 | `assets/sample-data/` | Yes | Example JSON payloads |
 | `assets/resources/` | Yes | Misc static resources |
 | `output/barcodes/` | Structure only | Generated PNGs |
@@ -603,8 +637,10 @@ barcode generation, and label layout remain separate services.
 7. **Label templates** — additional `LabelTemplateSpec` entries (5163, 8160,
    A4, Brother, custom) via `TemplateRegistry`
 8. **Workbook save / print** — persist layout worksheets; print preview
-9. **Multiple label templates** — `assets/templates/` + `label_template_id`
+9. **Additional label templates** — register more `LabelTemplateSpec` ids;
+   configure via `label_template_id`
 10. **Auto-update / installer** — `installer/` + `releases/` driven by `VERSION`
+11. **CLI migration** — point `generate` at the canonical service pipeline
 
 ## Coding standards
 
