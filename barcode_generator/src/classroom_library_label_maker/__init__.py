@@ -36,6 +36,8 @@ from classroom_library_label_maker.models import (
     Book,
     BookProcessingResult,
     BookProcessingStatus,
+    ImportResult,
+    ImportWarning,
     ValidationErrorCode,
     ValidationResult,
 )
@@ -58,6 +60,8 @@ __all__ = [
     "BookProcessingStatus",
     "ConfigurationError",
     "FileSystemError",
+    "ImportResult",
+    "ImportWarning",
     "InvalidISBNError",
     "InvalidWorkbookError",
     "ValidationError",

@@ -47,6 +47,7 @@ barcode_generator/
 │       ├── services/
 │       │   ├── barcode_generation_service.py
 │       │   ├── batch_processing_service.py
+│       │   ├── excel_import_service.py
 │       │   ├── barcode_generator.py
 │       │   ├── batch_processor.py
 │       │   ├── isbn_validator.py
@@ -56,6 +57,9 @@ barcode_generator/
 │       ├── rendering/              # Barcode image rendering (protocol + backends)
 │       │   ├── renderer.py
 │       │   └── barcode_renderer.py
+│       ├── workbooks/              # Spreadsheet I/O (protocol + placeholder)
+│       │   ├── workbook_reader.py
+│       │   └── openpyxl_workbook_reader.py
 │       └── utils/
 │           └── file_utils.py
 │
@@ -63,6 +67,7 @@ barcode_generator/
 │   ├── conftest.py
 │   ├── benchmarks/             # Manual ISBN timing (not CI)
 │   ├── golden/                 # Optional golden PNGs + helpers
+│   ├── assets/workbooks/       # Sample .xlsx files for import tests
 │   ├── integration/                # Reserved for E2E tests
 │   └── test_*.py
 │
@@ -97,13 +102,14 @@ Dependency split:
 
 | Install | What you get |
 |---------|----------------|
-| `pip install -r requirements.txt` or `pip install .` | Runtime only: `python-barcode`, `Pillow` |
+| `pip install -r requirements.txt` or `pip install .` | Runtime: `python-barcode`, `Pillow`, `openpyxl` |
 | `pip install -e ".[dev]"` | + pytest, ruff, mypy, pre-commit, … |
 | `pip install -e ".[build]"` | + PyInstaller |
 | `pip install -e ".[dev,build]"` | Full local development (recommended) |
 
 The PyInstaller EXE bundles only what the app imports at runtime (stdlib +
-`python-barcode` + `Pillow`). Dev/build tools are never required inside the EXE.
+`python-barcode` + `Pillow` + `openpyxl`). Dev/build tools are never required
+inside the EXE.
 
 ### Linting and formatting (Ruff)
 
@@ -199,6 +205,19 @@ python -c "from classroom_library_label_maker.config import load_application_set
 - Optional `BatchProgressReporter` for future progress UI
 - Optional `BatchCancellationToken` constructor hook for future cooperative
   cancel (accepted now, **not enforced** yet)
+
+### Excel import
+
+`ExcelImportService` maps workbook rows to `Book` objects via `WorkbookReader`:
+
+```powershell
+python -c "from classroom_library_label_maker.config import load_application_settings; from classroom_library_label_maker.services import ExcelImportService; s=load_application_settings(workbook_path=r'tests\assets\workbooks\valid_books.xlsx'); r=ExcelImportService(s).import_books(); print(r.imported_rows, r.books[0].title)"
+```
+
+- Column/sheet settings live on `ApplicationSettings` (not hardcoded)
+- Blank rows are skipped; malformed rows become `ImportWarning` entries
+- Returns `ImportResult` (`books`, `source_rows`, counts, warnings, timing)
+- Does **not** validate ISBNs or generate barcodes
 
 ### Manual barcode verification
 

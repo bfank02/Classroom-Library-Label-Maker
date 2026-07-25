@@ -13,6 +13,12 @@ from classroom_library_label_maker.constants import (
     DEFAULT_BARCODE_MODULE_HEIGHT,
     DEFAULT_BARCODE_MODULE_WIDTH,
     DEFAULT_BARCODE_QUIET_ZONE,
+    DEFAULT_WORKBOOK_COLUMN_AUTHOR,
+    DEFAULT_WORKBOOK_COLUMN_COPIES,
+    DEFAULT_WORKBOOK_COLUMN_ISBN,
+    DEFAULT_WORKBOOK_COLUMN_TITLE,
+    DEFAULT_WORKBOOK_HEADER_ROW,
+    DEFAULT_WORKBOOK_SHEET_NAME,
 )
 
 
@@ -437,6 +443,88 @@ class BatchProcessingResult:
 
 
 @dataclass(slots=True)
+class ImportWarning:
+    """Recoverable import issue with enough context for diagnostics.
+
+    Attributes:
+        message: Human-readable description of the issue.
+        row_number: 1-based worksheet row when applicable.
+        code: Optional short machine-readable code (e.g. ``missing_isbn``).
+    """
+
+    message: str
+    row_number: int | None = None
+    code: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize this warning to a JSON-compatible dictionary."""
+        return {
+            "message": self.message,
+            "row_number": self.row_number,
+            "code": self.code,
+        }
+
+    def __repr__(self) -> str:
+        """Return a developer-friendly representation."""
+        return (
+            f"ImportWarning(row_number={self.row_number!r}, "
+            f"code={self.code!r}, message={self.message!r})"
+        )
+
+
+@dataclass(slots=True)
+class ImportResult:
+    """Outcome of importing books from a workbook.
+
+    Attributes:
+        books: Successfully mapped :class:`Book` instances (input/sheet order).
+        source_rows: 1-based worksheet row for each entry in ``books``.
+        total_rows: Data rows examined after the header (including blanks).
+        imported_rows: Count of successfully imported books.
+        skipped_rows: Count of blank or rejected data rows.
+        warnings: Recoverable issues with row context.
+        elapsed_seconds: Wall-clock duration of the import.
+        workbook_path: Workbook that was imported, when known.
+        worksheet_name: Worksheet that was read, when known.
+    """
+
+    books: list[Book] = field(default_factory=list)
+    source_rows: list[int] = field(default_factory=list)
+    total_rows: int = 0
+    imported_rows: int = 0
+    skipped_rows: int = 0
+    warnings: list[ImportWarning] = field(default_factory=list)
+    elapsed_seconds: float = 0.0
+    workbook_path: Path | None = None
+    worksheet_name: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize import results to a JSON-compatible dictionary."""
+        return {
+            "summary": {
+                "total_rows": self.total_rows,
+                "imported_rows": self.imported_rows,
+                "skipped_rows": self.skipped_rows,
+                "warning_count": len(self.warnings),
+                "elapsed_seconds": self.elapsed_seconds,
+            },
+            "workbook_path": str(self.workbook_path) if self.workbook_path else None,
+            "worksheet_name": self.worksheet_name,
+            "source_rows": list(self.source_rows),
+            "books": [book.to_dict() for book in self.books],
+            "warnings": [warning.to_dict() for warning in self.warnings],
+        }
+
+    def __repr__(self) -> str:
+        """Return a developer-friendly representation."""
+        return (
+            f"ImportResult(imported={self.imported_rows}, "
+            f"skipped={self.skipped_rows}, warnings={len(self.warnings)}, "
+            f"elapsed_seconds={self.elapsed_seconds!r})"
+        )
+
+
+@dataclass(slots=True)
 class ApplicationSettings:
     """Project-wide and per-run application settings.
 
@@ -457,6 +545,13 @@ class ApplicationSettings:
         barcode_quiet_zone: Quiet-zone margin in millimeters.
         barcode_font_size: Human-readable text font size (points).
         barcode_dpi: Output image resolution in dots per inch.
+        workbook_path: Optional Excel workbook path for import.
+        workbook_sheet_name: Worksheet name to import.
+        workbook_column_isbn: Header name for the ISBN column.
+        workbook_column_title: Header name for the title column.
+        workbook_column_author: Header name for the author column.
+        workbook_column_copies: Header name for the copies column.
+        workbook_header_row: 1-based header row index.
     """
 
     barcode_output_directory: Path
@@ -475,6 +570,13 @@ class ApplicationSettings:
     barcode_quiet_zone: float = DEFAULT_BARCODE_QUIET_ZONE
     barcode_font_size: int = DEFAULT_BARCODE_FONT_SIZE
     barcode_dpi: int = DEFAULT_BARCODE_DPI
+    workbook_path: Path | None = None
+    workbook_sheet_name: str = DEFAULT_WORKBOOK_SHEET_NAME
+    workbook_column_isbn: str = DEFAULT_WORKBOOK_COLUMN_ISBN
+    workbook_column_title: str = DEFAULT_WORKBOOK_COLUMN_TITLE
+    workbook_column_author: str = DEFAULT_WORKBOOK_COLUMN_AUTHOR
+    workbook_column_copies: str = DEFAULT_WORKBOOK_COLUMN_COPIES
+    workbook_header_row: int = DEFAULT_WORKBOOK_HEADER_ROW
 
     def __post_init__(self) -> None:
         """Normalize path fields to :class:`~pathlib.Path` instances."""
@@ -488,6 +590,8 @@ class ApplicationSettings:
             self.results_path = Path(self.results_path)
         if self.log_file is not None:
             self.log_file = Path(self.log_file)
+        if self.workbook_path is not None:
+            self.workbook_path = Path(self.workbook_path)
         if not self.app_version.strip():
             raise ValueError("app_version must not be empty")
         if not self.default_label_type.strip():
@@ -502,6 +606,18 @@ class ApplicationSettings:
             raise ValueError("barcode_font_size must be positive")
         if self.barcode_dpi <= 0:
             raise ValueError("barcode_dpi must be positive")
+        if not self.workbook_sheet_name.strip():
+            raise ValueError("workbook_sheet_name must not be empty")
+        if self.workbook_header_row < 1:
+            raise ValueError("workbook_header_row must be >= 1")
+        for name, value in (
+            ("workbook_column_isbn", self.workbook_column_isbn),
+            ("workbook_column_title", self.workbook_column_title),
+            ("workbook_column_author", self.workbook_column_author),
+            ("workbook_column_copies", self.workbook_column_copies),
+        ):
+            if not str(value).strip():
+                raise ValueError(f"{name} must not be empty")
 
     def __repr__(self) -> str:
         """Return a developer-friendly representation."""

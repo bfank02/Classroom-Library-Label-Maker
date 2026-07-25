@@ -15,6 +15,9 @@ from classroom_library_label_maker.services.batch_processing_service import (
     BatchProcessingService,
 )
 from classroom_library_label_maker.services.batch_processor import BatchProcessor
+from classroom_library_label_maker.services.excel_import_service import (
+    ExcelImportService,
+)
 from classroom_library_label_maker.services.isbn_validator import (
     ISBNValidator,
     IsbnValidator,
@@ -25,6 +28,7 @@ __all__ = [
     "BarcodeGenerator",
     "BatchProcessingService",
     "BatchProcessor",
+    "ExcelImportService",
     "ISBNValidator",
     "IsbnValidator",
 ]

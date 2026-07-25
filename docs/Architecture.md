@@ -129,6 +129,7 @@ barcode_generator/src/classroom_library_label_maker/
 │   ├── isbn_validator.py
 │   ├── barcode_generation_service.py
 │   ├── batch_processing_service.py
+│   ├── excel_import_service.py
 │   ├── barcode_generator.py
 │   ├── batch_processor.py
 │   ├── protocols.py
@@ -137,6 +138,9 @@ barcode_generator/src/classroom_library_label_maker/
 ├── rendering/           Barcode image rendering (library-agnostic)
 │   ├── renderer.py      BarcodeRenderer protocol
 │   └── barcode_renderer.py  PythonBarcodeRenderer (EAN-13 PNG)
+├── workbooks/           Spreadsheet / workbook I/O (library-agnostic)
+│   ├── workbook_reader.py           WorkbookReader protocol
+│   └── openpyxl_workbook_reader.py  OpenPyxlWorkbookReader placeholder
 └── utils/
     └── file_utils.py
 ```
@@ -166,6 +170,7 @@ Root package `__init__` exports a narrow public API (models + exceptions +
 | `services.*` | Validation, generation, batch orchestration |
 | `services.protocols` | Extension contracts for lookups / covers |
 | `rendering` | Library-agnostic barcode image rendering |
+| `workbooks` | Library-agnostic spreadsheet / workbook I/O |
 | `utils.file_utils` | JSON + directory helpers |
 | `constants` | Operational defaults (paths, log sizes) — not product branding |
 
@@ -329,6 +334,67 @@ Additional backends can implement `BarcodeRenderer` without changing callers:
 
 Do not implement these until a feature sprint requires them.
 
+## Workbook layer (`workbooks/`)
+
+Spreadsheet **I/O** is isolated from import orchestration and domain mapping
+so a future Excel Import Engine can load rows without depending on openpyxl
+(or any other vendor) in services.
+
+```
+Application
+    ↓
+ExcelImportService          (services/excel_import_service.py)
+    ↓
+WorkbookReader              (workbooks/workbook_reader.py — protocol)
+    ↓
+OpenPyxlWorkbookReader      (workbooks/openpyxl_workbook_reader.py)
+    ↓
+openpyxl
+```
+
+**Why isolate Excel-specific code?**
+
+* Keeps openpyxl types (workbooks, worksheets, cells) out of services and CLI
+* Allows swapping backends without rewriting import / batch orchestration
+* Makes testing import logic possible with a fake `WorkbookReader`
+* Mirrors the `BarcodeRenderer` pattern used for barcode image encoding
+
+**Public API**
+
+* `WorkbookReader` — protocol: `open`, `close`, `sheet_names`, `iter_rows`
+* `OpenPyxlWorkbookReader` — openpyxl backend (plain string cells only)
+
+`iter_rows` yields plain `(str | None, ...)` tuples only — never vendor cell
+objects. Mapping those rows into `Book` instances is the job of
+`ExcelImportService`.
+
+### Excel import service (`services/excel_import_service.py`)
+
+`ExcelImportService` imports books from a configured workbook/worksheet using
+column header names from `ApplicationSettings`. It:
+
+* Maps populated rows to `Book` (ISBN, Title, Author, Copies)
+* Preserves worksheet row numbers in `ImportResult.source_rows`
+* Skips blank rows; records `ImportWarning` for recoverable row issues
+* Continues after malformed rows
+* Raises `FileSystemError` / `InvalidWorkbookError` / `ConfigurationError`
+  for unrecoverable failures
+
+It does **not** validate ISBNs, generate barcodes, or run batch processing.
+
+### Future workbook reader extension points
+
+Additional backends can implement `WorkbookReader` without changing callers:
+
+| Future reader | Intent |
+|---------------|--------|
+| `CSVWorkbookReader` | Plain CSV / TSV classroom exports |
+| `GoogleSheetsReader` | Remote Google Sheets via API |
+| `OneDriveWorkbookReader` | Workbooks stored in OneDrive / SharePoint |
+| `LibreOfficeWorkbookReader` | ODS / LibreOffice-centric pipelines |
+
+Do not implement these until a feature sprint requires them.
+
 ## Application metadata (`metadata.py`)
 
 Product-facing strings are centralized so installers, CLI help, logs, and
@@ -352,12 +418,16 @@ when the project tree is present and falls back to `APP_VERSION`.
 ## Data flow (generate command)
 
 ```
-books JSON / future Excel adapter
-    │
-    ▼
-list[Book]
-    │
-    ▼
+Excel workbook                    books JSON
+    │                                  │
+    ▼                                  │
+ExcelImportService.import_books()      │
+    │                                  │
+    └──────────────┬───────────────────┘
+                   ▼
+              list[Book]
+                   │
+                   ▼
 BatchProcessingService.process_books()
     │
     ├─ IsbnValidator.validate()
@@ -371,9 +441,8 @@ results JSON + output/barcodes/*.png   (CLI / BatchProcessor adapters)
 logs/application.log (rotating)
 ```
 
-`BatchProcessor.run()` remains the CLI adapter that will load JSON and write
-results once `load_books` is implemented; core orchestration is
-`BatchProcessingService`.
+`ExcelImportService` only produces `Book` + `ImportResult`. Validation and
+barcode generation remain separate services.
 
 ## Folder purposes
 
@@ -382,6 +451,7 @@ results once `load_books` is implemented; core orchestration is
 | `src/classroom_library_label_maker/` | Yes | Installable Python package |
 | `tests/` | Yes | Unit tests; `integration/` reserved |
 | `tests/golden/` | Yes | Optional golden barcode PNGs + helpers |
+| `tests/assets/workbooks/` | Yes | Sample `.xlsx` files for Excel import tests |
 | `assets/icons/` | Yes | EXE icon + logo placeholders |
 | `assets/templates/` | Yes | Future Avery / label templates |
 | `assets/sample-data/` | Yes | Example JSON payloads |
@@ -398,9 +468,11 @@ results once `load_books` is implemented; core orchestration is
 3. **Cover downloads** — `CoverDownloadService` under `services/covers/`
 4. **Rendering backends** — additional `BarcodeRenderer` implementations under
    `rendering/` (SVG, QR, Code128, alternate libraries)
-5. **Inventory / checkout / reading levels** — extend `Book` optional fields
-6. **Multiple label templates** — `assets/templates/` + `default_label_type`
-7. **Auto-update / installer** — `installer/` + `releases/` driven by `VERSION`
+5. **Workbook readers** — additional `WorkbookReader` implementations under
+   `workbooks/` (CSV, Google Sheets, OneDrive, LibreOffice)
+6. **Inventory / checkout / reading levels** — extend `Book` optional fields
+7. **Multiple label templates** — `assets/templates/` + `default_label_type`
+8. **Auto-update / installer** — `installer/` + `releases/` driven by `VERSION`
 
 ## Coding standards
 
