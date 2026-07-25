@@ -40,15 +40,14 @@ saved label workbook (.xlsx)
 ```
 
 Orchestrated by `WorkbookGenerationService`. **Printing is not implemented.**
-The CLI `generate` command still uses the deprecated `BatchProcessor` path
-(compatibility only).
+The CLI `generate` command is a thin adapter over `WorkbookGenerationService`
+(same canonical runtime as library callers).
 
 ## Startup sequence / application lifecycle
 
 ```
-Workbook / caller
+Inventory workbook / caller
         │
-        │  (JSON path, or future VBA → EXE)
         ▼
        CLI          cli/parser.py  →  argparse + subcommands
         │
@@ -60,18 +59,17 @@ Workbook / caller
         │
         ▼
      Command        cli/commands.dispatch()
-        │             generate* | version | validate* | clean* | diagnostics*
+        │             generate | version | validate* | clean* | diagnostics*
         ▼
-     Services       *generate today: deprecated BatchProcessor (CLI only)
-        │             Library: WorkbookGenerationService
+     Services       generate → WorkbookGenerationService
         │             (Import → Batch → Layout → Save)
         ▼
-      Output        output/barcodes/*.png  +  label .xlsx  +  logs/
+      Output        output/barcodes/*.png  +  label .xlsx  +  optional results JSON
+                    + logs/
 ```
 
 \* Reserved commands are registered now and return “not implemented” until
-feature sprints land. `generate` remains on the legacy adapter until a CLI
-migration sprint.
+feature sprints land.
 
 ### Lifecycle notes
 
@@ -331,13 +329,12 @@ as a stable extension point.
 `total_processed / elapsed_seconds` (returns `0.0` when elapsed time is zero).
 It is not stored separately.
 
-### Deprecated CLI orchestration (compatibility only)
+### Deprecated modules (unused by CLI)
 
-`BatchProcessor`, `BarcodeGenerator`, and `BatchResults` remain for the current
-CLI `generate` command. They are **not** the public Feature 6+ pipeline.
-New work must use `BatchProcessingService` + `BarcodeGenerationService`.
-`BatchProcessor.load_books()` and `BarcodeGenerator.generate()` are still
-stubs (`NotImplementedError`).
+`BatchProcessor`, `BarcodeGenerator`, and `BatchResults` remain in the package
+for transitional imports only. The CLI **does not** call them. Prefer
+`WorkbookGenerationService` / `BatchProcessingService` /
+`BarcodeGenerationService`. These stubs may be removed in a later cleanup.
 ### Manual barcode verification
 
 Generated PNGs should scan back to the normalized ISBN-13 (13 digits, no
@@ -621,19 +618,25 @@ logs/application.log (rotating)
 ```
 
 **Implemented today:** import, validation, barcode generation, batch
-orchestration, label layout, and label workbook **save**.
+orchestration, label layout, label workbook **save**, and CLI `generate`
+via `WorkbookGenerationService`.
 
-**Not implemented:** **printing** / print preview, Excel VBA UI (Phase 2),
-CLI migration off deprecated `BatchProcessor`.
+**Not implemented:** **printing** / print preview, Excel VBA UI (Phase 2).
 
-### CLI `generate` (legacy, compatibility only)
+### CLI `generate` (canonical runtime)
 
 ```
-CLI generate → BatchProcessor → IsbnValidator + BarcodeGenerator (stub)
-             → BatchResults JSON + (intended) PNG paths
+CLI generate
+    → WorkbookGenerationService.generate()
+        → ExcelImportService / BatchProcessingService / LabelLayoutService
+        → WorkbookWriter.save
+    → console summary from WorkbookGenerationResult
+    → optional --results JSON (result.to_dict)
 ```
 
-Do not extend this path. Prefer `WorkbookGenerationService` for Feature 6+.
+Exit codes: `0` success, `1` invalid arguments, `2` import failure,
+`3` generation failure, `4` unexpected internal error, `5` reserved command
+not implemented.
 
 `ExcelImportService` only produces `Book` + `ImportResult`. Validation,
 barcode generation, layout, and save remain separate collaborators coordinated
@@ -643,7 +646,8 @@ by `WorkbookGenerationService`.
 | Path | Tracked? | Purpose |
 |------|----------|---------|
 | `src/classroom_library_label_maker/` | Yes | Installable Python package |
-| `tests/` | Yes | Unit tests; `integration/` reserved |
+| `tests/` | Yes | Unit tests |
+| `tests/integration/` | Yes | End-to-end real-adapter tests |
 | `tests/golden/` | Yes | Optional golden barcode PNGs + helpers |
 | `tests/assets/workbooks/` | Yes | Sample `.xlsx` files for Excel import tests |
 | `assets/icons/` | Yes | EXE icon + logo placeholders |
@@ -671,7 +675,8 @@ by `WorkbookGenerationService`.
 9. **Additional label templates** — register more `LabelTemplateSpec` ids;
    configure via `label_template_id`
 10. **Auto-update / installer** — `installer/` + `releases/` driven by `VERSION`
-11. **CLI migration** — point `generate` at `WorkbookGenerationService`
+11. **Remove deprecated stubs** — `BatchProcessor` / `BarcodeGenerator` /
+    `BatchResults` once no transitional imports remain
 
 ## Coding standards
 

@@ -1,9 +1,25 @@
-"""CLI command implementations and dispatch."""
+"""CLI command implementations and dispatch.
+
+The ``generate`` command is a thin adapter over
+:class:`~classroom_library_label_maker.services.workbook_generation_service.WorkbookGenerationService`.
+It must not validate ISBNs, generate barcodes, lay out labels, or recalculate
+statistics already present on :class:`WorkbookGenerationResult`.
+
+Exit codes
+----------
+* ``0`` — success
+* ``1`` — invalid arguments
+* ``2`` — input / import failure
+* ``3`` — generation failure (barcodes, layout, or save)
+* ``4`` — unexpected internal error
+* ``5`` — reserved command not implemented
+"""
 
 from __future__ import annotations
 
 import argparse
 from collections.abc import Callable
+from pathlib import Path
 
 from classroom_library_label_maker.cli.parser import (
     COMMAND_CLEAN,
@@ -16,18 +32,38 @@ from classroom_library_label_maker.config import (
     load_application_settings,
     read_version,
 )
-from classroom_library_label_maker.exceptions import ApplicationError
+from classroom_library_label_maker.exceptions import (
+    ApplicationError,
+    BarcodeGenerationError,
+    ConfigurationError,
+    FileSystemError,
+    InvalidWorkbookError,
+    LabelLayoutError,
+    WorkbookGenerationError,
+)
 from classroom_library_label_maker.logger import get_logger
-from classroom_library_label_maker.models import ApplicationSettings
-from classroom_library_label_maker.services.batch_processor import BatchProcessor
+from classroom_library_label_maker.models import (
+    ApplicationSettings,
+    WorkbookGenerationResult,
+)
+from classroom_library_label_maker.services.workbook_generation_service import (
+    WorkbookGenerationService,
+)
+from classroom_library_label_maker.utils.file_utils import ensure_directory, write_json
 
 CommandHandler = Callable[[argparse.Namespace, ApplicationSettings | None], int]
 
 # Process exit codes used by the CLI.
 EXIT_SUCCESS = 0
-EXIT_FAILURE = 1
-EXIT_NOT_IMPLEMENTED = 2
-EXIT_COMPLETED_WITH_ERRORS = 3
+EXIT_INVALID_ARGUMENTS = 1
+EXIT_IMPORT_FAILURE = 2
+EXIT_GENERATION_FAILURE = 3
+EXIT_INTERNAL_ERROR = 4
+EXIT_NOT_IMPLEMENTED = 5
+
+# Backward-compatible aliases (prefer the named constants above).
+EXIT_FAILURE = EXIT_INVALID_ARGUMENTS
+EXIT_COMPLETED_WITH_ERRORS = EXIT_GENERATION_FAILURE
 
 
 def dispatch(
@@ -58,43 +94,90 @@ def run_generate(
     args: argparse.Namespace,
     settings: ApplicationSettings | None = None,
 ) -> int:
-    """Run the barcode generation command.
+    """Run label workbook generation via :class:`WorkbookGenerationService`.
 
     Args:
         args: Parsed generate-command arguments.
         settings: Optional settings; loaded from ``args`` when omitted.
 
     Returns:
-        Process exit code.
+        Process exit code (see module docstring).
     """
     resolved = settings or load_application_settings(
-        input_path=args.input,
-        results_path=args.results,
+        workbook_path=args.input,
+        results_path=getattr(args, "results", None),
         barcode_output_directory=args.output_dir,
         overwrite=args.overwrite,
         log_level=args.log_level,
         log_file=args.log_file,
     )
+    if resolved.workbook_path is None:
+        resolved.workbook_path = Path(args.input)
+
     logger = get_logger()
-    logger.info(
-        "Running generate (v%s)",
-        resolved.app_version,
-    )
+    logger.info("Running generate via WorkbookGenerationService (v%s)", resolved.app_version)
+
+    labels_output = getattr(args, "labels_output", None)
+    results_path = getattr(args, "results", None)
 
     try:
-        processor = BatchProcessor(resolved)
-        batch = processor.run()
-    except NotImplementedError as exc:
-        # Feature stubs still raise NotImplementedError until Sprint 1 work lands.
-        logger.error("Not implemented: %s", exc)
-        return EXIT_NOT_IMPLEMENTED
+        service = WorkbookGenerationService(resolved)
+        result = service.generate(
+            workbook_path=Path(args.input),
+            output_path=Path(labels_output) if labels_output is not None else None,
+        )
+    except ConfigurationError as exc:
+        logger.error("%s", exc)
+        return EXIT_INVALID_ARGUMENTS
+    except InvalidWorkbookError as exc:
+        logger.error("%s", exc)
+        return EXIT_IMPORT_FAILURE
+    except FileSystemError as exc:
+        logger.error("%s", exc)
+        if "save" in exc.message.lower():
+            return EXIT_GENERATION_FAILURE
+        return EXIT_IMPORT_FAILURE
+    except (
+        LabelLayoutError,
+        WorkbookGenerationError,
+        BarcodeGenerationError,
+    ) as exc:
+        logger.error("%s", exc)
+        return EXIT_GENERATION_FAILURE
+    except ApplicationError as exc:
+        logger.error("%s", exc)
+        return EXIT_GENERATION_FAILURE
 
-    if batch.error_count:
-        logger.warning("Completed with %s error(s)", batch.error_count)
-        return EXIT_COMPLETED_WITH_ERRORS
+    if results_path is not None:
+        _write_results_summary(Path(results_path), result)
 
+    _print_generation_summary(result)
     logger.info("Completed successfully")
     return EXIT_SUCCESS
+
+
+def _print_generation_summary(result: WorkbookGenerationResult) -> None:
+    """Print a concise success summary from ``result`` (no recalculation)."""
+    output = result.output_path
+    print("Generation complete")
+    print()
+    print(f"Books imported: {result.books_imported}")
+    print(f"Books processed: {result.books_processed}")
+    print(f"Labels created: {result.labels_created}")
+    print(f"Pages created: {result.pages_created}")
+    print(f"Barcodes generated: {result.barcodes_generated}")
+    print(f"Barcodes reused: {result.barcodes_reused}")
+    print()
+    print(f"Output workbook: {output}")
+    print()
+    print(f"Elapsed time: {result.elapsed_seconds:.3f}s")
+
+
+def _write_results_summary(path: Path, result: WorkbookGenerationResult) -> None:
+    """Persist ``result.to_dict()`` to ``path`` when ``--results`` is set."""
+    ensure_directory(path.parent)
+    write_json(path, result.to_dict())
+    get_logger().info("Wrote results summary: %s", path)
 
 
 def run_version(
@@ -129,7 +212,7 @@ def run_validate(
         settings: Optional application settings.
 
     Returns:
-        ``EXIT_NOT_IMPLEMENTED``.
+        Never returns; raises ``NotImplementedError``.
     """
     _ = (args, settings)
     raise NotImplementedError("validate command is not implemented yet")
@@ -146,7 +229,7 @@ def run_clean(
         settings: Optional application settings.
 
     Returns:
-        ``EXIT_NOT_IMPLEMENTED``.
+        Never returns; raises ``NotImplementedError``.
     """
     _ = (args, settings)
     raise NotImplementedError("clean command is not implemented yet")
@@ -163,7 +246,7 @@ def run_diagnostics(
         settings: Optional application settings.
 
     Returns:
-        ``EXIT_NOT_IMPLEMENTED``.
+        Never returns; raises ``NotImplementedError``.
     """
     _ = (args, settings)
     raise NotImplementedError("diagnostics command is not implemented yet")

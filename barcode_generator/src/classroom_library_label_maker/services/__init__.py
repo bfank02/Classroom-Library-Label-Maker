@@ -1,15 +1,15 @@
 """Service-layer components for barcode generation.
 
-Canonical pipeline for new development (Feature 6+)::
+Canonical pipeline for new development and the CLI ``generate`` command::
 
+* :class:`WorkbookGenerationService` (end-to-end orchestration)
 * :class:`ExcelImportService`
 * :class:`BatchProcessingService`
 * :class:`LabelLayoutService`
-* :class:`WorkbookGenerationService` (end-to-end orchestration)
 
 Also stable: :class:`IsbnValidator`, :class:`BarcodeGenerationService`.
 
-Deprecated / internal (CLI compatibility only — do not use for new work):
+Deprecated / unused by the CLI (kept for transitional imports only):
 
 * :class:`BatchProcessor`
 * :class:`BarcodeGenerator`
