@@ -26,7 +26,7 @@ barcode_generator/
 ├── pyproject.toml
 ├── .ruff.toml
 ├── .pre-commit-config.yaml
-├── requirements.txt
+├── requirements.txt            # Runtime only (python-barcode + Pillow)
 ├── build.bat
 ├── README.md
 │
@@ -91,6 +91,18 @@ python -m pip install -e ".[dev,build]"
 python -m pytest
 python -m classroom_library_label_maker --version
 ```
+
+Dependency split:
+
+| Install | What you get |
+|---------|----------------|
+| `pip install -r requirements.txt` or `pip install .` | Runtime only: `python-barcode`, `Pillow` |
+| `pip install -e ".[dev]"` | + pytest, ruff, mypy, pre-commit, … |
+| `pip install -e ".[build]"` | + PyInstaller |
+| `pip install -e ".[dev,build]"` | Full local development (recommended) |
+
+The PyInstaller EXE bundles only what the app imports at runtime (stdlib +
+`python-barcode` + `Pillow`). Dev/build tools are never required inside the EXE.
 
 ### Linting and formatting (Ruff)
 

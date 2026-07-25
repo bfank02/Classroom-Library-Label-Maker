@@ -1,13 +1,12 @@
-# Runtime dependencies (keep in sync with pyproject.toml)
+# Runtime dependencies for the barcode generator executable / library.
+# Keep in sync with [project].dependencies in pyproject.toml.
+#
+# Install runtime only:
+#   python -m pip install -r requirements.txt
+#   # or: python -m pip install .
+#
+# Install development + packaging tools from pyproject extras:
+#   python -m pip install -e ".[dev,build]"
+
 python-barcode>=0.15.1
 Pillow>=11.0.0
-
-# Dev / test
-pytest>=8.0
-pytest-cov>=6.0
-ruff>=0.9.0
-mypy>=1.14
-pre-commit>=4.0
-
-# Packaging
-pyinstaller>=6.0
