@@ -8,7 +8,7 @@ Public API
 ----------
 * :class:`BarcodeRenderer` — rendering protocol
 * :class:`BarcodeSymbology` — symbology identifiers
-* :class:`PythonBarcodeRenderer` — placeholder python-barcode backend
+* :class:`PythonBarcodeRenderer` — python-barcode EAN-13 PNG backend
 """
 
 from __future__ import annotations

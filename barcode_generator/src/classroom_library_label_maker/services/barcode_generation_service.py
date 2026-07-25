@@ -67,7 +67,9 @@ class BarcodeGenerationService:
             filename_extension: Image file extension including the leading dot.
         """
         self._settings = settings
-        self._renderer: BarcodeRenderer = renderer or PythonBarcodeRenderer()
+        self._renderer: BarcodeRenderer = (
+            renderer or PythonBarcodeRenderer.from_settings(settings)
+        )
         self._extension = filename_extension
         self._normalizer = IsbnValidator()
 

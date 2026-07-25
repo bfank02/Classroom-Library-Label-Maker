@@ -7,6 +7,14 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from classroom_library_label_maker.constants import (
+    DEFAULT_BARCODE_DPI,
+    DEFAULT_BARCODE_FONT_SIZE,
+    DEFAULT_BARCODE_MODULE_HEIGHT,
+    DEFAULT_BARCODE_MODULE_WIDTH,
+    DEFAULT_BARCODE_QUIET_ZONE,
+)
+
 
 class BarcodeStatus(StrEnum):
     """Outcome status for a single barcode generation attempt."""
@@ -299,6 +307,11 @@ class ApplicationSettings:
         overwrite: When True, regenerate PNGs even if they already exist.
         log_level: Logging level name.
         log_file: Optional explicit log file path (defaults under ``log_directory``).
+        barcode_module_width: Barcode bar module width in millimeters.
+        barcode_module_height: Barcode bar module height in millimeters.
+        barcode_quiet_zone: Quiet-zone margin in millimeters.
+        barcode_font_size: Human-readable text font size (points).
+        barcode_dpi: Output image resolution in dots per inch.
     """
 
     barcode_output_directory: Path
@@ -312,6 +325,11 @@ class ApplicationSettings:
     overwrite: bool = False
     log_level: str = "INFO"
     log_file: Path | None = None
+    barcode_module_width: float = DEFAULT_BARCODE_MODULE_WIDTH
+    barcode_module_height: float = DEFAULT_BARCODE_MODULE_HEIGHT
+    barcode_quiet_zone: float = DEFAULT_BARCODE_QUIET_ZONE
+    barcode_font_size: int = DEFAULT_BARCODE_FONT_SIZE
+    barcode_dpi: int = DEFAULT_BARCODE_DPI
 
     def __post_init__(self) -> None:
         """Normalize path fields to :class:`~pathlib.Path` instances."""
@@ -329,6 +347,16 @@ class ApplicationSettings:
             raise ValueError("app_version must not be empty")
         if not self.default_label_type.strip():
             raise ValueError("default_label_type must not be empty")
+        if self.barcode_module_width <= 0:
+            raise ValueError("barcode_module_width must be positive")
+        if self.barcode_module_height <= 0:
+            raise ValueError("barcode_module_height must be positive")
+        if self.barcode_quiet_zone < 0:
+            raise ValueError("barcode_quiet_zone must be non-negative")
+        if self.barcode_font_size <= 0:
+            raise ValueError("barcode_font_size must be positive")
+        if self.barcode_dpi <= 0:
+            raise ValueError("barcode_dpi must be positive")
 
     def __repr__(self) -> str:
         """Return a developer-friendly representation."""

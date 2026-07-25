@@ -219,3 +219,36 @@ def test_output_path_for_uses_settings(
     service = BarcodeGenerationService(app_settings)
     path = service.output_path_for("9780064400558")
     assert path == app_settings.barcode_output_directory / "9780064400558.png"
+
+
+def test_default_renderer_uses_application_settings(
+    app_settings: ApplicationSettings,
+) -> None:
+    """Default PythonBarcodeRenderer should take geometry from ApplicationSettings."""
+    service = BarcodeGenerationService(app_settings)
+    renderer = service._renderer
+    assert isinstance(renderer, PythonBarcodeRenderer)
+    options = renderer._writer_options()
+    assert options["module_width"] == app_settings.barcode_module_width
+    assert options["module_height"] == app_settings.barcode_module_height
+    assert options["quiet_zone"] == app_settings.barcode_quiet_zone
+    assert options["font_size"] == app_settings.barcode_font_size
+    assert options["dpi"] == app_settings.barcode_dpi
+
+
+def test_renderer_defaults_match_library_effective_output(tmp_path: Path) -> None:
+    """Configured defaults must preserve prior python-barcode EAN-13 PNG output."""
+    from barcode import get_barcode_class
+    from barcode.writer import ImageWriter
+
+    isbn = "9780064400558"
+    baseline = tmp_path / "baseline.png"
+    configured = tmp_path / "configured.png"
+
+    barcode_cls = get_barcode_class("ean13")
+    with baseline.open("wb") as handle:
+        barcode_cls(isbn, writer=ImageWriter()).write(handle)
+
+    PythonBarcodeRenderer().render_to_file(isbn, configured)
+
+    assert configured.read_bytes() == baseline.read_bytes()

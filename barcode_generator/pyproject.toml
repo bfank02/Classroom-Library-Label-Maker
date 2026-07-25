@@ -42,7 +42,7 @@ version = { file = "VERSION" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "tests"]
 # Default discovery uses test_*.py; tests/benchmarks/benchmark_*.py is excluded
 # so engineering timings never run (or fail) in normal / CI pytest invocations.
 

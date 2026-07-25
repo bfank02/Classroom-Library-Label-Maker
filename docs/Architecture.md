@@ -127,6 +127,7 @@ barcode_generator/src/classroom_library_label_maker/
 │   └── commands.py      Handlers + dispatch registry
 ├── services/
 │   ├── isbn_validator.py
+│   ├── barcode_generation_service.py
 │   ├── barcode_generator.py
 │   ├── batch_processor.py
 │   ├── protocols.py
@@ -134,7 +135,7 @@ barcode_generator/src/classroom_library_label_maker/
 │   └── covers/          Future cover downloads
 ├── rendering/           Barcode image rendering (library-agnostic)
 │   ├── renderer.py      BarcodeRenderer protocol
-│   └── barcode_renderer.py  PythonBarcodeRenderer placeholder
+│   └── barcode_renderer.py  PythonBarcodeRenderer (EAN-13 PNG)
 └── utils/
     └── file_utils.py
 ```
@@ -203,19 +204,19 @@ barcode generator README for how to run them and how to interpret results.
 ## Rendering layer (`rendering/`)
 
 Barcode **image encoding** is isolated from business logic so the generation
-service can orchestrate validation, skip/overwrite rules, and results JSON
-without depending on a specific barcode library.
+service can orchestrate skip rules and results without depending on a specific
+barcode library.
 
 ```
 Application (CLI / future Excel)
         ↓
-Barcode Generation Service  (services/barcode_generator.py)
+BarcodeGenerationService  (services/barcode_generation_service.py)
         ↓
 BarcodeRenderer             (rendering/renderer.py — protocol)
         ↓
-PythonBarcodeRenderer       (rendering/barcode_renderer.py — placeholder)
+PythonBarcodeRenderer       (rendering/barcode_renderer.py)
         ↓
-Third-party barcode library (e.g. python-barcode + Pillow — future)
+Third-party barcode library (python-barcode + Pillow)
 ```
 
 **Why isolate rendering?**
@@ -230,6 +231,23 @@ Third-party barcode library (e.g. python-barcode + Pillow — future)
 * `BarcodeSymbology` — `EAN13` (implemented), plus reserved `CODE128` / `QR`
 * `PythonBarcodeRenderer` — EAN-13 PNG backend via python-barcode + Pillow
 
+### Renderer configuration (`ApplicationSettings`)
+
+Renderer geometry lives on `ApplicationSettings` (defaults in `constants.py`):
+
+| Setting | Default | Meaning |
+|---------|---------|---------|
+| `barcode_module_width` | `0.33` mm | EAN-13 SC2 module width |
+| `barcode_module_height` | `15.0` mm | Bar height |
+| `barcode_quiet_zone` | `6.5` mm | Quiet-zone margin |
+| `barcode_font_size` | `10` | Human-readable text size (pt) |
+| `barcode_dpi` | `300` | PNG resolution |
+
+`BarcodeGenerationService` builds `PythonBarcodeRenderer.from_settings(settings)`
+so call sites never hardcode writer options. Changing these values changes
+rendered output; update golden references and re-run manual scan verification
+after intentional tweaks.
+
 ### Barcode generation service (`services/barcode_generation_service.py`)
 
 `BarcodeGenerationService` is the reusable engine for creating barcode images.
@@ -238,6 +256,27 @@ existing files (`ALREADY_EXISTS`), and delegates encoding to a `BarcodeRenderer`
 
 It does **not** re-validate ISBNs and does **not** import third-party barcode
 libraries.
+
+### Manual barcode verification
+
+Generated PNGs should scan back to the normalized ISBN-13 (13 digits, no
+hyphens). Example: `978-0-06-440055-8` → scan result **`9780064400558`**.
+
+Full phone / hardware scanner checklist:
+[`docs/Barcode Scan Verification.md`](Barcode%20Scan%20Verification.md).
+
+### Golden barcode tests
+
+`barcode_generator/tests/golden/` holds optional known-good reference PNGs and
+comparison helpers. Philosophy:
+
+* Catch accidental visual regressions when rendering settings or dependencies
+  change
+* Prefer structural + perceptual (average-hash) checks — **not** byte-identical
+  PNG equality
+* Skip (do not fail CI) when a reference file is absent
+* Refresh references only after intentional rendering changes; see
+  `tests/golden/README.md` and set `UPDATE_GOLDEN=1` to rewrite goldens
 
 ### Future renderer extension points
 
@@ -302,6 +341,7 @@ ApplicationSettings ──► BatchProcessor.run()
 |------|----------|---------|
 | `src/classroom_library_label_maker/` | Yes | Installable Python package |
 | `tests/` | Yes | Unit tests; `integration/` reserved |
+| `tests/golden/` | Yes | Optional golden barcode PNGs + helpers |
 | `assets/icons/` | Yes | EXE icon + logo placeholders |
 | `assets/templates/` | Yes | Future Avery / label templates |
 | `assets/sample-data/` | Yes | Example JSON payloads |
