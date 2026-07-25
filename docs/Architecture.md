@@ -127,11 +127,15 @@ barcode_generator/src/classroom_library_label_maker/
 │   └── commands.py      Handlers + dispatch registry
 ├── services/
 │   ├── isbn_validator.py
+│   ├── barcode_generation_service.py
 │   ├── barcode_generator.py
 │   ├── batch_processor.py
 │   ├── protocols.py
 │   ├── lookups/         Future catalog APIs
 │   └── covers/          Future cover downloads
+├── rendering/           Barcode image rendering (library-agnostic)
+│   ├── renderer.py      BarcodeRenderer protocol
+│   └── barcode_renderer.py  PythonBarcodeRenderer (EAN-13 PNG)
 └── utils/
     └── file_utils.py
 ```
@@ -160,6 +164,7 @@ Root package `__init__` exports a narrow public API (models + exceptions +
 | `logger` | Production logging setup (no import-time side effects) |
 | `services.*` | Validation, generation, batch orchestration |
 | `services.protocols` | Extension contracts for lookups / covers |
+| `rendering` | Library-agnostic barcode image rendering |
 | `utils.file_utils` | JSON + directory helpers |
 | `constants` | Operational defaults (paths, log sizes) — not product branding |
 
@@ -195,6 +200,96 @@ is populated from that message.
 Engineering timings live under `barcode_generator/tests/benchmarks/`. They are
 **not** part of the normal unit-test suite and must **never** fail CI. See the
 barcode generator README for how to run them and how to interpret results.
+
+## Rendering layer (`rendering/`)
+
+Barcode **image encoding** is isolated from business logic so the generation
+service can orchestrate skip rules and results without depending on a specific
+barcode library.
+
+```
+Application (CLI / future Excel)
+        ↓
+BarcodeGenerationService  (services/barcode_generation_service.py)
+        ↓
+BarcodeRenderer             (rendering/renderer.py — protocol)
+        ↓
+PythonBarcodeRenderer       (rendering/barcode_renderer.py)
+        ↓
+Third-party barcode library (python-barcode + Pillow)
+```
+
+**Why isolate rendering?**
+
+* Keeps vendor types (python-barcode, Pillow, etc.) out of services and CLI
+* Allows swapping backends without rewriting batch orchestration
+* Makes testing the service possible with a fake/mock renderer
+
+**Public API**
+
+* `BarcodeRenderer` — protocol: `render_to_file(data, output_path, *, symbology) -> Path`
+* `BarcodeSymbology` — `EAN13` (implemented), plus reserved `CODE128` / `QR`
+* `PythonBarcodeRenderer` — EAN-13 PNG backend via python-barcode + Pillow
+
+### Renderer configuration (`ApplicationSettings`)
+
+Renderer geometry lives on `ApplicationSettings` (defaults in `constants.py`):
+
+| Setting | Default | Meaning |
+|---------|---------|---------|
+| `barcode_module_width` | `0.33` mm | EAN-13 SC2 module width |
+| `barcode_module_height` | `15.0` mm | Bar height |
+| `barcode_quiet_zone` | `6.5` mm | Quiet-zone margin |
+| `barcode_font_size` | `10` | Human-readable text size (pt) |
+| `barcode_dpi` | `300` | PNG resolution |
+
+`BarcodeGenerationService` builds `PythonBarcodeRenderer.from_settings(settings)`
+so call sites never hardcode writer options. Changing these values changes
+rendered output; update golden references and re-run manual scan verification
+after intentional tweaks.
+
+### Barcode generation service (`services/barcode_generation_service.py`)
+
+`BarcodeGenerationService` is the reusable engine for creating barcode images.
+It accepts a validated `Book`, resolves paths from `ApplicationSettings`, skips
+existing files (`ALREADY_EXISTS`), and delegates encoding to a `BarcodeRenderer`.
+
+It does **not** re-validate ISBNs and does **not** import third-party barcode
+libraries.
+
+### Manual barcode verification
+
+Generated PNGs should scan back to the normalized ISBN-13 (13 digits, no
+hyphens). Example: `978-0-06-440055-8` → scan result **`9780064400558`**.
+
+Full phone / hardware scanner checklist:
+[`docs/Barcode Scan Verification.md`](Barcode%20Scan%20Verification.md).
+
+### Golden barcode tests
+
+`barcode_generator/tests/golden/` holds optional known-good reference PNGs and
+comparison helpers. Philosophy:
+
+* Catch accidental visual regressions when rendering settings or dependencies
+  change
+* Prefer structural + perceptual (average-hash) checks — **not** byte-identical
+  PNG equality
+* Skip (do not fail CI) when a reference file is absent
+* Refresh references only after intentional rendering changes; see
+  `tests/golden/README.md` and set `UPDATE_GOLDEN=1` to rewrite goldens
+
+### Future renderer extension points
+
+Additional backends can implement `BarcodeRenderer` without changing callers:
+
+| Future renderer | Intent |
+|-----------------|--------|
+| SVG renderer | Vector barcodes for print pipelines |
+| QR code renderer | Alternate symbology via `BarcodeSymbology.QR` |
+| Code128 renderer | Non-ISBN linear codes via `BarcodeSymbology.CODE128` |
+| Alternate libraries | Drop-in replacements for python-barcode |
+
+Do not implement these until a feature sprint requires them.
 
 ## Application metadata (`metadata.py`)
 
@@ -246,6 +341,7 @@ ApplicationSettings ──► BatchProcessor.run()
 |------|----------|---------|
 | `src/classroom_library_label_maker/` | Yes | Installable Python package |
 | `tests/` | Yes | Unit tests; `integration/` reserved |
+| `tests/golden/` | Yes | Optional golden barcode PNGs + helpers |
 | `assets/icons/` | Yes | EXE icon + logo placeholders |
 | `assets/templates/` | Yes | Future Avery / label templates |
 | `assets/sample-data/` | Yes | Example JSON payloads |
@@ -260,9 +356,10 @@ ApplicationSettings ──► BatchProcessor.run()
 1. **CLI commands** — `validate`, `clean`, `diagnostics` already registered
 2. **ISBN lookup APIs** — `IsbnLookupService` under `services/lookups/`
 3. **Cover downloads** — `CoverDownloadService` under `services/covers/`
-4. **Inventory / checkout / reading levels** — extend `Book` optional fields
-5. **Multiple label templates** — `assets/templates/` + `default_label_type`
-6. **Additional barcode formats** — new generator strategies beside EAN-13
+4. **Rendering backends** — additional `BarcodeRenderer` implementations under
+   `rendering/` (SVG, QR, Code128, alternate libraries)
+5. **Inventory / checkout / reading levels** — extend `Book` optional fields
+6. **Multiple label templates** — `assets/templates/` + `default_label_type`
 7. **Auto-update / installer** — `installer/` + `releases/` driven by `VERSION`
 
 ## Coding standards

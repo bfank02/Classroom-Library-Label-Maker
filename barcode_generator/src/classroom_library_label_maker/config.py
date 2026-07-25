@@ -7,6 +7,11 @@ from pathlib import Path
 
 from classroom_library_label_maker.constants import (
     APP_ICON_FILE_NAME,
+    DEFAULT_BARCODE_DPI,
+    DEFAULT_BARCODE_FONT_SIZE,
+    DEFAULT_BARCODE_MODULE_HEIGHT,
+    DEFAULT_BARCODE_MODULE_WIDTH,
+    DEFAULT_BARCODE_QUIET_ZONE,
     DEFAULT_LABEL_TYPE,
     DEFAULT_LOG_FILE_NAME,
     DEFAULT_LOG_LEVEL,
@@ -216,6 +221,11 @@ def load_application_settings(
         overwrite=overwrite,
         log_level=log_level.upper(),
         log_file=resolved_log_file,
+        barcode_module_width=DEFAULT_BARCODE_MODULE_WIDTH,
+        barcode_module_height=DEFAULT_BARCODE_MODULE_HEIGHT,
+        barcode_quiet_zone=DEFAULT_BARCODE_QUIET_ZONE,
+        barcode_font_size=DEFAULT_BARCODE_FONT_SIZE,
+        barcode_dpi=DEFAULT_BARCODE_DPI,
     )
 
 

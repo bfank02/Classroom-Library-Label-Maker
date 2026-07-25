@@ -20,6 +20,15 @@ DEFAULT_LABEL_TYPE = "avery_5160"
 # Barcode image files
 DEFAULT_BARCODE_EXTENSION = ".png"
 
+# EAN-13 PNG rendering defaults (python-barcode ImageWriter / EAN SC2).
+# These values match the library's effective defaults so centralizing them
+# in ApplicationSettings does not change rendered output.
+DEFAULT_BARCODE_MODULE_WIDTH = 0.33  # mm (EAN-13 SC2)
+DEFAULT_BARCODE_MODULE_HEIGHT = 15.0  # mm
+DEFAULT_BARCODE_QUIET_ZONE = 6.5  # mm
+DEFAULT_BARCODE_FONT_SIZE = 10
+DEFAULT_BARCODE_DPI = 300
+
 # Rotating log file settings
 LOG_MAX_BYTES = 1_048_576  # 1 MiB
 LOG_BACKUP_COUNT = 5

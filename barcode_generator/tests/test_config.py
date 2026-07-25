@@ -10,7 +10,14 @@ from classroom_library_label_maker.config import (
     load_application_settings,
     read_version,
 )
-from classroom_library_label_maker.constants import DEFAULT_LABEL_TYPE
+from classroom_library_label_maker.constants import (
+    DEFAULT_BARCODE_DPI,
+    DEFAULT_BARCODE_FONT_SIZE,
+    DEFAULT_BARCODE_MODULE_HEIGHT,
+    DEFAULT_BARCODE_MODULE_WIDTH,
+    DEFAULT_BARCODE_QUIET_ZONE,
+    DEFAULT_LABEL_TYPE,
+)
 
 
 def test_load_application_settings_reads_version(tmp_path: Path) -> None:
@@ -33,6 +40,11 @@ def test_load_application_settings_reads_version(tmp_path: Path) -> None:
     assert settings.template_directory == tmp_path / "assets" / "templates"
     assert settings.default_label_type == DEFAULT_LABEL_TYPE
     assert settings.log_file == tmp_path / "logs" / "application.log"
+    assert settings.barcode_module_width == DEFAULT_BARCODE_MODULE_WIDTH
+    assert settings.barcode_module_height == DEFAULT_BARCODE_MODULE_HEIGHT
+    assert settings.barcode_quiet_zone == DEFAULT_BARCODE_QUIET_ZONE
+    assert settings.barcode_font_size == DEFAULT_BARCODE_FONT_SIZE
+    assert settings.barcode_dpi == DEFAULT_BARCODE_DPI
 
 
 def test_project_paths_sample_books(tmp_path: Path) -> None:

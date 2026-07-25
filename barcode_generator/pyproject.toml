@@ -14,9 +14,11 @@ authors = [
     { name = "Classroom Library Label Maker contributors" },
 ]
 dynamic = ["version"]
+# Runtime-only: needed to generate EAN-13 PNG barcodes.
+# Dev/test/packaging tools live under [project.optional-dependencies].
 dependencies = [
     "python-barcode>=0.15.1",
-    "Pillow>=11.0.0",
+    "Pillow>=11.0.0",  # required for ImageWriter PNG output (python-barcode[images])
 ]
 
 [project.optional-dependencies]
@@ -42,7 +44,7 @@ version = { file = "VERSION" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "tests"]
 # Default discovery uses test_*.py; tests/benchmarks/benchmark_*.py is excluded
 # so engineering timings never run (or fail) in normal / CI pytest invocations.
 
