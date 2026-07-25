@@ -291,6 +291,151 @@ class BatchResults:
         )
 
 
+class BookProcessingStatus(StrEnum):
+    """Outcome status for processing a single book in a batch."""
+
+    GENERATED = "generated"
+    ALREADY_EXISTS = "already_exists"
+    VALIDATION_FAILED = "validation_failed"
+    GENERATION_FAILED = "generation_failed"
+
+
+@dataclass(slots=True)
+class BookProcessingResult:
+    """Result of validating and optionally generating a barcode for one book.
+
+    Attributes:
+        isbn: Normalized ISBN when available; otherwise the original input ISBN.
+        title: Book title echoed for reporting.
+        status: Per-book processing outcome.
+        output_path: PNG path when generated or already present.
+        message: Human-readable detail for logs and summaries.
+        validation: ISBN validation result when validation ran.
+        generation: Barcode generation result when generation was attempted.
+    """
+
+    isbn: str
+    title: str
+    status: BookProcessingStatus
+    output_path: Path | None = None
+    message: str = ""
+    validation: ValidationResult | None = None
+    generation: BarcodeGenerationResult | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize this result to a JSON-compatible dictionary."""
+        payload: dict[str, Any] = {
+            "isbn": self.isbn,
+            "title": self.title,
+            "status": self.status.value,
+            "output_path": str(self.output_path) if self.output_path else None,
+            "message": self.message,
+        }
+        if self.validation is not None:
+            payload["validation"] = {
+                "isbn": self.validation.isbn,
+                "is_valid": self.validation.is_valid,
+                "error_code": self.validation.error_code.value,
+                "errors": list(self.validation.errors),
+            }
+        if self.generation is not None:
+            payload["generation"] = self.generation.to_dict()
+        return payload
+
+    def __repr__(self) -> str:
+        """Return a developer-friendly representation."""
+        return (
+            f"BookProcessingResult(isbn={self.isbn!r}, "
+            f"status={self.status!r}, title={self.title!r})"
+        )
+
+
+@dataclass(slots=True)
+class BatchProcessingResult:
+    """Aggregate outcome for processing a collection of books.
+
+    Attributes:
+        results: Per-book processing outcomes in input order.
+        elapsed_seconds: Wall-clock duration of the batch run.
+    """
+
+    results: list[BookProcessingResult] = field(default_factory=list)
+    elapsed_seconds: float = 0.0
+
+    @property
+    def total_processed(self) -> int:
+        """Number of books processed (including failures)."""
+        return len(self.results)
+
+    @property
+    def successful_generations(self) -> int:
+        """Number of newly generated barcode images."""
+        return sum(
+            1 for r in self.results if r.status == BookProcessingStatus.GENERATED
+        )
+
+    @property
+    def existing_barcodes_skipped(self) -> int:
+        """Number of books skipped because a barcode file already existed."""
+        return sum(
+            1 for r in self.results if r.status == BookProcessingStatus.ALREADY_EXISTS
+        )
+
+    @property
+    def validation_failures(self) -> int:
+        """Number of books that failed ISBN validation."""
+        return sum(
+            1
+            for r in self.results
+            if r.status == BookProcessingStatus.VALIDATION_FAILED
+        )
+
+    @property
+    def generation_failures(self) -> int:
+        """Number of books that failed during barcode generation."""
+        return sum(
+            1
+            for r in self.results
+            if r.status == BookProcessingStatus.GENERATION_FAILED
+        )
+
+    @property
+    def books_per_second(self) -> float:
+        """Derived throughput: ``total_processed / elapsed_seconds``.
+
+        Returns ``0.0`` when no time has elapsed (avoids division by zero).
+        """
+        if self.elapsed_seconds <= 0.0:
+            return 0.0
+        return self.total_processed / self.elapsed_seconds
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize batch processing results to a JSON-compatible dictionary."""
+        return {
+            "summary": {
+                "total_processed": self.total_processed,
+                "successful_generations": self.successful_generations,
+                "existing_barcodes_skipped": self.existing_barcodes_skipped,
+                "validation_failures": self.validation_failures,
+                "generation_failures": self.generation_failures,
+                "elapsed_seconds": self.elapsed_seconds,
+                "books_per_second": self.books_per_second,
+            },
+            "results": [result.to_dict() for result in self.results],
+        }
+
+    def __repr__(self) -> str:
+        """Return a developer-friendly representation."""
+        return (
+            f"BatchProcessingResult(total={self.total_processed}, "
+            f"generated={self.successful_generations}, "
+            f"skipped={self.existing_barcodes_skipped}, "
+            f"validation_failures={self.validation_failures}, "
+            f"generation_failures={self.generation_failures}, "
+            f"elapsed_seconds={self.elapsed_seconds!r})"
+        )
+
+
 @dataclass(slots=True)
 class ApplicationSettings:
     """Project-wide and per-run application settings.

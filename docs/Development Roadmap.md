@@ -19,6 +19,7 @@
 - [x] ISBN-13 check-digit validation
 - [x] Rendering package scaffold (`BarcodeRenderer` / `PythonBarcodeRenderer`)
 - [x] EAN-13 PNG generation (`BarcodeGenerationService` + python-barcode / Pillow)
+- [x] Batch processing engine (`BatchProcessingService` over Book collections)
 - [ ] JSON book loading (`BatchProcessor.load_books`)
 - [ ] Package as EXE (`build.bat` / PyInstaller)
 

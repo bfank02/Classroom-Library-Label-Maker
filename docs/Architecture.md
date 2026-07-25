@@ -46,7 +46,7 @@ Workbook / caller
      Command        cli/commands.dispatch()
         │             generate | version | validate* | clean* | diagnostics*
         ▼
-     Services       BatchProcessor → IsbnValidator / BarcodeGenerator
+     Services       BatchProcessingService → IsbnValidator / BarcodeGenerationService
         │
         ▼
       Output        output/barcodes/*.png  +  results JSON  +  logs/
@@ -128,6 +128,7 @@ barcode_generator/src/classroom_library_label_maker/
 ├── services/
 │   ├── isbn_validator.py
 │   ├── barcode_generation_service.py
+│   ├── batch_processing_service.py
 │   ├── barcode_generator.py
 │   ├── batch_processor.py
 │   ├── protocols.py
@@ -257,6 +258,43 @@ existing files (`ALREADY_EXISTS`), and delegates encoding to a `BarcodeRenderer`
 It does **not** re-validate ISBNs and does **not** import third-party barcode
 libraries.
 
+### Batch processing service (`services/batch_processing_service.py`)
+
+`BatchProcessingService` is the orchestration layer for collections of `Book`
+objects. Future Excel import will feed books into this service.
+
+**Orchestration responsibilities**
+
+* Validate each book with `IsbnValidator` (Feature 1)
+* Generate barcodes for valid books with `BarcodeGenerationService` (Feature 2)
+* Continue after per-book validation or generation failures
+* Return `BatchProcessingResult` with counts, `elapsed_seconds`, and derived
+  `books_per_second`
+* Preserve **input order** in `results` (`BookProcessingResult` index `i`
+  always corresponds to input book `i`)
+
+**Progress reporting**
+
+Optional `BatchProgressReporter` hooks (`on_batch_started`,
+`on_book_processed`, `on_batch_completed`) allow future CLI/UI progress
+without changing `process_books()`. No UI is implemented here.
+
+**Future cancellation support**
+
+Optional `BatchCancellationToken` (`is_cancellation_requested`) is accepted on
+the constructor so UI can plug in later **without changing the public API**.
+Cancellation is **not enforced** in this release; the token is retained only
+as a stable extension point.
+
+**Metrics**
+
+`BatchProcessingResult.books_per_second` is derived as
+`total_processed / elapsed_seconds` (returns `0.0` when elapsed time is zero).
+It is not stored separately.
+
+JSON loading / `BatchProcessor.run()` remain separate (workbook/CLI input
+adapters).
+
 ### Manual barcode verification
 
 Generated PNGs should scan back to the normalized ISBN-13 (13 digits, no
@@ -314,26 +352,28 @@ when the project tree is present and falls back to `APP_VERSION`.
 ## Data flow (generate command)
 
 ```
-books JSON
+books JSON / future Excel adapter
     │
     ▼
-ApplicationSettings ──► BatchProcessor.run()
-    │                          │
-    │                          ▼
-    │                   load_books() ──► list[Book]
-    │                          │
-    │                          ▼
-    │                   process_book() per item
-    │                     ├─ IsbnValidator.validate()
-    │                     ├─ optional lookup / cover hooks
-    │                     └─ BarcodeGenerator.generate_if_missing()
-    │                          │
-    │                          ▼
-    │                   list[BarcodeGenerationResult]
-    │                          │
-    └──────────► results JSON + output/barcodes/*.png
-                 logs/application.log (rotating)
+list[Book]
+    │
+    ▼
+BatchProcessingService.process_books()
+    │
+    ├─ IsbnValidator.validate()
+    └─ BarcodeGenerationService.generate_for_book()  (valid only)
+    │
+    ▼
+BatchProcessingResult  (counts, elapsed_seconds, per-book outcomes)
+    │
+    ▼
+results JSON + output/barcodes/*.png   (CLI / BatchProcessor adapters)
+logs/application.log (rotating)
 ```
+
+`BatchProcessor.run()` remains the CLI adapter that will load JSON and write
+results once `load_books` is implemented; core orchestration is
+`BatchProcessingService`.
 
 ## Folder purposes
 

@@ -46,6 +46,7 @@ barcode_generator/
 │       │   └── commands.py         # Command handlers + dispatch
 │       ├── services/
 │       │   ├── barcode_generation_service.py
+│       │   ├── batch_processing_service.py
 │       │   ├── barcode_generator.py
 │       │   ├── batch_processor.py
 │       │   ├── isbn_validator.py
@@ -180,6 +181,24 @@ print(result.status, result.output_path)
 - Renderer geometry comes from `ApplicationSettings` (`barcode_module_width`,
   `barcode_module_height`, `barcode_quiet_zone`, `barcode_font_size`,
   `barcode_dpi`) — defaults match the current EAN-13 PNG look
+
+### Batch processing
+
+`BatchProcessingService` orchestrates Feature 1 + Feature 2 over a collection
+of books: validate each ISBN, generate barcodes for valid books, continue after
+per-book failures, and preserve input order in the results list.
+
+```powershell
+python -c "from classroom_library_label_maker.config import load_application_settings; from classroom_library_label_maker.models import Book; from classroom_library_label_maker.services import BatchProcessingService; s=load_application_settings(); books=[Book(isbn='9780064400558', title='A', author='B'), Book(isbn='123', title='Bad', author='B')]; r=BatchProcessingService(s).process_books(books); print(r.to_dict()['summary'])"
+```
+
+- Returns `BatchProcessingResult` (`total_processed`, generation/skip/failure
+  counts, `elapsed_seconds`, derived `books_per_second`, per-book results)
+- `results` order matches the input `books` collection
+- Reuses `IsbnValidator` and `BarcodeGenerationService` (no duplicated logic)
+- Optional `BatchProgressReporter` for future progress UI
+- Optional `BatchCancellationToken` constructor hook for future cooperative
+  cancel (accepted now, **not enforced** yet)
 
 ### Manual barcode verification
 

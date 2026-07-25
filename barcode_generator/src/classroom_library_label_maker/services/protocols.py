@@ -1,7 +1,9 @@
-"""Protocols for optional enrichment services.
+"""Protocols for optional enrichment, progress reporting, and cancellation.
 
 Implementations will live under ``services.lookups`` and ``services.covers``
-when those features are built.
+when those features are built. Progress reporters and cancellation tokens may
+be supplied by CLI or future UI layers without changing
+:class:`BatchProcessingService` method signatures.
 """
 
 from __future__ import annotations
@@ -9,7 +11,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol
 
-from classroom_library_label_maker.models import CoverImageResult, IsbnLookupResult
+from classroom_library_label_maker.models import (
+    BookProcessingResult,
+    CoverImageResult,
+    IsbnLookupResult,
+)
 
 
 class IsbnLookupService(Protocol):
@@ -40,4 +46,47 @@ class CoverDownloadService(Protocol):
         Returns:
             Result describing the downloaded (or failed) cover.
         """
+        ...
+
+
+class BatchProgressReporter(Protocol):
+    """Optional progress hook for batch processing.
+
+    Implementations can drive CLI progress bars or future UI without changing
+    the batch processing service public API. All methods are best-effort;
+    reporter exceptions are swallowed and logged by the service.
+    """
+
+    def on_batch_started(self, total: int) -> None:
+        """Called once before the first book is processed."""
+        ...
+
+    def on_book_processed(
+        self,
+        index: int,
+        total: int,
+        result: BookProcessingResult,
+    ) -> None:
+        """Called after each book finishes (``index`` is 1-based)."""
+        ...
+
+    def on_batch_completed(self, total: int) -> None:
+        """Called once after all books have been processed."""
+        ...
+
+
+class BatchCancellationToken(Protocol):
+    """Extension point for cooperative batch cancellation.
+
+    Future UI layers can supply a token so the operator can stop a long batch
+    between books. :class:`BatchProcessingService` accepts an optional token
+    today so the constructor API stays stable when enforcement is added.
+
+    **Not enforced in this release.** Passing a token has no effect until a
+    future sprint checks ``is_cancellation_requested`` between books and stops
+    gracefully (partial results retained).
+    """
+
+    def is_cancellation_requested(self) -> bool:
+        """Return True when the caller has requested that the batch stop."""
         ...
