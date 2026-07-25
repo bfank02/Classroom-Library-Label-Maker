@@ -1,4 +1,4 @@
-"""Shared utility helpers."""
+"""Shared utility helpers for filesystem and JSON I/O."""
 
 from __future__ import annotations
 

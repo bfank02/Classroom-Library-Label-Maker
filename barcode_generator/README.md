@@ -6,7 +6,11 @@ Validates ISBN-13 values, generates EAN-13 barcode PNG images, skips existing
 images, and writes a JSON results file. Packaged for Windows via PyInstaller.
 
 **Package:** `classroom_library_label_maker`  
-**Version:** see [`VERSION`](VERSION) · **Changes:** [`CHANGELOG.md`](CHANGELOG.md)
+**Version:** see [`VERSION`](VERSION) and `metadata.APP_VERSION` · **Changes:** [`CHANGELOG.md`](CHANGELOG.md)
+
+Product identity (name, license, authorship, CLI name) lives in
+`src/classroom_library_label_maker/metadata.py` — treat that module as the
+single source of truth and avoid hardcoding branding strings elsewhere.
 
 ## Requirements
 
@@ -20,6 +24,8 @@ barcode_generator/
 ├── VERSION
 ├── CHANGELOG.md
 ├── pyproject.toml
+├── .ruff.toml
+├── .pre-commit-config.yaml
 ├── requirements.txt
 ├── build.bat
 ├── README.md
@@ -28,11 +34,16 @@ barcode_generator/
 │   └── classroom_library_label_maker/
 │       ├── __init__.py
 │       ├── __main__.py
-│       ├── main.py                 # CLI / startup only
+│       ├── main.py                 # Startup only
+│       ├── metadata.py             # Product identity (single source of truth)
 │       ├── constants.py
 │       ├── config.py               # ApplicationSettings + ProjectPaths
 │       ├── logger.py               # Rotating + console logging
 │       ├── models.py               # Domain dataclasses / enums
+│       ├── exceptions.py           # ApplicationError hierarchy
+│       ├── cli/
+│       │   ├── parser.py           # Argparse + subcommands
+│       │   └── commands.py         # Command handlers + dispatch
 │       ├── services/
 │       │   ├── barcode_generator.py
 │       │   ├── batch_processor.py
@@ -45,6 +56,7 @@ barcode_generator/
 │
 ├── tests/
 │   ├── conftest.py
+│   ├── benchmarks/             # Manual ISBN timing (not CI)
 │   ├── integration/                # Reserved for E2E tests
 │   └── test_*.py
 │
@@ -75,6 +87,31 @@ python -m pytest
 python -m classroom_library_label_maker --version
 ```
 
+### Linting and formatting (Ruff)
+
+Ruff config lives in [`.ruff.toml`](.ruff.toml) (Python 3.13, format, import
+sorting, and common lint rules).
+
+```powershell
+# Check and auto-fix lint issues
+python -m ruff check --fix src tests
+
+# Apply formatter
+python -m ruff format src tests
+```
+
+### Pre-commit hooks
+
+Hooks run Ruff check (with `--fix`) and Ruff format on each commit:
+
+```powershell
+python -m pip install pre-commit
+pre-commit install
+pre-commit run --all-files
+```
+
+Configuration: [`.pre-commit-config.yaml`](.pre-commit-config.yaml).
+
 Coding standards:
 
 - Python 3.13+, PEP 8, PEP 257
@@ -83,6 +120,24 @@ Coding standards:
 - `pathlib.Path` for filesystem paths
 - No wildcard imports; no logging configuration at import time
 - Business logic in `services/`; `main.py` stays thin
+- Use Ruff (via CLI or pre-commit) before opening a PR
+
+### ISBN validation
+
+`IsbnValidator` lives in `services/isbn_validator.py`.
+
+**Stable public API** (backward compatible unless a major version change):
+
+- `normalize()` — clean input without validating
+- `validate()` — validate one ISBN → `ValidationResult`
+- `validate_many()` — validate many ISBNs via `validate()`
+
+```powershell
+python -c "from classroom_library_label_maker.services import IsbnValidator; v=IsbnValidator(); print(v.normalize('978-0-06-440055-8'), v.validate('9780064400558').is_valid)"
+```
+
+Failure text comes from `ValidationErrorCode.message`. See
+[`docs/Architecture.md`](../docs/Architecture.md) for the full contract.
 
 ## Build process
 
@@ -104,26 +159,75 @@ python -m pytest
 - `tests/integration/` is reserved for end-to-end runs once generation works.
 - Incomplete engine features remain `xfail` until implemented.
 
+### ISBN validator benchmarks (manual only)
+
+`tests/benchmarks/` holds **engineering performance timings** for
+`IsbnValidator`. They exist to spot accidental slowdowns during refactors, not
+to enforce hard SLAs.
+
+**Why they exist**
+
+- Give developers a quick local signal when changing normalization/validation.
+- Produce comparable timings across machines/commits without coupling CI to
+  wall-clock variance.
+
+**How to run**
+
+```powershell
+# Preferred: run as a script (prints timings only)
+python tests\benchmarks\benchmark_isbn_validator.py
+
+# Optional: invoke via pytest on that file alone
+python -m pytest tests\benchmarks\benchmark_isbn_validator.py -v -s
+```
+
+Default `python -m pytest` does **not** collect these files (they are named
+`benchmark_*.py`, not `test_*.py`).
+
+**How to interpret results**
+
+- Compare relative times on the **same machine** before/after a change.
+- Absolute numbers vary by CPU, power plan, and background load — do not treat
+  them as pass/fail gates.
+- Look for order-of-magnitude regressions (e.g. 10× slower), not millisecond noise.
+
+**CI policy**
+
+- Benchmarks must **never** fail CI.
+- Do not add performance assertions or include `tests/benchmarks/` in required
+  CI test paths.
+
 ## Versioning
 
-- Source of truth: plain-text [`VERSION`](VERSION)
+- Python source of truth for identity: `metadata.py`
+- On-disk SemVer file: [`VERSION`](VERSION) (also used by setuptools)
+- Keep `APP_VERSION` and `VERSION` identical when releasing
 - Human history: Keep a Changelog in [`CHANGELOG.md`](CHANGELOG.md)
-- Align `pyproject.toml` `[project].version` when cutting a release
 - Semantic Versioning: `MAJOR.MINOR.PATCH`
 
 ## Run (CLI)
 
+Commands: `generate` (default), `version`, plus reserved `validate` /
+`clean` / `diagnostics`.
+
 ```powershell
-python -m classroom_library_label_maker `
+# Preferred explicit form
+python -m classroom_library_label_maker generate `
   --input assets\sample-data\sample-books.json `
   --output-dir output\barcodes `
   --results output\results.json `
   --log-file logs\application.log
+
+# Legacy form (still supported; maps to generate)
+python -m classroom_library_label_maker `
+  --input assets\sample-data\sample-books.json `
+  --results output\results.json
+
+python -m classroom_library_label_maker version
 ```
 
 > Core ISBN check-digit validation and PNG generation still raise
 > `NotImplementedError` by design until Sprint 1 feature work.
-
 ## Related documentation
 
 - [Architecture](../docs/Architecture.md)

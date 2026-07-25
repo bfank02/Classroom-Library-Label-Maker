@@ -27,23 +27,113 @@ Architecture for **Classroom Library Label Maker**, with emphasis on the
 └───────────────────────────────────────────────────────────────┘
 ```
 
+## Startup sequence / application lifecycle
+
+```
+Workbook / caller
+        │
+        │  (JSON path, or future VBA → EXE)
+        ▼
+       CLI          cli/parser.py  →  argparse + subcommands
+        │
+        ▼
+  Configuration     config.load_application_settings()
+        │             VERSION, assets/, output/, logs/, temp/
+        ▼
+     Logging        logger.setup_logging()  (console + rotating file)
+        │
+        ▼
+     Command        cli/commands.dispatch()
+        │             generate | version | validate* | clean* | diagnostics*
+        ▼
+     Services       BatchProcessor → IsbnValidator / BarcodeGenerator
+        │
+        ▼
+      Output        output/barcodes/*.png  +  results JSON  +  logs/
+```
+
+\* Reserved commands are registered now and return “not implemented” until
+feature sprints land.
+
+### Lifecycle notes
+
+1. **Process start** — `__main__` / console script calls `main()`.
+2. **Parse** — `parse_args()` selects a command (`generate` by default).
+3. **Configure** — settings resolve project paths without hardcoded absolutes.
+4. **Log** — handlers attach only after parse (never at import time).
+5. **Execute** — command handlers call services; services never own CLI concerns.
+6. **Exit** — stable exit codes (`0` success, `1` failure, `2` not implemented,
+   `3` completed with per-item errors).
+
+## CLI architecture
+
+```
+main.py
+  └─ parse_args()          cli/parser.py
+  └─ setup_logging()       logger.py
+  └─ dispatch()            cli/commands.py
+        ├─ run_generate()
+        ├─ run_version()
+        ├─ run_validate()      (reserved)
+        ├─ run_clean()         (reserved)
+        └─ run_diagnostics()   (reserved)
+```
+
+| Module | Responsibility |
+|--------|----------------|
+| `cli/parser.py` | Argparse definitions, help text, legacy flag normalization |
+| `cli/commands.py` | Command handlers + `COMMAND_HANDLERS` registry |
+| `main.py` | Startup orchestration only |
+
+Adding a command later:
+
+1. Add a constant + subparser in `parser.py`
+2. Implement `run_<name>()` in `commands.py`
+3. Register it in `COMMAND_HANDLERS`
+
+Legacy invocations without a subcommand still work and map to `generate`.
+
+## Exception hierarchy
+
+```
+ApplicationError
+├── ConfigurationError
+├── ValidationError
+│   ├── InvalidISBNError
+│   └── InvalidWorkbookError
+├── BarcodeGenerationError
+└── FileSystemError
+```
+
+- Defined in `exceptions.py`
+- Support an optional underlying `cause` (set as `__cause__`) for logging
+- CLI catches `ApplicationError` for clean user-facing failures
+- Feature code should raise these instead of bare `Exception` once implemented
+
 ## Package layout (src-layout)
 
 ```
 barcode_generator/src/classroom_library_label_maker/
-├── main.py              CLI / process entry only
+├── main.py              Process entry / startup only
+├── __main__.py          python -m entry
+├── metadata.py          Product identity (name, version, license, …)
+├── exceptions.py        ApplicationError hierarchy
 ├── config.py            ApplicationSettings, ProjectPaths, VERSION
-├── logger.py            Console + RotatingFileHandler (setup only at runtime)
-├── models.py            Book, ValidationResult, BarcodeGenerationResult, …
-├── constants.py         Shared names / defaults (no magic strings in services)
-├── services/            Business orchestration
+├── logger.py            Console + RotatingFileHandler
+├── models.py            Domain dataclasses / enums
+├── constants.py         Runtime defaults / relative path segments
+├── cli/
+│   ├── parser.py        Argparse + subcommands
+│   └── commands.py      Handlers + dispatch registry
+├── services/
 │   ├── isbn_validator.py
 │   ├── barcode_generator.py
 │   ├── batch_processor.py
-│   ├── protocols.py     IsbnLookupService / CoverDownloadService
+│   ├── protocols.py
 │   ├── lookups/         Future catalog APIs
 │   └── covers/          Future cover downloads
-└── utils/               Generic I/O helpers
+└── utils/
+    └── file_utils.py
 ```
 
 Import style (absolute, package-qualified):
@@ -51,42 +141,103 @@ Import style (absolute, package-qualified):
 ```python
 from classroom_library_label_maker.services import BatchProcessor
 from classroom_library_label_maker.config import load_application_settings
+from classroom_library_label_maker.exceptions import InvalidISBNError
 ```
+
+Root package `__init__` exports a narrow public API (models + exceptions +
+`__version__`). Prefer submodule imports in library-style call sites.
 
 ## Package responsibilities
 
 | Area | Responsibility |
 |------|----------------|
-| `main` | Parse CLI, load settings, configure logging, run batch |
+| `main` | Startup: parse → configure → log → dispatch |
+| `cli` | CLI parsing and command handlers |
+| `metadata` | Single source of truth for product identity |
 | `models` | Domain dataclasses and `BarcodeStatus` enum |
-| `config` | Discover project root, VERSION, asset/runtime paths |
+| `exceptions` | Typed application errors |
+| `config` | Project root, VERSION, asset/runtime paths |
 | `logger` | Production logging setup (no import-time side effects) |
 | `services.*` | Validation, generation, batch orchestration |
 | `services.protocols` | Extension contracts for lookups / covers |
 | `utils.file_utils` | JSON + directory helpers |
+| `constants` | Operational defaults (paths, log sizes) — not product branding |
 
-## Data flow
+## ISBN validator (`services/isbn_validator.py`)
+
+`IsbnValidator` (alias `ISBNValidator`) is a **stateless** normalizer/validator.
+It never raises for expected ISBN failures; it always returns
+`ValidationResult`.
+
+### Stable public API (frozen)
+
+The following methods are the **stable public interface** for ISBN validation.
+They are considered feature-complete and **must remain backward compatible**
+unless a **major** version bump intentionally breaks them:
+
+| Method | Contract |
+|--------|----------|
+| `normalize(isbn: str \| None) -> str` | Clean an ISBN string (trim; remove spaces/hyphens). Does **not** validate. |
+| `validate(isbn: str \| None) -> ValidationResult` | Validate one ISBN; always returns a result (never raises for invalid input). |
+| `validate_many(isbns: Iterable[str \| None]) -> list[ValidationResult]` | Validate many values by calling `validate()` per item, preserving order. |
+
+Additional public helpers (`is_valid`, `compute_check_digit`) exist for
+convenience but are not part of the frozen compatibility surface above.
+
+Validation order: empty → numeric → length 13 → prefix `978`/`979` → checksum.
+
+`ValidationErrorCode` is the single source of truth for failure **codes and
+default user-facing messages** (`error_code.message`). `ValidationResult.errors`
+is populated from that message.
+
+### Performance benchmarks
+
+Engineering timings live under `barcode_generator/tests/benchmarks/`. They are
+**not** part of the normal unit-test suite and must **never** fail CI. See the
+barcode generator README for how to run them and how to interpret results.
+
+## Application metadata (`metadata.py`)
+
+Product-facing strings are centralized so installers, CLI help, logs, and
+about dialogs cannot drift apart:
+
+* `APP_NAME`, `APP_DESCRIPTION`, `APP_AUTHOR`, `APP_COMPANY`
+* `APP_COPYRIGHT`, `APP_VERSION`, `APP_WEBSITE`, `APP_LICENSE`
+* Technical IDs: `APP_PACKAGE_NAME`, `APP_DISTRIBUTION_NAME`, `APP_CLI_NAME`
+
+**Why centralize?** Hardcoded product strings in CLI parsers, log lines, and
+build scripts become inconsistent as the app grows (Excel, installer, updates).
+One module is the contract for branding and version identity.
+
+**Version tradeoff:** `APP_VERSION` is a static constant synchronized with the
+root `VERSION` file (and mirrored by setuptools `dynamic = ["version"]`).
+Import-time reads of `VERSION` were avoided because wheel installs may not
+ship that file beside the package and path discovery would couple metadata to
+`config`. At runtime, `read_version()` still prefers the on-disk `VERSION`
+when the project tree is present and falls back to `APP_VERSION`.
+
+## Data flow (generate command)
 
 ```
-sample-books.json / caller JSON
-            │
-            ▼
-   ApplicationSettings ──► BatchProcessor.run()
-            │                      │
-            │                      ▼
-            │               load_books() ──► list[Book]
-            │                      │
-            │                      ▼
-            │               process_book() per item
-            │                 ├─ IsbnValidator.validate()
-            │                 ├─ optional lookup / cover hooks
-            │                 └─ BarcodeGenerator.generate_if_missing()
-            │                      │
-            │                      ▼
-            │               list[BarcodeGenerationResult]
-            │                      │
-            └──────────► results JSON + output/barcodes/*.png
-                         logs/application.log (rotating)
+books JSON
+    │
+    ▼
+ApplicationSettings ──► BatchProcessor.run()
+    │                          │
+    │                          ▼
+    │                   load_books() ──► list[Book]
+    │                          │
+    │                          ▼
+    │                   process_book() per item
+    │                     ├─ IsbnValidator.validate()
+    │                     ├─ optional lookup / cover hooks
+    │                     └─ BarcodeGenerator.generate_if_missing()
+    │                          │
+    │                          ▼
+    │                   list[BarcodeGenerationResult]
+    │                          │
+    └──────────► results JSON + output/barcodes/*.png
+                 logs/application.log (rotating)
 ```
 
 ## Folder purposes
@@ -106,24 +257,13 @@ sample-books.json / caller JSON
 
 ## Future extension points
 
-Designed for growth without rewriting the batch pipeline:
-
-1. **ISBN lookup APIs** — implement `IsbnLookupService` under `services/lookups/`
-2. **Cover downloads** — implement `CoverDownloadService` under `services/covers/`
-3. **Inventory / checkout / reading levels** — extend `Book` optional fields and
-   Excel sheets; keep JSON contracts versioned
-4. **Multiple label templates** — files in `assets/templates/` selected via
-   `ApplicationSettings.default_label_type`
-5. **Additional barcode formats** — new generator strategies beside EAN-13
-6. **Auto-update / installer** — `installer/` + `releases/`; VERSION drives
-   update checks later
-
-```
-ExtensibilityHooks ──► BatchProcessor
-        │
-        ├─ IsbnLookupService (protocols)
-        └─ CoverDownloadService (protocols)
-```
+1. **CLI commands** — `validate`, `clean`, `diagnostics` already registered
+2. **ISBN lookup APIs** — `IsbnLookupService` under `services/lookups/`
+3. **Cover downloads** — `CoverDownloadService` under `services/covers/`
+4. **Inventory / checkout / reading levels** — extend `Book` optional fields
+5. **Multiple label templates** — `assets/templates/` + `default_label_type`
+6. **Additional barcode formats** — new generator strategies beside EAN-13
+7. **Auto-update / installer** — `installer/` + `releases/` driven by `VERSION`
 
 ## Coding standards
 
@@ -132,17 +272,18 @@ ExtensibilityHooks ──► BatchProcessor
 - Dataclasses + `StrEnum` for domain types
 - `pathlib` only (no `os.path`)
 - No wildcard imports; avoid circular imports
-- Constants live in `constants.py`
+- Constants in `constants.py`; CLI exit codes in `cli/commands.py`
 - Logging configured only in `setup_logging()` during startup
-- Deferred feature work raises `NotImplementedError` with an explanatory note
-  (no silent stubs)
+- Deferred features raise `NotImplementedError` with an explanatory note
 
 ## Versioning strategy
 
 1. Bump `barcode_generator/VERSION`
-2. Update `CHANGELOG.md` (Keep a Changelog)
-3. Align `pyproject.toml` project version
-4. Tag releases when publishing EXE / installer artifacts to `releases/`
+2. Bump `APP_VERSION` in `metadata.py` to match
+3. Update `CHANGELOG.md` (Keep a Changelog)
+4. `pyproject.toml` reads version dynamically from `VERSION`
+5. Keep packaging name/description/license/authors aligned with `metadata.py`
+6. Tag releases when publishing EXE / installer artifacts to `releases/`
 
 ## Development workflow
 

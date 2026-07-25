@@ -1,80 +1,27 @@
-"""Application entry point for the Classroom Library barcode generator.
+"""Application entry point for the barcode generator component.
 
-This module contains only startup / CLI wiring. Business logic lives in
-``services`` and supporting modules.
+Startup only: parse CLI arguments, initialize logging when needed, and
+dispatch to a command handler. Business logic lives under ``services/``.
 """
 
 from __future__ import annotations
 
-import argparse
 import sys
-from pathlib import Path
 
+from classroom_library_label_maker.cli.commands import (
+    EXIT_FAILURE,
+    EXIT_NOT_IMPLEMENTED,
+    dispatch,
+)
+from classroom_library_label_maker.cli.parser import (
+    COMMAND_GENERATE,
+    COMMAND_VERSION,
+    parse_args,
+)
 from classroom_library_label_maker.config import load_application_settings
-from classroom_library_label_maker.constants import DEFAULT_LOG_LEVEL
+from classroom_library_label_maker.exceptions import ApplicationError
 from classroom_library_label_maker.logger import get_logger, setup_logging
-from classroom_library_label_maker.services.batch_processor import BatchProcessor
-
-
-def build_arg_parser() -> argparse.ArgumentParser:
-    """Create the command-line argument parser.
-
-    Returns:
-        Configured :class:`argparse.ArgumentParser`.
-    """
-    parser = argparse.ArgumentParser(
-        prog="barcode-generator",
-        description=(
-            "Generate EAN-13 barcode PNGs from a JSON file of classroom "
-            "library books."
-        ),
-    )
-    parser.add_argument(
-        "--input",
-        "-i",
-        type=Path,
-        default=None,
-        help="Path to input JSON file containing books.",
-    )
-    parser.add_argument(
-        "--output-dir",
-        "-o",
-        type=Path,
-        default=None,
-        help=(
-            "Directory for generated barcode PNG images "
-            "(default: <project>/output/barcodes)."
-        ),
-    )
-    parser.add_argument(
-        "--results",
-        "-r",
-        type=Path,
-        default=None,
-        help="Path to write the JSON results file.",
-    )
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Regenerate barcode images even if they already exist.",
-    )
-    parser.add_argument(
-        "--log-level",
-        default=DEFAULT_LOG_LEVEL,
-        help="Logging level (DEBUG, INFO, WARNING, ERROR).",
-    )
-    parser.add_argument(
-        "--log-file",
-        type=Path,
-        default=None,
-        help="Optional path to write a rotating log file.",
-    )
-    parser.add_argument(
-        "--version",
-        action="store_true",
-        help="Print the component version and exit.",
-    )
-    return parser
+from classroom_library_label_maker.metadata import APP_COMPONENT_NAME, APP_NAME
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -86,48 +33,50 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         Process exit code (``0`` on success, non-zero on failure).
     """
-    parser = build_arg_parser()
-    args = parser.parse_args(argv)
+    args = parse_args(argv)
 
-    settings = load_application_settings(
-        input_path=args.input,
-        results_path=args.results,
-        barcode_output_directory=args.output_dir,
-        overwrite=args.overwrite,
-        log_level=args.log_level,
-        log_file=args.log_file,
-    )
+    if args.command == COMMAND_VERSION:
+        return dispatch(args, settings=None)
 
-    if args.version:
-        print(settings.app_version)
-        return 0
-
-    if args.input is None or args.results is None:
-        parser.error("--input and --results are required unless --version is set")
+    settings = None
+    if args.command == COMMAND_GENERATE:
+        settings = load_application_settings(
+            input_path=args.input,
+            results_path=args.results,
+            barcode_output_directory=args.output_dir,
+            overwrite=args.overwrite,
+            log_level=args.log_level,
+            log_file=args.log_file,
+        )
+    else:
+        settings = load_application_settings(
+            log_level=args.log_level,
+            log_file=args.log_file,
+        )
 
     setup_logging(level=settings.log_level, log_file=settings.log_file)
     logger = get_logger()
     logger.info(
-        "Classroom Library Barcode Generator v%s starting",
+        "%s — %s v%s starting (%s)",
+        APP_NAME,
+        APP_COMPONENT_NAME,
         settings.app_version,
+        args.command,
     )
 
     try:
-        processor = BatchProcessor(settings)
-        batch = processor.run()
+        return dispatch(args, settings)
+    except ApplicationError as exc:
+        logger.error("%s", exc)
+        if exc.__cause__ is not None:
+            logger.debug("Caused by: %s", exc.__cause__, exc_info=exc.__cause__)
+        return EXIT_FAILURE
     except NotImplementedError as exc:
         logger.error("Not implemented: %s", exc)
-        return 2
+        return EXIT_NOT_IMPLEMENTED
     except Exception:
-        logger.exception("Unhandled error during barcode generation")
-        return 1
-
-    if batch.error_count:
-        logger.warning("Completed with %s error(s)", batch.error_count)
-        return 3
-
-    logger.info("Completed successfully")
-    return 0
+        logger.exception("Unhandled error during command execution")
+        return EXIT_FAILURE
 
 
 if __name__ == "__main__":

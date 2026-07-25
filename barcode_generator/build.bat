@@ -2,6 +2,12 @@
 setlocal
 cd /d "%~dp0"
 
+set "PYTHONPATH=src"
+
+REM Resolve product identifiers from metadata.py (single source of truth).
+for /f "usebackq delims=" %%A in (`python -c "from classroom_library_label_maker.metadata import APP_CLI_NAME; print(APP_CLI_NAME)"`) do set "CLI_NAME=%%A"
+for /f "usebackq delims=" %%A in (`python -c "from classroom_library_label_maker.metadata import APP_NAME, APP_COMPONENT_NAME; print(f'{APP_NAME} — {APP_COMPONENT_NAME}')"`) do set "PRODUCT_LABEL=%%A"
+
 REM Optional EXE icon once assets\icons\app.ico contains real icon data.
 set "ICON_ARGS="
 if exist "assets\icons\app.ico" (
@@ -10,12 +16,12 @@ if exist "assets\icons\app.ico" (
     )
 )
 
-echo Building Classroom Library Barcode Generator with PyInstaller...
+echo Building %PRODUCT_LABEL% with PyInstaller...
 python -m PyInstaller ^
     --noconfirm ^
     --clean ^
     --onefile ^
-    --name barcode-generator ^
+    --name "%CLI_NAME%" ^
     --paths src ^
     --hidden-import classroom_library_label_maker ^
     --hidden-import classroom_library_label_maker.services ^

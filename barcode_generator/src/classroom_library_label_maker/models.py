@@ -114,25 +114,68 @@ class Book:
         )
 
 
+class ValidationErrorCode(StrEnum):
+    """Machine-readable ISBN validation failure codes.
+
+    Each member carries a default user-facing ``message``. Prefer
+    ``error_code.message`` over duplicated string literals when building
+    :class:`ValidationResult` values.
+    """
+
+    def __new__(cls, value: str, message: str = "") -> ValidationErrorCode:
+        """Create an enum member with a stable code value and default message."""
+        obj = str.__new__(cls, value)
+        obj._value_ = value
+        obj._message_ = message
+        return obj
+
+    NONE = ("none", "")
+    EMPTY = ("empty", "ISBN is empty")
+    NON_NUMERIC = (
+        "non_numeric",
+        "ISBN must contain only digits after normalization",
+    )
+    INVALID_LENGTH = (
+        "invalid_length",
+        "ISBN-13 must contain exactly 13 digits",
+    )
+    INVALID_PREFIX = (
+        "invalid_prefix",
+        "ISBN-13 prefix must be 978 or 979",
+    )
+    INVALID_CHECKSUM = (
+        "invalid_checksum",
+        "ISBN-13 check digit is invalid",
+    )
+
+    @property
+    def message(self) -> str:
+        """Return the default user-facing message for this error code."""
+        return self._message_
+
+
 @dataclass(slots=True)
 class ValidationResult:
     """Outcome of validating a single ISBN value.
 
     Attributes:
-        isbn: ISBN associated with this result (normalized when valid).
+        isbn: Normalized ISBN when available; empty string for empty/None input.
         is_valid: Whether the ISBN passed validation.
-        errors: Human-readable validation error messages (empty when valid).
+        errors: Human-readable messages (from ``error_code.message`` when
+            invalid; empty when valid).
+        error_code: Machine-readable failure code (``NONE`` when valid).
     """
 
     isbn: str
     is_valid: bool
     errors: list[str] = field(default_factory=list)
+    error_code: ValidationErrorCode = ValidationErrorCode.NONE
 
     def __repr__(self) -> str:
         """Return a developer-friendly representation."""
         return (
             f"ValidationResult(isbn={self.isbn!r}, is_valid={self.is_valid}, "
-            f"errors={self.errors!r})"
+            f"error_code={self.error_code!r}, errors={self.errors!r})"
         )
 
 
@@ -345,10 +388,7 @@ class CoverImageResult:
 
     def __repr__(self) -> str:
         """Return a developer-friendly representation."""
-        return (
-            f"CoverImageResult(isbn={self.isbn!r}, "
-            f"image_path={self.image_path!r})"
-        )
+        return f"CoverImageResult(isbn={self.isbn!r}, image_path={self.image_path!r})"
 
 
 def _optional_str(value: Any) -> str | None:

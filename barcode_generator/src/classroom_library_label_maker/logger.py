@@ -7,9 +7,9 @@ this module (or any service module) never configures logging as a side effect.
 from __future__ import annotations
 
 import logging
-import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+import sys
 
 from classroom_library_label_maker.constants import (
     APP_LOGGER_NAME,

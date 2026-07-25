@@ -1,105 +1,215 @@
-"""ISBN-13 validation for classroom library books."""
+"""ISBN-13 normalization and validation for classroom library books.
+
+This module is intentionally limited to normalization and validation. It does
+not generate barcodes or interact with workbooks.
+
+Stable public API (frozen)
+--------------------------
+The following methods are the stable ISBN validation interface and should
+remain backward compatible unless a major version change occurs:
+
+* :meth:`IsbnValidator.normalize` — clean an ISBN string without validating
+* :meth:`IsbnValidator.validate` — validate one ISBN; always returns
+  :class:`~classroom_library_label_maker.models.ValidationResult`
+* :meth:`IsbnValidator.validate_many` — validate an iterable via ``validate``
+
+Additional public helpers (not part of the frozen surface above):
+
+* :meth:`IsbnValidator.is_valid` — convenience boolean wrapper
+* :meth:`IsbnValidator.compute_check_digit` — ISBN-13 / EAN-13 check digit
+"""
 
 from __future__ import annotations
 
-import re
+from collections.abc import Iterable
 
 from classroom_library_label_maker.logger import get_logger
-from classroom_library_label_maker.models import ValidationResult
+from classroom_library_label_maker.models import ValidationErrorCode, ValidationResult
 
 _logger = get_logger("isbn_validator")
 
-_ISBN13_DIGITS = re.compile(r"^\d{13}$")
-_NON_DIGIT = re.compile(r"[^0-9]")
+_VALID_PREFIXES: frozenset[str] = frozenset({"978", "979"})
+_ISBN13_LENGTH = 13
 
 
 class IsbnValidator:
-    """Validate and normalize ISBN-13 identifiers.
+    """Stateless ISBN-13 normalizer and validator.
 
-    Designed so future ISBN-10 conversion and remote enrichment can plug in
-    without changing call sites that depend on :meth:`validate`.
+    Expected validation failures are returned as :class:`ValidationResult`
+    values; this class does not raise for invalid ISBN input.
+
+    User-facing failure text comes from
+    :attr:`ValidationErrorCode.message` so messages stay centralized.
     """
 
-    def normalize(self, isbn: str) -> str:
-        """Strip hyphens/spaces and return digits only.
+    def normalize(self, isbn: str | None) -> str:
+        """Return a normalized ISBN string without validating it.
+
+        This is a public helper for callers that need a cleaned value (for
+        display, deduplication, or file naming) before or instead of full
+        validation.
+
+        Accepts ``None`` or ``str``. Trims leading/trailing whitespace, then
+        removes internal spaces and hyphens. Other characters are left in place
+        so :meth:`validate` can report ``NON_NUMERIC`` when appropriate.
 
         Args:
-            isbn: Raw ISBN string from input data.
+            isbn: Raw ISBN value, or ``None``.
 
         Returns:
-            A string containing only digit characters.
+            Normalized string (possibly empty). Does **not** check length,
+            prefix, or checksum.
         """
-        return _NON_DIGIT.sub("", isbn.strip())
+        if isbn is None:
+            return ""
+        trimmed = isbn.strip()
+        return trimmed.replace("-", "").replace(" ", "")
 
-    def validate(self, isbn: str) -> ValidationResult:
-        """Validate an ISBN-13 value including check digit.
+    def validate(self, isbn: str | None) -> ValidationResult:
+        """Validate an ISBN-13 value and return a structured result.
+
+        Validation order:
+
+        1. Empty input
+        2. Numeric characters only
+        3. Exactly 13 digits
+        4. Prefix ``978`` or ``979``
+        5. ISBN-13 checksum
 
         Args:
-            isbn: Raw ISBN string (may include hyphens or spaces).
+            isbn: Raw ISBN value, or ``None``.
 
         Returns:
-            A :class:`ValidationResult` describing validity.
+            A :class:`ValidationResult` for every attempt.
         """
-        original = isbn
         normalized = self.normalize(isbn)
 
-        if not normalized:
-            return ValidationResult(
-                isbn=original,
-                is_valid=False,
-                errors=["ISBN is empty"],
+        if self._is_empty(normalized):
+            return self._invalid_result(
+                isbn="",
+                code=ValidationErrorCode.EMPTY,
             )
 
-        if not _ISBN13_DIGITS.match(normalized):
-            return ValidationResult(
+        if not self._is_numeric(normalized):
+            return self._invalid_result(
                 isbn=normalized,
-                is_valid=False,
-                errors=["ISBN-13 must contain exactly 13 digits"],
+                code=ValidationErrorCode.NON_NUMERIC,
             )
 
-        try:
-            check_ok = self._check_digit_is_valid(normalized)
-        except NotImplementedError:
-            # Check-digit algorithm is intentionally unimplemented until the
-            # barcode engine sprint delivers validation logic.
-            raise
-
-        if not check_ok:
-            return ValidationResult(
+        if not self._has_valid_length(normalized):
+            return self._invalid_result(
                 isbn=normalized,
-                is_valid=False,
-                errors=["ISBN-13 check digit is invalid"],
+                code=ValidationErrorCode.INVALID_LENGTH,
             )
 
-        # ISBN-10 acceptance / conversion will be added when inventory import
-        # requirements are finalized.
+        if not self._has_valid_prefix(normalized):
+            return self._invalid_result(
+                isbn=normalized,
+                code=ValidationErrorCode.INVALID_PREFIX,
+            )
+
+        if not self._checksum_is_valid(normalized):
+            return self._invalid_result(
+                isbn=normalized,
+                code=ValidationErrorCode.INVALID_CHECKSUM,
+            )
+
         _logger.debug("Validated ISBN-13: %s", normalized)
-        return ValidationResult(isbn=normalized, is_valid=True, errors=[])
+        return ValidationResult(
+            isbn=normalized,
+            is_valid=True,
+            errors=[],
+            error_code=ValidationErrorCode.NONE,
+        )
 
-    def is_valid(self, isbn: str) -> bool:
+    def validate_many(
+        self,
+        isbns: Iterable[str | None],
+    ) -> list[ValidationResult]:
+        """Validate multiple ISBN values in order.
+
+        Reuses :meth:`validate` for each item; validation rules are not
+        duplicated here.
+
+        Args:
+            isbns: Iterable of raw ISBN values (each may be ``None`` or ``str``).
+
+        Returns:
+            A list of :class:`ValidationResult` objects in the same order as
+            ``isbns``.
+        """
+        return [self.validate(value) for value in isbns]
+
+    def is_valid(self, isbn: str | None) -> bool:
         """Return whether ``isbn`` is a valid ISBN-13.
 
         Args:
-            isbn: Raw ISBN string.
+            isbn: Raw ISBN value, or ``None``.
 
         Returns:
             ``True`` if valid; otherwise ``False``.
         """
         return self.validate(isbn).is_valid
 
-    def _check_digit_is_valid(self, isbn13: str) -> bool:
-        """Verify the EAN-13 / ISBN-13 check digit.
+    def compute_check_digit(self, first_twelve_digits: str) -> str:
+        """Compute the ISBN-13 / EAN-13 check digit for 12 digits.
 
         Args:
-            isbn13: A 13-digit string.
+            first_twelve_digits: Exactly twelve digit characters.
 
         Returns:
-            ``True`` if the check digit matches the computed value.
+            A single check-digit character from ``"0"`` to ``"9"``.
 
         Raises:
-            NotImplementedError: Until the GS1 check-digit algorithm is added.
+            ValueError: If ``first_twelve_digits`` is not twelve digits.
         """
-        # Weighted sum of first 12 digits (weights 1 and 3 alternating);
-        # check digit = (10 - (sum % 10)) % 10. Deferred to feature work.
-        _ = isbn13
-        raise NotImplementedError("ISBN-13 check digit validation is not implemented")
+        if len(first_twelve_digits) != 12 or not first_twelve_digits.isdigit():
+            raise ValueError(
+                "first_twelve_digits must be exactly 12 numeric characters"
+            )
+        total = 0
+        for index, char in enumerate(first_twelve_digits):
+            weight = 1 if index % 2 == 0 else 3
+            total += int(char) * weight
+        check = (10 - (total % 10)) % 10
+        return str(check)
+
+    def _is_empty(self, normalized: str) -> bool:
+        """Return whether normalized input is empty."""
+        return normalized == ""
+
+    def _is_numeric(self, normalized: str) -> bool:
+        """Return whether normalized input contains only digit characters."""
+        return normalized.isdigit()
+
+    def _has_valid_length(self, normalized: str) -> bool:
+        """Return whether normalized input has ISBN-13 length."""
+        return len(normalized) == _ISBN13_LENGTH
+
+    def _has_valid_prefix(self, normalized: str) -> bool:
+        """Return whether normalized input starts with 978 or 979."""
+        return normalized[:3] in _VALID_PREFIXES
+
+    def _checksum_is_valid(self, isbn13: str) -> bool:
+        """Return whether the ISBN-13 check digit is correct."""
+        expected = self.compute_check_digit(isbn13[:12])
+        return isbn13[12] == expected
+
+    def _invalid_result(
+        self,
+        *,
+        isbn: str,
+        code: ValidationErrorCode,
+    ) -> ValidationResult:
+        """Build an invalid :class:`ValidationResult` using ``code.message``."""
+        message = code.message
+        return ValidationResult(
+            isbn=isbn,
+            is_valid=False,
+            errors=[message] if message else [],
+            error_code=code,
+        )
+
+
+# Alias matching the feature brief / common branding capitalization.
+ISBNValidator = IsbnValidator

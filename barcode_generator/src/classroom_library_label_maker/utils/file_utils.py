@@ -1,4 +1,4 @@
-"""Filesystem helpers for reading and writing barcode-generator artifacts."""
+"""Filesystem helpers for reading and writing application artifacts."""
 
 from __future__ import annotations
 

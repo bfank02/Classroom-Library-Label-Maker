@@ -1,9 +1,16 @@
-"""Shared constants for the barcode generator package."""
+"""Shared operational constants for the barcode generator package.
+
+Product identity (name, version, license, authorship) lives in
+:mod:`classroom_library_label_maker.metadata`. This module holds runtime
+defaults and relative path segment names only.
+"""
 
 from __future__ import annotations
 
+from classroom_library_label_maker.metadata import APP_PACKAGE_NAME
+
 # Application / logging
-APP_LOGGER_NAME = "classroom_library_label_maker"
+APP_LOGGER_NAME = APP_PACKAGE_NAME
 DEFAULT_LOG_FILE_NAME = "application.log"
 DEFAULT_LOG_LEVEL = "INFO"
 

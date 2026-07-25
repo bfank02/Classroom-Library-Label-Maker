@@ -16,7 +16,7 @@
 - [x] Configuration (`ApplicationSettings`, `ProjectPaths`, VERSION)
 - [x] Production logging skeleton
 - [x] Test framework + fixtures / integration placeholder
-- [ ] ISBN-13 check-digit validation
+- [x] ISBN-13 check-digit validation
 - [ ] EAN-13 PNG generation (`python-barcode` + Pillow)
 - [ ] JSON book loading (`BatchProcessor.load_books`)
 - [ ] Package as EXE (`build.bat` / PyInstaller)
