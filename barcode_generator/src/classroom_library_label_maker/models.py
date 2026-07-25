@@ -530,6 +530,80 @@ class ImportResult:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class LabelLayoutWarning:
+    """Recoverable layout issue with diagnostic context.
+
+    Attributes:
+        message: Human-readable description.
+        isbn: ISBN related to the warning, when applicable.
+        page_number: 1-based page when applicable.
+        code: Short machine-readable code.
+    """
+
+    message: str
+    isbn: str | None = None
+    page_number: int | None = None
+    code: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize this warning to a JSON-compatible dictionary."""
+        return {
+            "message": self.message,
+            "isbn": self.isbn,
+            "page_number": self.page_number,
+            "code": self.code,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class LabelLayoutResult:
+    """Outcome of arranging books onto label worksheet pages.
+
+    Immutable value object — treat instances as read-only after construction.
+
+    Attributes:
+        pages_created: Number of worksheet pages created.
+        labels_placed: Number of labels successfully placed.
+        empty_labels_remaining_on_last_page: Unused slots on the final page.
+        elapsed_seconds: Wall-clock duration of the layout run.
+        warnings: Recoverable issues encountered during layout.
+        template_id: Template used for layout.
+    """
+
+    pages_created: int = 0
+    labels_placed: int = 0
+    empty_labels_remaining_on_last_page: int = 0
+    elapsed_seconds: float = 0.0
+    warnings: tuple[LabelLayoutWarning, ...] = ()
+    template_id: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize layout results to a JSON-compatible dictionary."""
+        return {
+            "summary": {
+                "pages_created": self.pages_created,
+                "labels_placed": self.labels_placed,
+                "empty_labels_remaining_on_last_page": (
+                    self.empty_labels_remaining_on_last_page
+                ),
+                "elapsed_seconds": self.elapsed_seconds,
+                "warning_count": len(self.warnings),
+                "template_id": self.template_id,
+            },
+            "warnings": [warning.to_dict() for warning in self.warnings],
+        }
+
+    def __repr__(self) -> str:
+        """Return a developer-friendly representation."""
+        return (
+            f"LabelLayoutResult(pages={self.pages_created}, "
+            f"labels={self.labels_placed}, "
+            f"empty_remaining={self.empty_labels_remaining_on_last_page}, "
+            f"elapsed_seconds={self.elapsed_seconds!r})"
+        )
+
+
 @dataclass(slots=True)
 class ApplicationSettings:
     """Project-wide and per-run application settings.

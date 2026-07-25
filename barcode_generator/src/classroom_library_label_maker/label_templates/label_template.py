@@ -30,7 +30,7 @@ class LabelTemplate(Protocol):
     """Physical specification of a sheet of labels (inches only).
 
     Implementations must be immutable value objects. This protocol deliberately
-    excludes Excel, rendering, and printing concepts so a future
+    excludes Excel, rendering, and printing concepts so
     ``LabelLayoutService`` can depend on layout data alone.
     """
 

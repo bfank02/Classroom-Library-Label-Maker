@@ -88,6 +88,17 @@ user-facing text.
 
 **Fields:** `results` (input order), `elapsed_seconds`.
 
+### `LabelLayoutResult` / `LabelLayoutWarning` — Stable — External
+
+**Purpose:** Outcome of arranging books onto label worksheet pages, plus
+recoverable diagnostics (e.g. missing barcode images).
+
+**Public methods:** `to_dict()`.
+
+**Fields:** `pages_created`, `labels_placed`,
+`empty_labels_remaining_on_last_page`, `elapsed_seconds`, `warnings`,
+`template_id`.
+
 ### `ApplicationSettings` — Stable — External
 
 **Purpose:** Project paths, logging, and barcode render geometry for a run.
@@ -213,6 +224,7 @@ Package: `classroom_library_label_maker.services`
 | `BarcodeGenerationService` | Stable | External | Single-book PNG generation |
 | `BatchProcessingService` | Stable | External | Multi-book orchestration |
 | `ExcelImportService` | Stable | External | Workbook → `Book` import |
+| `LabelLayoutService` | Stable | External | Arrange books onto label sheets |
 | `BatchProcessor` | Experimental | Internal / transitional | CLI/JSON adapter (`load_books` still stubbed) |
 | `BarcodeGenerator` | Internal | Transitional | Legacy path helpers; superseded by `BarcodeGenerationService` |
 
@@ -253,8 +265,8 @@ Module: `classroom_library_label_maker.services.protocols`
 
 Module: `classroom_library_label_maker.workbooks`
 
-Spreadsheet I/O only. Does **not** map rows to `Book` (that belongs to a
-future Excel import service).
+Spreadsheet I/O only. Row → `Book` mapping belongs to `ExcelImportService`.
+Label placement writes belong to `LabelLayoutService` via `LabelSheetTarget`.
 
 ### `WorkbookReader` — Stable — External (protocol)
 
@@ -274,6 +286,31 @@ as plain string cells.
 
 **External use:** Prefer depending on `WorkbookReader` in services; construct
 `OpenPyxlWorkbookReader` when injecting the concrete backend.
+
+### `LabelSheetTarget` — Stable — External (protocol)
+
+**Purpose:** Library-agnostic contract for creating label pages and placing
+labels. Layout services must not depend on openpyxl worksheet objects.
+
+| Method | Inputs | Outputs |
+|--------|--------|---------|
+| `begin_page(page_number, *, template)` | 1-based page, `LabelTemplate` | — |
+| `place_label(placement)` | `LabelPlacement` | — |
+
+### `LabelPlacement` — Stable — External
+
+**Purpose:** Immutable placement payload: page/row/column, title, author, ISBN,
+optional barcode path, and placeholder flag.
+
+### `InMemoryLabelSheetTarget` — Stable — External
+
+**Purpose:** Records pages and placements for tests / non-Excel consumers.
+
+### `OpenPyxlLabelSheetTarget` — Stable — External (default write backend)
+
+**Purpose:** Place centered title/author/ISBN (and optional barcode image) onto
+openpyxl worksheets. **Does not save** the workbook; expose `.workbook` for a
+future save/print adapter.
 
 ### `ExcelImportService` — Stable — External
 
@@ -297,6 +334,31 @@ Configuration (on `ApplicationSettings`): `workbook_path`, `workbook_sheet_name`
 
 Both are **immutable value objects** (`dataclass(frozen=True)`). Callers should
 treat instances as read-only after construction.
+
+### `LabelLayoutService` — Stable — External
+
+Module: `classroom_library_label_maker.services.label_layout_service`
+
+**Purpose:** Arrange `Book` objects onto worksheet pages using `LabelTemplate`
+and `LabelSheetTarget`. Does not generate barcodes, validate ISBNs, import
+workbooks, print, or save.
+
+| Method | Inputs | Outputs / errors |
+|--------|--------|------------------|
+| `__init__(settings, *, registry=None)` | `ApplicationSettings`; optional registry | service |
+| `layout_books(books, target, *, template=None, barcode_paths=None)` | Books, target, optional template / ISBN→PNG map | `LabelLayoutResult`; may raise `ConfigurationError`, `LabelLayoutError` |
+
+Uses `settings.label_template_id` when `template` is omitted. Missing barcode
+images become placeholders with warnings (`missing_barcode`,
+`barcode_file_missing`).
+
+### `LabelLayoutResult` / `LabelLayoutWarning` — Stable — External
+
+**Purpose:** Layout outcome (`pages_created`, `labels_placed`,
+`empty_labels_remaining_on_last_page`, `elapsed_seconds`, `warnings`,
+`template_id`) and recoverable diagnostics.
+
+Both are **immutable value objects** (`dataclass(frozen=True)`).
 
 ### Workbook template versioning — Experimental — Extension point
 
@@ -355,11 +417,13 @@ ApplicationError
 │   ├── InvalidISBNError
 │   └── InvalidWorkbookError
 ├── BarcodeGenerationError
+├── LabelLayoutError
 └── FileSystemError
 ```
 
 Use these for unexpected failures. Expected invalid ISBNs use
-`ValidationResult`, not exceptions.
+`ValidationResult`, not exceptions. Recoverable layout issues use
+`LabelLayoutWarning` inside `LabelLayoutResult`.
 
 ---
 

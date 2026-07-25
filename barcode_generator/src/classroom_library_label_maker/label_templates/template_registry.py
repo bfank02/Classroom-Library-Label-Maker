@@ -10,7 +10,7 @@ from classroom_library_label_maker.label_templates.label_template import LabelTe
 class TemplateRegistry:
     """Register and look up immutable label templates by ``template_id``.
 
-    New vendor templates can be registered without changing a future
+    New vendor templates can be registered without changing
     ``LabelLayoutService`` — the service depends on :class:`LabelTemplate` only.
     """
 

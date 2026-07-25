@@ -236,8 +236,24 @@ python -c "from classroom_library_label_maker.label_templates import create_defa
 
 - `ApplicationSettings.label_template_id` defaults to `avery-5160`
 - `TemplateRegistry` looks up templates; unknown ids raise `ConfigurationError`
-- Future `LabelLayoutService` will consume `LabelTemplate` without knowing vendors
+- `LabelLayoutService` consumes `LabelTemplate` without knowing vendors
 - Add new templates by registering `LabelTemplateSpec` instances (no layout-engine changes)
+
+### Label layout
+
+`LabelLayoutService` arranges books onto worksheet pages using the selected
+`LabelTemplate` and a `LabelSheetTarget` (no direct openpyxl dependency):
+
+```powershell
+python -c "from classroom_library_label_maker.config import load_application_settings; from classroom_library_label_maker.models import Book; from classroom_library_label_maker.services import LabelLayoutService; from classroom_library_label_maker.workbooks import InMemoryLabelSheetTarget; s=load_application_settings(); books=[Book(isbn='9780064400558', title='A', author='B')]; r=LabelLayoutService(s).layout_books(books, InMemoryLabelSheetTarget()); print(r.to_dict()['summary'])"
+```
+
+- Paginates when a page is full; never silently discards labels
+- Returns `LabelLayoutResult` (`pages_created`, `labels_placed`,
+  `empty_labels_remaining_on_last_page`, `elapsed_seconds`, warnings)
+- Optional `barcode_paths` map ISBN → PNG; missing images use placeholders
+- `OpenPyxlLabelSheetTarget` writes centered cells (does **not** save)
+- Does **not** generate barcodes, validate ISBNs, import, print, or save
 
 ### Manual barcode verification
 

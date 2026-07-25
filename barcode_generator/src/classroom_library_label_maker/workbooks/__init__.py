@@ -1,23 +1,39 @@
-"""Workbook reading layer.
+"""Workbook / worksheet I/O layer.
 
-Isolates Excel / spreadsheet I/O from import orchestration and domain mapping.
+Isolates Excel spreadsheet access from import and layout orchestration.
 The public surface is library-agnostic so backends can be swapped without
-changing a future Excel import service.
+changing services.
 
 Public API
 ----------
-* :class:`WorkbookReader` — reading protocol
-* :class:`OpenPyxlWorkbookReader` — openpyxl backend
+* :class:`WorkbookReader` / :class:`OpenPyxlWorkbookReader` — workbook reading
+* :class:`LabelSheetTarget` / :class:`LabelPlacement` — label placement contract
+* :class:`InMemoryLabelSheetTarget` — test / non-Excel target
+* :class:`OpenPyxlLabelSheetTarget` — openpyxl placement (no save)
 """
 
 from __future__ import annotations
 
+from classroom_library_label_maker.workbooks.in_memory_label_sheet_target import (
+    InMemoryLabelSheetTarget,
+)
+from classroom_library_label_maker.workbooks.label_sheet_target import (
+    LabelPlacement,
+    LabelSheetTarget,
+)
+from classroom_library_label_maker.workbooks.openpyxl_label_sheet_target import (
+    OpenPyxlLabelSheetTarget,
+)
 from classroom_library_label_maker.workbooks.openpyxl_workbook_reader import (
     OpenPyxlWorkbookReader,
 )
 from classroom_library_label_maker.workbooks.workbook_reader import WorkbookReader
 
 __all__ = [
+    "InMemoryLabelSheetTarget",
+    "LabelPlacement",
+    "LabelSheetTarget",
+    "OpenPyxlLabelSheetTarget",
     "OpenPyxlWorkbookReader",
     "WorkbookReader",
 ]
