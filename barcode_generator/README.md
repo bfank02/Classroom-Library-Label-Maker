@@ -334,18 +334,24 @@ label-maker-gui
 Both call `classroom_library_label_maker.gui:main`, which creates
 `QApplication`, shows `MainWindow`, and runs the Qt event loop.
 
-### Current user workflow (RC3.5)
+### Current user workflow
 
 The main window collects generation inputs and runs the engine **in the
 background**:
 
-1. **Inventory workbook** — Browse… (Excel `.xlsx` / `.xlsm`)
-2. **Barcode folder** — Browse… (directory for barcode images)
-3. **Output workbook** — Browse… (defaults to `library_labels.xlsx`; extension
-   preserved / applied automatically)
+1. **Inventory workbook** — Browse… (Excel `.xlsx` / `.xlsm`; dialog opens in
+   the sample folder when `Sample Books.xlsx` is present)
+2. **Barcode folder** — Browse… (starts in Documents)
+3. **Label workbook** — Browse… (save dialog defaults to
+   `Documents/library_labels.xlsx`; extension preserved / applied
+   automatically)
 4. **Label template** — combo (default **Avery 5160**)
 5. **Generate Labels** — enabled when all fields validate; starts
    `WorkbookGenerationService` on a Qt worker thread
+
+Teacher quick start: [`docs/Quick Start.md`](../docs/Quick%20Start.md).
+Sample inventory: `assets/sample-data/Sample Books.xlsx` (also
+`samples/Sample Books.xlsx` at the repo root).
 
 While generating, Browse buttons, the template combo, and Generate are
 disabled. The status line shows engine stage updates, then a clean success,

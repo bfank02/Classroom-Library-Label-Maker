@@ -34,6 +34,7 @@ from classroom_library_label_maker.constants import (
     DIR_TEMPLATES,
     LOGO_FILE_NAME,
     SAMPLE_BOOKS_FILE_NAME,
+    SAMPLE_INVENTORY_FILE_NAME,
     VERSION_FILE_NAME,
 )
 from classroom_library_label_maker.metadata import APP_VERSION
@@ -166,6 +167,11 @@ class ProjectPaths:
     def sample_books_file(self) -> Path:
         """Return the path to the sample books JSON file."""
         return self.sample_data_dir / SAMPLE_BOOKS_FILE_NAME
+
+    @property
+    def sample_inventory_file(self) -> Path:
+        """Return the path to the bundled sample inventory workbook."""
+        return self.sample_data_dir / SAMPLE_INVENTORY_FILE_NAME
 
     @property
     def app_icon_file(self) -> Path:

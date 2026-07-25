@@ -55,7 +55,7 @@ def cli_completion_lines(result: WorkbookGenerationResult) -> tuple[str, ...]:
     lines.append(f"Barcodes generated: {result.barcodes_generated}")
     lines.append(f"Barcodes reused: {result.barcodes_reused}")
     lines.append("")
-    lines.append(f"Output workbook: {result.output_path}")
+    lines.append(f"Label workbook: {result.output_path}")
     lines.append("")
     lines.append(f"Elapsed time: {result.elapsed_seconds:.3f}s")
 

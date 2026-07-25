@@ -688,8 +688,10 @@ MainWindow
 UX notes:
 
 * Window title is the product name; Esc closes the window
-* Save dialog defaults to `library_labels.xlsx` and applies/preserves Excel
-  extensions
+* Save dialog defaults to `Documents/library_labels.xlsx` and applies/preserves
+  Excel extensions; inventory browse prefers the sample workbook folder when
+  present
+* Terminology: **inventory workbook** (input) and **label workbook** (output)
 * Status wording is concise and actionable (no Python tracebacks)
 * Completed runs use three presentation states from
   `WorkbookGenerationResult.completion_state`: clean success, success with
@@ -697,6 +699,8 @@ UX notes:
   stay on `result.warnings` for CLI listing / a future details UI; the status
   line shows only a count + review guidance
 * Application icon loads from `assets/icons/` when a non-empty file is present
+* Teacher quick start: `docs/Quick Start.md`; sample inventory:
+  `samples/Sample Books.xlsx`
 
 Progress originates in the engine (`progress.GenerationStage` /
 `GenerationProgress` / `GenerationProgressReporter`). The worker only forwards

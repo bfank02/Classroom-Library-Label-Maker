@@ -205,7 +205,7 @@ def test_run_generate_success_summary(
     assert "Pages created: 1" in captured.out
     assert "Barcodes generated: 2" in captured.out
     assert "Barcodes reused: 0" in captured.out
-    assert "Output workbook:" in captured.out
+    assert "Label workbook:" in captured.out
     assert "Elapsed time: 1.250s" in captured.out
     assert "Warnings" not in captured.out
     mock_service.generate.assert_called_once()

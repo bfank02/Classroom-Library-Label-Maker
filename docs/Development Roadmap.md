@@ -50,7 +50,7 @@ Phase 3 is printing only.
 ## Phase 4 — Packaging & distribution
 
 - [ ] Installer / setup under `installer/`
-- [ ] Sample books workbook under `samples/`
+- [x] Sample books workbook under `samples/`
 - [ ] First public release under `releases/`
 
 ## Phase 5 — Extensibility

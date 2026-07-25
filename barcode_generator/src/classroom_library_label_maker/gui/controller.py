@@ -45,6 +45,11 @@ from classroom_library_label_maker.models import (
     WorkbookGenerationResult,
 )
 from classroom_library_label_maker.progress import GenerationProgress
+from classroom_library_label_maker.user_paths import (
+    barcode_folder_dialog_start_directory,
+    inventory_dialog_start_directory,
+    label_workbook_save_dialog_defaults,
+)
 
 if TYPE_CHECKING:
     from classroom_library_label_maker.gui.main_window import MainWindow
@@ -433,7 +438,7 @@ class GuiController(QObject):
         path, _filter = QFileDialog.getOpenFileName(
             self._window,
             "Choose Inventory Workbook",
-            "",
+            inventory_dialog_start_directory(),
             "Excel workbooks (*.xlsx *.xlsm);;All files (*.*)",
         )
         return Path(path) if path else None
@@ -442,15 +447,16 @@ class GuiController(QObject):
         path = QFileDialog.getExistingDirectory(
             self._window,
             "Choose Barcode Folder",
-            "",
+            barcode_folder_dialog_start_directory(),
         )
         return Path(path) if path else None
 
     def _default_save_output(self) -> Path | None:
+        start_dir, suggested_name = label_workbook_save_dialog_defaults()
         path, selected_filter = QFileDialog.getSaveFileName(
             self._window,
             "Save Label Workbook",
-            "library_labels.xlsx",
+            str(Path(start_dir) / suggested_name),
             "Excel workbook (*.xlsx);;Excel macro-enabled workbook (*.xlsm)",
         )
         if not path:
