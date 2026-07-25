@@ -31,6 +31,10 @@ ClassroomLibraryLabelMaker/
 
 Design notes:
 
+- [`docs/Architecture.md`](docs/Architecture.md)
+- [`docs/PublicAPI.md`](docs/PublicAPI.md)
+- [`docs/DeveloperReviewChecklist.md`](docs/DeveloperReviewChecklist.md)
+- [`docs/templates/FeatureReviewTemplate.md`](docs/templates/FeatureReviewTemplate.md)
 - [`docs/Software Design Specification.md`](docs/Software%20Design%20Specification.md)
 - [`docs/Development Roadmap.md`](docs/Development%20Roadmap.md)
 
