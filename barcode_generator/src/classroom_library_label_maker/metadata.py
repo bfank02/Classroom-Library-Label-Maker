@@ -47,7 +47,7 @@ APP_COMPANY: str = "Classroom Library Label Maker"
 APP_COPYRIGHT: str = "Copyright (c) 2026 Classroom Library Label Maker contributors"
 """Copyright notice for about dialogs, logs, and documentation footers."""
 
-APP_VERSION: str = "1.0.1"
+APP_VERSION: str = "1.0.2"
 """Semantic version string. Keep synchronized with ``VERSION`` and pyproject."""
 
 APP_WEBSITE: str = "https://github.com/bfank02/Classroom-Library-Label-Maker"

@@ -7,7 +7,7 @@ Create barcode labels for your classroom library.
 Start here: [`docs/Quick Start.md`](docs/Quick%20Start.md)
 
 **Windows (recommended):** download
-`Classroom-Library-Label-Maker-1.0.1-windows.zip` from GitHub Releases, unzip,
+`Classroom-Library-Label-Maker-1.0.2-windows.zip` from GitHub Releases, unzip,
 and run `Classroom Library Label Maker.exe`.
 
 1. Prepare an **inventory workbook** (Excel sheet named `Books` with columns

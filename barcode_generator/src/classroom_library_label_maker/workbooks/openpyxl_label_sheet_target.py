@@ -26,6 +26,18 @@ _logger = get_logger("workbooks.openpyxl_label_sheet")
 # Approximate Excel character-width units per inch (implementation detail).
 _COL_WIDTH_PER_INCH = 12.0
 _ROW_HEIGHT_POINTS_PER_INCH = 72.0
+# openpyxl / Excel treat drawing widths/heights as pixels at ~96 DPI.
+_EXCEL_IMAGE_DPI = 96.0
+
+# Vertical share of each 1-inch Avery label (must sum to 1.0).
+# Barcode needs most of the height; oversized images previously spilled into
+# the labels below and hid title/author text.
+_LABEL_ROW_FRACTIONS: tuple[float, float, float, float] = (
+    0.18,  # title
+    0.15,  # author
+    0.12,  # ISBN
+    0.55,  # barcode
+)
 
 # Consistent sheet title prefix (page number appended).
 LABEL_SHEET_PREFIX = "Labels "
@@ -138,11 +150,14 @@ class OpenPyxlLabelSheetTarget:
             sheet.column_dimensions[letter].width = (
                 template.label_width * _COL_WIDTH_PER_INCH
             )
-        # 4 worksheet rows per label slot for text + barcode line.
-        total_ws_rows = template.rows * 4
-        row_height = (template.label_height / 4.0) * _ROW_HEIGHT_POINTS_PER_INCH
-        for row_index in range(1, total_ws_rows + 1):
-            sheet.row_dimensions[row_index].height = row_height
+        # Four worksheet rows per label slot with uneven heights so the barcode
+        # fits inside its own label instead of covering the next row's text.
+        for label_row in range(template.rows):
+            for offset, fraction in enumerate(_LABEL_ROW_FRACTIONS):
+                ws_row = label_row * 4 + offset + 1
+                sheet.row_dimensions[ws_row].height = (
+                    template.label_height * fraction * _ROW_HEIGHT_POINTS_PER_INCH
+                )
 
     def _add_barcode_image(
         self,
@@ -160,14 +175,27 @@ class OpenPyxlLabelSheetTarget:
             return
 
         image = XLImage(str(path))
-        # Scale roughly to label width (pixels at ~96 DPI heuristic).
-        max_width_px = int(template.label_width * 96 * 0.9)
-        if image.width and image.width > max_width_px:
-            ratio = max_width_px / float(image.width)
-            image.width = max_width_px
-            image.height = int(image.height * ratio)
+        max_width_px = int(template.label_width * _EXCEL_IMAGE_DPI * 0.92)
+        max_height_px = int(
+            template.label_height
+            * _LABEL_ROW_FRACTIONS[3]
+            * _EXCEL_IMAGE_DPI
+            * 0.92
+        )
+        self._fit_image_within(image, max_width_px, max_height_px)
         image.anchor = f"{self._column_letter(anchor_col)}{anchor_row}"
         sheet.add_image(image)
+
+    @staticmethod
+    def _fit_image_within(image: Any, max_width_px: int, max_height_px: int) -> None:
+        """Scale ``image`` to fit inside a width×height box (aspect preserved)."""
+        width = float(getattr(image, "width", 0) or 0)
+        height = float(getattr(image, "height", 0) or 0)
+        if width <= 0 or height <= 0:
+            return
+        ratio = min(max_width_px / width, max_height_px / height, 1.0)
+        image.width = max(1, int(width * ratio))
+        image.height = max(1, int(height * ratio))
 
     @staticmethod
     def _column_letter(index: int) -> str:

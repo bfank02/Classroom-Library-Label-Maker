@@ -129,6 +129,80 @@ def test_label_formatting_wraps_long_titles() -> None:
     assert sheet.cell(3, 1).value == "9780064400558"
 
 
+def test_barcode_image_fits_within_label_slot(tmp_path: Path) -> None:
+    """Barcode drawings must be short enough not to cover the next label's text."""
+    import zipfile
+    from xml.etree import ElementTree as ET
+
+    from classroom_library_label_maker.rendering.barcode_renderer import (
+        PythonBarcodeRenderer,
+    )
+    from classroom_library_label_maker.workbooks.openpyxl_label_sheet_target import (
+        _LABEL_ROW_FRACTIONS,
+    )
+    from classroom_library_label_maker.workbooks.openpyxl_workbook_writer import (
+        OpenPyxlWorkbookWriter,
+    )
+
+    png = tmp_path / "9780064400558.png"
+    PythonBarcodeRenderer().render_to_file("9780064400558", png)
+
+    writer = OpenPyxlWorkbookWriter()
+    writer.create_workbook()
+    target = writer.get_label_sheet_target()
+    assert isinstance(target, OpenPyxlLabelSheetTarget)
+    target.begin_page(1, template=AVERY_5160)
+    target.place_label(
+        LabelPlacement(
+            page_number=1,
+            row=0,
+            column=0,
+            title="Charlotte's Web",
+            author="E. B. White",
+            isbn="9780064400558",
+            barcode_image_path=png,
+            used_placeholder_barcode=False,
+        )
+    )
+    target.place_label(
+        LabelPlacement(
+            page_number=1,
+            row=1,
+            column=0,
+            title="The Giving Tree",
+            author="Shel Silverstein",
+            isbn="9780060256654",
+            used_placeholder_barcode=True,
+        )
+    )
+
+    out = tmp_path / "sized.xlsx"
+    writer.save(out)
+    writer.close()
+
+    workbook = load_workbook(out)
+    try:
+        sheet = workbook[f"{LABEL_SHEET_PREFIX}1"]
+        assert sheet.cell(1, 1).value == "Charlotte's Web"
+        assert sheet.cell(5, 1).value == "The Giving Tree"
+        assert sheet.row_dimensions[4].height > sheet.row_dimensions[1].height
+    finally:
+        workbook.close()
+
+    with zipfile.ZipFile(out) as archive:
+        drawing = next(n for n in archive.namelist() if n.startswith("xl/drawings/drawing"))
+        root = ET.fromstring(archive.read(drawing))
+    ns = {
+        "xdr": "http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"
+    }
+    ext = root.find(".//xdr:ext", ns)
+    assert ext is not None
+    # EMUs: 914400 per inch. Barcode must stay within its band (~0.55").
+    height_in = int(ext.attrib["cy"]) / 914400.0
+    max_height_in = AVERY_5160.label_height * _LABEL_ROW_FRACTIONS[3] * 0.95
+    assert height_in <= max_height_in
+
+
 def test_apply_presentation_helpers_are_idempotent() -> None:
     """Re-applying presentation helpers should not raise."""
     target = OpenPyxlLabelSheetTarget()
