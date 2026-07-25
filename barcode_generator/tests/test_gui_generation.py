@@ -1,4 +1,4 @@
-"""Tests for GUI → WorkbookGenerationService integration (RC3.2)."""
+"""Tests for GUI → WorkbookGenerationService integration (RC3.2/RC3.3)."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 import pytest
+from PySide6.QtWidgets import QApplication
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -22,6 +23,7 @@ from classroom_library_label_maker.models import (
 from classroom_library_label_maker.services.workbook_generation_service import (
     WorkbookGenerationService,
 )
+from gui_test_helpers import wait_until_generation_finished
 
 INVENTORY = (
     Path(__file__).resolve().parent / "assets" / "workbooks" / "valid_books.xlsx"
@@ -114,6 +116,7 @@ def test_controller_invokes_generation_service_with_form_inputs(
     controller.set_output_workbook(tmp_paths["output"])
 
     controller.on_generate_labels()
+    wait_until_generation_finished(controller)
 
     assert len(recorded) == 1
     service = recorded[0]
@@ -149,6 +152,7 @@ def test_generation_failure_updates_status_without_traceback(
     controller.set_output_workbook(tmp_paths["output"])
 
     controller.on_generate_labels()
+    wait_until_generation_finished(controller)
 
     status = window.status_label.text()
     assert "could not be read" in status.lower()
@@ -172,6 +176,7 @@ def test_unexpected_failure_hides_exception_details(
     controller.set_output_workbook(tmp_paths["output"])
 
     controller.on_generate_labels()
+    wait_until_generation_finished(controller)
 
     status = window.status_label.text().lower()
     assert "unexpectedly" in status
@@ -207,7 +212,7 @@ def test_gui_generation_matches_direct_service_path(
 
     gui_results: list[WorkbookGenerationResult] = []
 
-    def factory(settings: ApplicationSettings) -> WorkbookGenerationService:
+    def factory(settings: ApplicationSettings) -> object:
         settings.overwrite = True
 
         class _Capturing:
@@ -227,7 +232,7 @@ def test_gui_generation_matches_direct_service_path(
                 gui_results.append(result)
                 return result
 
-        return _Capturing(WorkbookGenerationService(settings))  # type: ignore[return-value]
+        return _Capturing(WorkbookGenerationService(settings))
 
     window = MainWindow()
     controller = GuiController(window, generation_service_factory=factory)
@@ -235,6 +240,7 @@ def test_gui_generation_matches_direct_service_path(
     controller.set_barcode_folder(barcodes_gui)
     controller.set_output_workbook(out_gui)
     controller.on_generate_labels()
+    wait_until_generation_finished(controller)
 
     assert out_gui.is_file()
     assert out_direct.is_file()

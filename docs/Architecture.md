@@ -147,7 +147,8 @@ barcode_generator/src/classroom_library_label_maker/
 │   ├── __main__.py      python -m classroom_library_label_maker.gui
 │   ├── app.py           QApplication bootstrap + event loop
 │   ├── main_window.py   Input form (paths, template, Generate)
-│   ├── controller.py    Form state actions + lightweight validation
+│   ├── controller.py    Form state actions + start/finish generation
+│   ├── generation_worker.py  QObject worker (service call only)
 │   └── form_state.py    Immutable selections + validation messages
 ├── services/
 │   ├── isbn_validator.py
@@ -200,6 +201,7 @@ Root package `__init__` exports a narrow public API (models + exceptions +
 | `main` | Startup: parse → configure → log → dispatch |
 | `cli` | CLI parsing and command handlers |
 | `gui` | Desktop presentation (PySide6); thin adapter only |
+| `gui.generation_worker` | Background `QObject` that runs the generation service |
 | `gui.form_state` | Immutable GUI selections + field validation messages |
 | `metadata` | Single source of truth for product identity |
 | `models` | Domain dataclasses and `BarcodeStatus` enum |
@@ -648,9 +650,10 @@ logs/application.log (rotating)
 **Implemented today:** import, validation, barcode generation, batch
 orchestration, label layout, label workbook **save**, CLI `generate` and
 desktop GUI via `WorkbookGenerationService`
-(`python -m classroom_library_label_maker.gui`).
+(`python -m classroom_library_label_maker.gui`). GUI generation runs on a
+Qt worker thread so the window stays responsive.
 
-**Not implemented:** GUI progress / threading / cancellation, **printing** /
+**Not implemented:** GUI progress reporting / cancellation, **printing** /
 print preview, Excel VBA UI (Phase 2).
 
 ### Desktop GUI launch
@@ -665,26 +668,27 @@ python -m classroom_library_label_maker.gui
 label-maker-gui   # same entry point after pip install
 ```
 
-### Desktop GUI workflow (RC3.2)
+### Desktop GUI workflow (RC3.3 — responsive)
 
 ```
 MainWindow
-  Inventory workbook  → Browse (QFileDialog)
-  Barcode folder      → Browse (QFileDialog)
-  Output workbook     → Browse (QFileDialog)
-  Label template      → combo (TemplateRegistry; default Avery 5160)
+  Inventory / Barcode / Output / Template  → form inputs
   Generate Labels
-      → GuiController.build_application_settings()
-      → WorkbookGenerationService.generate()   # same engine as CLI
-      → status label (success summary or friendly error)
+      → GuiController validates + build_application_settings()
+      → GenerationJob (immutable inputs)
+      → QThread + GenerationWorker.run()
+            → WorkbookGenerationService.generate()   # same engine as CLI
+            → emit completed(result) | failed(exc)
+      → GuiController updates status + restores controls
 ```
 
-Generation runs **synchronously** on the UI thread for this milestone (brief
-blocking is acceptable). No progress dialog, worker thread, or cancellation yet.
+While a job is running, Browse / template / Generate are disabled and
+duplicate Generate requests are ignored. The worker never touches widgets;
+`WorkbookGenerationService` never imports Qt.
 
 `GuiController` remains a thin adapter: form state + settings construction +
-service call. It must not import openpyxl or python-barcode, and must not
-duplicate engine logic.
+start/finish handling. It must not import openpyxl or python-barcode, and must
+not duplicate engine logic.
 
 ### CLI `generate` (canonical runtime)
 
@@ -724,8 +728,8 @@ by `WorkbookGenerationService`.
 
 ## Future extension points
 
-1. **Desktop GUI responsiveness** — background generation, progress, and
-   cancellation (keep `WorkbookGenerationService` unchanged)
+1. **Desktop GUI progress / cancellation** — optional progress UI and
+   cooperative cancel (keep `WorkbookGenerationService` unaware of Qt)
 2. **CLI commands** — `validate`, `clean`, `diagnostics` already registered
 3. **ISBN lookup APIs** — `IsbnLookupService` under `services/lookups/`
 4. **Cover downloads** — `CoverDownloadService` under `services/covers/`

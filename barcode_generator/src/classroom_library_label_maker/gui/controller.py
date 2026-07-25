@@ -1,29 +1,37 @@
-"""GUI controller — owns form state and invokes workbook generation.
+"""GUI controller — owns form state and starts background generation.
 
 Responsibilities:
 
 * own :class:`GenerationFormState`
 * handle browse / template / generate actions
-* update path labels and Generate enablement
+* update path labels and control enablement
 * lightweight form validation
-* construct :class:`ApplicationSettings` and call
-  :class:`~classroom_library_label_maker.services.workbook_generation_service.WorkbookGenerationService`
+* construct :class:`ApplicationSettings` and start a :class:`GenerationWorker`
+  on a ``QThread``
 
-Does **not** implement ISBN / import / barcode / layout logic, background
-threads, progress reporting, or cancellation. Generation runs synchronously.
+Does **not** implement ISBN / import / barcode / layout logic, progress
+reporting, or cancellation. ``WorkbookGenerationService`` remains Qt-unaware.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
-from PySide6.QtWidgets import QApplication, QFileDialog
+from PySide6.QtCore import QObject, QThread, Slot
+from PySide6.QtWidgets import QFileDialog
 
 from classroom_library_label_maker.config import load_application_settings
 from classroom_library_label_maker.exceptions import ApplicationError
 from classroom_library_label_maker.gui.form_state import GenerationFormState
+from classroom_library_label_maker.gui.generation_worker import (
+    GenerationJob,
+    GenerationServiceFactory,
+    GenerationWorker,
+    WorkbookGenerator,
+    _default_generation_service,
+)
 from classroom_library_label_maker.label_templates import (
     LabelTemplate,
     TemplateRegistry,
@@ -34,9 +42,6 @@ from classroom_library_label_maker.models import (
     ApplicationSettings,
     WorkbookGenerationResult,
 )
-from classroom_library_label_maker.services.workbook_generation_service import (
-    WorkbookGenerationService,
-)
 
 if TYPE_CHECKING:
     from classroom_library_label_maker.gui.main_window import MainWindow
@@ -45,21 +50,13 @@ OpenFileDialog = Callable[[], Path | None]
 OpenDirDialog = Callable[[], Path | None]
 SaveFileDialog = Callable[[], Path | None]
 
-
-class WorkbookGenerator(Protocol):
-    """Minimal protocol for the generation engine used by the GUI."""
-
-    def generate(
-        self,
-        *,
-        workbook_path: Path | None = None,
-        output_path: Path | None = None,
-    ) -> WorkbookGenerationResult:
-        """Run generation and return a result."""
-        ...
-
-
-GenerationServiceFactory = Callable[[ApplicationSettings], WorkbookGenerator]
+# Re-export for existing tests / callers.
+__all__ = [
+    "GenerationServiceFactory",
+    "GuiController",
+    "WorkbookGenerator",
+    "template_display_name",
+]
 
 
 def template_display_name(template: LabelTemplate) -> str:
@@ -71,12 +68,12 @@ def template_display_name(template: LabelTemplate) -> str:
     return template.template_name
 
 
-def _default_generation_service(settings: ApplicationSettings) -> WorkbookGenerator:
-    return WorkbookGenerationService(settings)
+class GuiController(QObject):
+    """Connects the main window to presentation-layer form state and generation.
 
-
-class GuiController:
-    """Connects the main window to presentation-layer form state and generation."""
+    Subclasses :class:`QObject` so worker ``completed`` / ``failed`` signals are
+    delivered on the GUI thread via queued connections.
+    """
 
     def __init__(
         self,
@@ -88,6 +85,7 @@ class GuiController:
         save_output_dialog: SaveFileDialog | None = None,
         generation_service_factory: GenerationServiceFactory | None = None,
     ) -> None:
+        super().__init__(window)
         self._window = window
         self._logger = get_logger("gui")
         self._registry = template_registry or create_default_template_registry()
@@ -100,6 +98,9 @@ class GuiController:
             generation_service_factory or _default_generation_service
         )
         self._state = GenerationFormState()
+        self._is_generating = False
+        self._active_thread: QThread | None = None
+        self._active_worker: GenerationWorker | None = None
 
         self._populate_templates()
         self._connect_signals()
@@ -109,6 +110,11 @@ class GuiController:
     def state(self) -> GenerationFormState:
         """Current form selections (immutable snapshot)."""
         return self._state
+
+    @property
+    def is_generating(self) -> bool:
+        """True while a background generation job is in progress."""
+        return self._is_generating
 
     def set_inventory_workbook(self, path: Path | None) -> None:
         """Update the inventory workbook selection and refresh the UI."""
@@ -139,24 +145,32 @@ class GuiController:
 
     def browse_inventory_workbook(self) -> None:
         """Open a native file dialog for the inventory workbook."""
+        if self._is_generating:
+            return
         selected = self._open_inventory_dialog()
         if selected is not None:
             self.set_inventory_workbook(selected)
 
     def browse_barcode_folder(self) -> None:
         """Open a native folder dialog for barcode PNG output."""
+        if self._is_generating:
+            return
         selected = self._open_barcode_folder_dialog()
         if selected is not None:
             self.set_barcode_folder(selected)
 
     def browse_output_workbook(self) -> None:
         """Open a native save dialog for the label workbook."""
+        if self._is_generating:
+            return
         selected = self._save_output_dialog()
         if selected is not None:
             self.set_output_workbook(selected)
 
     def on_template_changed(self, index: int) -> None:
         """Handle label-template combo selection changes."""
+        if self._is_generating:
+            return
         if index < 0:
             self.set_label_template_id(None)
             return
@@ -191,7 +205,10 @@ class GuiController:
         )
 
     def on_generate_labels(self) -> None:
-        """Validate the form and run :class:`WorkbookGenerationService` synchronously."""
+        """Validate the form and start background workbook generation."""
+        if self._is_generating:
+            return
+
         messages = self._state.validation_messages()
         if messages:
             self._set_status(" ".join(messages), error=True)
@@ -203,26 +220,63 @@ class GuiController:
         assert inventory is not None
         assert output is not None
 
-        self._window.generate_button.setEnabled(False)
-        self._set_status("Generating labels…", error=False)
-        QApplication.processEvents()
-
         try:
             settings = self.build_application_settings()
-            service = self._generation_service_factory(settings)
-            self._logger.info(
-                "Running generate via WorkbookGenerationService "
-                "(inventory=%s, barcodes=%s, output=%s, template=%s)",
-                inventory,
-                settings.barcode_output_directory,
-                output,
-                settings.label_template_id,
-            )
-            result = service.generate(
-                workbook_path=inventory,
-                output_path=output,
-            )
         except ApplicationError as exc:
+            self._set_status(exc.message, error=True)
+            self._window.generate_button.setEnabled(False)
+            return
+
+        job = GenerationJob(
+            settings=settings,
+            workbook_path=inventory,
+            output_path=output,
+        )
+        self._logger.info(
+            "Running generate via WorkbookGenerationService "
+            "(inventory=%s, barcodes=%s, output=%s, template=%s)",
+            inventory,
+            settings.barcode_output_directory,
+            output,
+            settings.label_template_id,
+        )
+
+        self._is_generating = True
+        self._set_inputs_enabled(False)
+        self._set_status("Generating labels…", error=False)
+
+        thread = QThread()
+        worker = GenerationWorker(
+            job,
+            service_factory=self._generation_service_factory,
+        )
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.completed.connect(self._on_generation_completed)
+        worker.failed.connect(self._on_generation_failed)
+        worker.completed.connect(thread.quit)
+        worker.failed.connect(thread.quit)
+        thread.finished.connect(self._on_generation_thread_finished)
+
+        self._active_thread = thread
+        self._active_worker = worker
+        thread.start()
+
+    @Slot(object)
+    def _on_generation_completed(self, result: object) -> None:
+        assert isinstance(result, WorkbookGenerationResult)
+        self._is_generating = False
+        self._logger.info(
+            "Generation complete: %s",
+            result.to_dict()["summary"],
+        )
+        self._set_status(self._success_status(result), error=False)
+        self._set_inputs_enabled(True)
+
+    @Slot(object)
+    def _on_generation_failed(self, exc: object) -> None:
+        self._is_generating = False
+        if isinstance(exc, ApplicationError):
             self._logger.error("%s", exc)
             if exc.__cause__ is not None:
                 self._logger.debug(
@@ -231,23 +285,28 @@ class GuiController:
                     exc_info=exc.__cause__,
                 )
             self._set_status(exc.message, error=True)
-            self._window.generate_button.setEnabled(self._state.is_valid)
-            return
-        except Exception:
-            self._logger.exception("Unhandled error during workbook generation")
+        else:
+            self._logger.error(
+                "Unhandled error during workbook generation",
+                exc_info=exc if isinstance(exc, BaseException) else False,
+            )
             self._set_status(
                 "Generation failed unexpectedly. See the log for details.",
                 error=True,
             )
-            self._window.generate_button.setEnabled(self._state.is_valid)
-            return
+        self._set_inputs_enabled(True)
 
-        self._logger.info(
-            "Generation complete: %s",
-            result.to_dict()["summary"],
-        )
-        self._set_status(self._success_status(result), error=False)
-        self._window.generate_button.setEnabled(self._state.is_valid)
+    @Slot()
+    def _on_generation_thread_finished(self) -> None:
+        """Drop worker/thread references after the background thread stops."""
+        worker = self._active_worker
+        thread = self._active_thread
+        self._active_worker = None
+        self._active_thread = None
+        if worker is not None:
+            worker.deleteLater()
+        if thread is not None:
+            thread.deleteLater()
 
     def _success_status(self, result: WorkbookGenerationResult) -> str:
         output = result.output_path
@@ -259,6 +318,17 @@ class GuiController:
             f"{result.pages_created} page(s){warning_note}. "
             f"Saved to {output}"
         )
+
+    def _set_inputs_enabled(self, enabled: bool) -> None:
+        window = self._window
+        window.inventory_browse_button.setEnabled(enabled)
+        window.barcode_browse_button.setEnabled(enabled)
+        window.output_browse_button.setEnabled(enabled)
+        window.label_template_combo.setEnabled(enabled)
+        if enabled:
+            window.generate_button.setEnabled(self._state.is_valid)
+        else:
+            window.generate_button.setEnabled(False)
 
     def _populate_templates(self) -> None:
         combo = self._window.label_template_combo
@@ -298,8 +368,12 @@ class GuiController:
         )
         self._sync_template_combo()
 
+        if self._is_generating:
+            self._set_inputs_enabled(False)
+            return
+
         messages = self._state.validation_messages()
-        self._window.generate_button.setEnabled(not messages)
+        self._set_inputs_enabled(True)
         if messages:
             self._set_status(messages[0], error=True)
         else:
