@@ -607,6 +607,90 @@ class LabelLayoutResult:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class WorkbookGenerationWarning:
+    """Recoverable issue during end-to-end workbook generation.
+
+    Attributes:
+        message: Human-readable description.
+        code: Short machine-readable code.
+        isbn: Related ISBN when applicable.
+        row_number: Related worksheet row when applicable.
+        page_number: Related label page when applicable.
+    """
+
+    message: str
+    code: str = ""
+    isbn: str | None = None
+    row_number: int | None = None
+    page_number: int | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize this warning to a JSON-compatible dictionary."""
+        return {
+            "message": self.message,
+            "code": self.code,
+            "isbn": self.isbn,
+            "row_number": self.row_number,
+            "page_number": self.page_number,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class WorkbookGenerationResult:
+    """Outcome of generating a printable label workbook from inventory.
+
+    Immutable value object — treat instances as read-only after construction.
+
+    Attributes:
+        books_imported: Books successfully imported from the inventory workbook.
+        books_processed: Books passed through batch processing.
+        labels_created: Labels placed by the layout engine.
+        pages_created: Label worksheet pages created.
+        barcodes_generated: Newly generated barcode PNG files.
+        barcodes_reused: Existing barcode PNG files reused.
+        output_path: Path to the saved label workbook.
+        elapsed_seconds: Wall-clock duration of the full run.
+        warnings: Recoverable issues from import, batch, or layout.
+    """
+
+    books_imported: int = 0
+    books_processed: int = 0
+    labels_created: int = 0
+    pages_created: int = 0
+    barcodes_generated: int = 0
+    barcodes_reused: int = 0
+    output_path: Path | None = None
+    elapsed_seconds: float = 0.0
+    warnings: tuple[WorkbookGenerationWarning, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize generation results to a JSON-compatible dictionary."""
+        return {
+            "summary": {
+                "books_imported": self.books_imported,
+                "books_processed": self.books_processed,
+                "labels_created": self.labels_created,
+                "pages_created": self.pages_created,
+                "barcodes_generated": self.barcodes_generated,
+                "barcodes_reused": self.barcodes_reused,
+                "output_path": str(self.output_path) if self.output_path else None,
+                "elapsed_seconds": self.elapsed_seconds,
+                "warning_count": len(self.warnings),
+            },
+            "warnings": [warning.to_dict() for warning in self.warnings],
+        }
+
+    def __repr__(self) -> str:
+        """Return a developer-friendly representation."""
+        return (
+            f"WorkbookGenerationResult(imported={self.books_imported}, "
+            f"labels={self.labels_created}, pages={self.pages_created}, "
+            f"output_path={self.output_path!r}, "
+            f"elapsed_seconds={self.elapsed_seconds!r})"
+        )
+
+
 @dataclass(slots=True)
 class ApplicationSettings:
     """Project-wide and per-run application settings.

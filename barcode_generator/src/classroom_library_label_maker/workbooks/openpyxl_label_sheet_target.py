@@ -1,8 +1,8 @@
-"""openpyxl-backed :class:`LabelSheetTarget` (no workbook save).
+"""openpyxl-backed :class:`LabelSheetTarget` (placement only).
 
 Vendor types stay inside this module. The layout service only sees
-:class:`LabelPlacement` and :class:`LabelTemplate`. Callers that need a file
-on disk must save the workbook themselves in a later sprint.
+:class:`LabelPlacement` and :class:`LabelTemplate`. Persisting the workbook is
+handled by :class:`OpenPyxlWorkbookWriter` / :class:`WorkbookWriter`.
 """
 
 from __future__ import annotations

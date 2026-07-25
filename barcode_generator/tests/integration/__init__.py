@@ -1,5 +1,5 @@
-"""Placeholder package for future end-to-end / integration tests.
+"""End-to-end / integration tests for the barcode generator.
 
-Integration tests will exercise JSON → validation → PNG → results.json once
-the barcode engine features are implemented.
+These tests exercise the production workflow with real adapters (openpyxl,
+python-barcode). See ``README.md`` in this package for how to run them.
 """
