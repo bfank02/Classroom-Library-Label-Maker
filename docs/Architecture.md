@@ -140,7 +140,7 @@ barcode_generator/src/classroom_library_label_maker/
 │   └── barcode_renderer.py  PythonBarcodeRenderer (EAN-13 PNG)
 ├── workbooks/           Spreadsheet / workbook I/O (library-agnostic)
 │   ├── workbook_reader.py           WorkbookReader protocol
-│   └── openpyxl_workbook_reader.py  OpenPyxlWorkbookReader placeholder
+│   └── openpyxl_workbook_reader.py  OpenPyxlWorkbookReader
 └── utils/
     └── file_utils.py
 ```
@@ -381,6 +381,35 @@ column header names from `ApplicationSettings`. It:
   for unrecoverable failures
 
 It does **not** validate ISBNs, generate barcodes, or run batch processing.
+
+`ImportResult` and `ImportWarning` are immutable value objects (`frozen=True`).
+
+### Workbook template versioning (extension point)
+
+Workbook template versioning is **not enforced** yet. The architecture can
+accommodate multiple template versions without changing `WorkbookReader`:
+
+**Where version metadata could live (pick one when implementing):**
+
+* A dedicated cell (e.g. `Meta!B2` or `Books!Z1` labeled `TemplateVersion`)
+* A `Meta` / `About` worksheet with a `Version` row
+* Excel custom document properties (`openpyxl` workbook properties)
+* Filename / companion manifest (less preferred for teacher workbooks)
+
+**Where compatibility checks would run:**
+
+In `ExcelImportService.import_books`, **after** the workbook is opened and the
+target worksheet is confirmed, and **before** header/column resolution and row
+mapping (marked in code). A mismatch would raise `InvalidWorkbookError` (or a
+future more specific subtype) without partial imports.
+
+**Supporting multiple versions later:**
+
+* `ApplicationSettings` can grow an expected `workbook_template_version`
+* Column maps / sheet names can be selected per version
+* Older templates can keep a dedicated mapper path while newer ones evolve
+
+Do not implement version validation until a template contract is published.
 
 ### Future workbook reader extension points
 

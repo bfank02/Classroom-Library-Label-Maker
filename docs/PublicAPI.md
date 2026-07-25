@@ -295,6 +295,17 @@ Configuration (on `ApplicationSettings`): `workbook_path`, `workbook_sheet_name`
 **Purpose:** Import outcome (`books`, `source_rows`, row counts, warnings,
 `elapsed_seconds`) and recoverable per-row diagnostics.
 
+Both are **immutable value objects** (`dataclass(frozen=True)`). Callers should
+treat instances as read-only after construction.
+
+### Workbook template versioning — Experimental — Extension point
+
+**Not implemented.** Future template version checks belong in
+`ExcelImportService.import_books` after open/sheet selection and before column
+mapping. Version metadata may live in a Meta sheet cell, document properties,
+or similar — see Architecture.md. Multiple template versions can later select
+different column maps via settings without changing `WorkbookReader`.
+
 ---
 
 ## Exceptions

@@ -217,7 +217,10 @@ python -c "from classroom_library_label_maker.config import load_application_set
 - Column/sheet settings live on `ApplicationSettings` (not hardcoded)
 - Blank rows are skipped; malformed rows become `ImportWarning` entries
 - Returns `ImportResult` (`books`, `source_rows`, counts, warnings, timing)
+- `ImportResult` / `ImportWarning` are immutable value objects
 - Does **not** validate ISBNs or generate barcodes
+- Workbook template versioning is an extension point only (not enforced yet);
+  see Architecture.md for where version metadata and checks will live
 
 ### Manual barcode verification
 

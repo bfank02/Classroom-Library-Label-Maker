@@ -95,14 +95,16 @@ class ExcelImportService:
                 )
 
             column_index = self._resolve_columns(rows[0], sheet_name)
+            # Future: workbook template version check belongs here — after open /
+            # sheet selection and before row mapping (see Architecture.md).
             result = self._import_data_rows(
                 data_rows=rows[1:],
                 first_data_row=header_row + 1,
                 column_index=column_index,
+                workbook_path=path,
+                worksheet_name=sheet_name,
+                elapsed_seconds=time.perf_counter() - started,
             )
-            result.workbook_path = path
-            result.worksheet_name = sheet_name
-            result.elapsed_seconds = time.perf_counter() - started
         finally:
             self._reader.close()
 
@@ -187,6 +189,9 @@ class ExcelImportService:
         data_rows: Sequence[Sequence[str | None]],
         first_data_row: int,
         column_index: Mapping[str, int],
+        workbook_path: Path,
+        worksheet_name: str,
+        elapsed_seconds: float,
     ) -> ImportResult:
         books: list[Book] = []
         source_rows: list[int] = []
@@ -227,6 +232,9 @@ class ExcelImportService:
             imported_rows=imported,
             skipped_rows=skipped,
             warnings=warnings,
+            elapsed_seconds=elapsed_seconds,
+            workbook_path=workbook_path,
+            worksheet_name=worksheet_name,
         )
 
     def _map_row(

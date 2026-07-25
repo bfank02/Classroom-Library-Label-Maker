@@ -442,9 +442,11 @@ class BatchProcessingResult:
         )
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class ImportWarning:
     """Recoverable import issue with enough context for diagnostics.
+
+    Immutable value object — treat instances as read-only after construction.
 
     Attributes:
         message: Human-readable description of the issue.
@@ -472,9 +474,12 @@ class ImportWarning:
         )
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class ImportResult:
     """Outcome of importing books from a workbook.
+
+    Immutable value object — treat instances as read-only after construction.
+    Nested lists are not deep-frozen; callers should not mutate them.
 
     Attributes:
         books: Successfully mapped :class:`Book` instances (input/sheet order).
