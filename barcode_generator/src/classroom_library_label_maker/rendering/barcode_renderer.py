@@ -22,6 +22,25 @@ from classroom_library_label_maker.rendering.renderer import BarcodeSymbology
 _logger = get_logger("rendering.python_barcode")
 
 
+def _resolve_barcode_font_path() -> Path | None:
+    """Return the bundled python-barcode TTF path when available.
+
+    PyInstaller builds must include ``barcode/fonts``; without a font path,
+    ImageWriter raises ``OSError: cannot open resource`` and every label
+    falls back to a placeholder.
+    """
+    try:
+        import barcode
+    except ImportError:  # pragma: no cover
+        return None
+
+    package_dir = Path(barcode.__file__).resolve().parent
+    candidate = package_dir / "fonts" / "DejaVuSansMono.ttf"
+    if candidate.is_file():
+        return candidate
+    return None
+
+
 class PythonBarcodeRenderer:
     """Render barcode images using ``python-barcode`` and Pillow.
 
@@ -67,15 +86,19 @@ class PythonBarcodeRenderer:
             dpi=settings.barcode_dpi,
         )
 
-    def _writer_options(self) -> dict[str, float | int]:
+    def _writer_options(self) -> dict[str, float | int | str]:
         """Return python-barcode ImageWriter options for the configured geometry."""
-        return {
+        options: dict[str, float | int | str] = {
             "module_width": self._module_width,
             "module_height": self._module_height,
             "quiet_zone": self._quiet_zone,
             "font_size": self._font_size,
             "dpi": self._dpi,
         }
+        font_path = _resolve_barcode_font_path()
+        if font_path is not None:
+            options["font_path"] = str(font_path)
+        return options
 
     def render_to_file(
         self,

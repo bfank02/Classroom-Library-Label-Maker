@@ -182,6 +182,7 @@ def test_unexpected_failure_hides_exception_details(
 
     status = window.status_label.text().lower()
     assert "something went wrong" in status
+    assert "log" in status
     assert "secret boom" not in status
     assert "traceback" not in status
     window.close()

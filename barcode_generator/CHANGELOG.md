@@ -1,32 +1,36 @@
 # Changelog
 
-All notable changes to the Classroom Library barcode generator are documented
-in this file.
+All notable changes to Classroom Library Label Maker are documented in this
+file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Changed
+## [1.0.1] - 2026-07-25 — Packaging hotfix
 
-- Renamed project directory from `barcode-generator` to `barcode_generator`
-- Adopted standard src-layout package `classroom_library_label_maker`
-- Reorganized assets into `icons/`, `templates/`, `sample-data/`, `resources/`
-- Expanded domain models and `ApplicationSettings` / `ProjectPaths`
-- Switched file logging to `RotatingFileHandler` (`logs/application.log`)
-- Moved CLI parsing and command dispatch into `cli/` (`main.py` is startup only)
-- Centralized product identity in `metadata.py` (CLI, logs, package exports)
+### Fixed
+
+- Packaged Windows EXE now bundles the `python-barcode` font so barcode PNGs
+  generate correctly (previously every label became `[barcode placeholder]`)
+
+## [1.0.0] - 2026-07-25 — Public beta release candidate
 
 ### Added
 
-- Extension packages `services/lookups/` and `services/covers/`
-- `services/protocols.py` for future enrichment providers
-- `tests/integration/` placeholder for end-to-end tests
-- `exceptions.py` application error hierarchy
-- CLI subcommands: `generate`, `version`, plus reserved `validate` / `clean` /
-  `diagnostics`
-- `metadata.py` as the single source of truth for application metadata
+- Windowed Windows GUI release ZIP (`releases/`) with product-named EXE
+- Production rotating logs under the per-user application data folder
+- Application branding icons (`assets/icons/app.ico`, `logo.png`)
+- Teacher Quick Start, sample inventory workbook, and first-run dialog defaults
+- Visible success-with-warnings completion state for review-before-print
+
+### Changed
+
+- Version synchronized to **1.0.0**
+- Product description updated for Excel inventory → Avery label workflow
+- Distribution name aligned to `classroom-library-label-maker`
+- GUI failure messages point to the configured log file path
 
 ## [0.1.0] - 2026-07-24 — Initial Development
 
@@ -40,5 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configuration framework
 - Assets, runtime folders, and packaging scaffolding for future releases
 
-[Unreleased]: https://github.com/bfank02/Classroom-Library-Label-Maker/compare/barcode-generator-v0.1.0...HEAD
+[Unreleased]: https://github.com/bfank02/Classroom-Library-Label-Maker/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/bfank02/Classroom-Library-Label-Maker/releases/tag/v1.0.1
+[1.0.0]: https://github.com/bfank02/Classroom-Library-Label-Maker/releases/tag/v1.0.0
 [0.1.0]: https://github.com/bfank02/Classroom-Library-Label-Maker/releases/tag/barcode-generator-v0.1.0

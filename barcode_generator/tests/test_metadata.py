@@ -13,6 +13,7 @@ from classroom_library_label_maker.metadata import (
     APP_COPYRIGHT,
     APP_DESCRIPTION,
     APP_DISTRIBUTION_NAME,
+    APP_GUI_EXE_NAME,
     APP_GUI_SCRIPT_NAME,
     APP_LICENSE,
     APP_NAME,
@@ -36,7 +37,9 @@ def test_metadata_constants_are_non_empty() -> None:
     assert APP_DISTRIBUTION_NAME
     assert APP_CLI_NAME
     assert APP_GUI_SCRIPT_NAME
+    assert APP_GUI_EXE_NAME
     assert APP_COMPONENT_NAME
+    assert APP_DISTRIBUTION_NAME == "classroom-library-label-maker"
 
 
 def test_logger_name_matches_package_name() -> None:
@@ -54,4 +57,6 @@ def test_package_version_aligned_with_metadata() -> None:
     """Installed/package __version__ should match APP_VERSION when resolvable."""
     assert __version__ == APP_VERSION or __version__
     # Prefer exact match against the canonical constant.
-    assert APP_VERSION == "0.1.0"
+    assert APP_VERSION == "1.0.1"
+    assert "Excel" in APP_DESCRIPTION
+    assert "JSON input" not in APP_DESCRIPTION

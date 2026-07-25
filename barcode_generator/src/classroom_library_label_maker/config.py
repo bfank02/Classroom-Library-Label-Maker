@@ -42,10 +42,13 @@ from classroom_library_label_maker.models import ApplicationSettings
 
 
 def find_project_root(start: Path | None = None) -> Path:
-    """Locate the ``barcode_generator`` project root.
+    """Locate the ``barcode_generator`` project root (or frozen bundle root).
 
     Walks upward from ``start`` (or this file) until a directory containing
     both ``pyproject.toml`` and ``VERSION`` is found.
+
+    When running from a PyInstaller bundle, returns ``sys._MEIPASS`` so
+    packaged ``assets/`` resolve correctly.
 
     Args:
         start: Optional starting path for the search.
@@ -56,6 +59,12 @@ def find_project_root(start: Path | None = None) -> Path:
     Raises:
         FileNotFoundError: If no project root can be located.
     """
+    from classroom_library_label_maker.runtime_env import bundle_directory
+
+    bundled = bundle_directory()
+    if bundled is not None:
+        return bundled.resolve()
+
     current = (start or Path(__file__)).resolve()
     if current.is_file():
         current = current.parent

@@ -39,7 +39,7 @@ from classroom_library_label_maker.label_templates import (
     create_default_template_registry,
 )
 from classroom_library_label_maker.generation_summary import gui_completion_status
-from classroom_library_label_maker.logger import get_logger
+from classroom_library_label_maker.logger import get_logger, user_facing_log_hint
 from classroom_library_label_maker.models import (
     ApplicationSettings,
     WorkbookGenerationResult,
@@ -311,7 +311,7 @@ class GuiController(QObject):
             )
             self._set_status(
                 "Something went wrong while generating labels. "
-                "Check the log for details.",
+                f"{user_facing_log_hint()}",
                 level="error",
             )
         self._set_inputs_enabled(True)

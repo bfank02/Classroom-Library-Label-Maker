@@ -13,11 +13,15 @@ from PySide6.QtWidgets import QApplication
 from classroom_library_label_maker.gui.controller import GuiController
 from classroom_library_label_maker.gui.icons import load_application_icon
 from classroom_library_label_maker.gui.main_window import MainWindow
-from classroom_library_label_maker.logger import setup_logging
+from classroom_library_label_maker.logger import get_logger, setup_logging
 from classroom_library_label_maker.metadata import (
     APP_COMPANY,
     APP_NAME,
     APP_VERSION,
+)
+from classroom_library_label_maker.runtime_env import (
+    default_user_log_file,
+    is_frozen,
 )
 
 
@@ -56,6 +60,23 @@ def create_main_window() -> MainWindow:
     return window
 
 
+def configure_gui_logging() -> None:
+    """Configure rotating file logs in a user-writable location."""
+    log_file = default_user_log_file()
+    setup_logging(
+        level="INFO",
+        log_file=log_file,
+        console=not is_frozen(),
+    )
+    get_logger("gui").info(
+        "Starting %s %s (log_file=%s, frozen=%s)",
+        APP_NAME,
+        APP_VERSION,
+        log_file,
+        is_frozen(),
+    )
+
+
 def run(argv: list[str] | None = None) -> int:
     """Create the application, show the main window, and start the event loop.
 
@@ -65,7 +86,7 @@ def run(argv: list[str] | None = None) -> int:
     Returns:
         Exit code from ``QApplication.exec()``.
     """
-    setup_logging()
+    configure_gui_logging()
     app = create_application(argv)
     window = create_main_window()
     window.show()

@@ -21,6 +21,13 @@ from classroom_library_label_maker.constants import (
 _LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 _DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
+_configured_log_file: Path | None = None
+
+
+def configured_log_file() -> Path | None:
+    """Return the log file path from the last :func:`setup_logging` call."""
+    return _configured_log_file
+
 
 def setup_logging(
     level: str = DEFAULT_LOG_LEVEL,
@@ -29,12 +36,13 @@ def setup_logging(
     logger_name: str = APP_LOGGER_NAME,
     max_bytes: int = LOG_MAX_BYTES,
     backup_count: int = LOG_BACKUP_COUNT,
+    console: bool = True,
 ) -> logging.Logger:
     """Configure and return the application logger.
 
-    Attaches a stderr console handler and, when ``log_file`` is provided, a
-    rotating file handler. Safe to call more than once; existing handlers on
-    the named logger are cleared first.
+    Attaches an optional stderr console handler and, when ``log_file`` is
+    provided, a rotating file handler. Safe to call more than once; existing
+    handlers on the named logger are cleared first.
 
     Args:
         level: Logging level name (e.g. ``\"INFO\"``, ``\"DEBUG\"``).
@@ -42,10 +50,13 @@ def setup_logging(
         logger_name: Root logger name for this application.
         max_bytes: Rotate when the log file exceeds this size.
         backup_count: Number of rotated backup files to retain.
+        console: When True, also log to stderr (disable for windowed EXE).
 
     Returns:
         The configured :class:`logging.Logger` instance.
     """
+    global _configured_log_file
+
     logger = logging.getLogger(logger_name)
     logger.handlers.clear()
     logger.setLevel(_resolve_level(level))
@@ -53,11 +64,14 @@ def setup_logging(
 
     formatter = logging.Formatter(_LOG_FORMAT, datefmt=_DATE_FORMAT)
 
-    console_handler = logging.StreamHandler(sys.stderr)
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
+    if console:
+        console_handler = logging.StreamHandler(sys.stderr)
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
 
+    _configured_log_file = None
     if log_file is not None:
+        log_file = Path(log_file)
         log_file.parent.mkdir(parents=True, exist_ok=True)
         file_handler = RotatingFileHandler(
             log_file,
@@ -67,6 +81,7 @@ def setup_logging(
         )
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
+        _configured_log_file = log_file.resolve()
 
     return logger
 
@@ -87,6 +102,14 @@ def get_logger(name: str | None = None) -> logging.Logger:
     if name:
         return logging.getLogger(f"{APP_LOGGER_NAME}.{name}")
     return logging.getLogger(APP_LOGGER_NAME)
+
+
+def user_facing_log_hint() -> str:
+    """Return a short phrase pointing teachers at the log file when configured."""
+    path = configured_log_file()
+    if path is None:
+        return "Check the application log for details."
+    return f"See the log for details: {path}"
 
 
 def _resolve_level(level: str) -> int:

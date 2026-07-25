@@ -29,7 +29,8 @@
 - [x] Background generation + stage progress in the status line
 - [x] Desktop product polish (RC3.5 UX / accessibility pass)
 - [ ] Remove deprecated stubs (`BatchProcessor` / `BarcodeGenerator`) when unused
-- [ ] Package as EXE (`build.bat` / PyInstaller)
+- [x] Package as EXE (`build.bat` / PyInstaller)
+- [x] Windows GUI release ZIP under `releases/`
 
 ## Phase 2 — Excel Integration
 
@@ -51,7 +52,7 @@ Phase 3 is printing only.
 
 - [ ] Installer / setup under `installer/`
 - [x] Sample books workbook under `samples/`
-- [ ] First public release under `releases/`
+- [x] First public release under `releases/`
 
 ## Phase 5 — Extensibility
 

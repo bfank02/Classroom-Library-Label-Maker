@@ -435,13 +435,22 @@ pixel-perfect or byte-identical checks. Missing goldens skip. See
 
 ## Build process
 
+### Teacher GUI release (Version 1.0)
+
+```powershell
+python release_build/build_windows_release.py
+```
+
+Produces a windowed EXE and a GitHub Releases ZIP. See
+[`docs/Release.md`](../docs/Release.md).
+
+### Legacy console CLI EXE
+
 ```powershell
 .\build.bat
 ```
 
-Produces a one-file EXE under `dist/` (gitignored). Assets are bundled via
-`--add-data`. A real `assets/icons/app.ico` is used as the EXE icon when the
-file is non-empty.
+Produces a one-file **console** CLI EXE under `dist/` (developer artifact).
 
 ## Testing
 

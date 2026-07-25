@@ -6,10 +6,12 @@ folder and the bundled sample inventory when present.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from classroom_library_label_maker.config import ProjectPaths
 from classroom_library_label_maker.constants import SAMPLE_INVENTORY_FILE_NAME
+from classroom_library_label_maker.runtime_env import is_frozen
 
 
 def user_documents_directory() -> Path:
@@ -33,17 +35,24 @@ def resolve_sample_inventory_workbook(
     Search order:
 
     1. Bundled ``assets/sample-data/Sample Books.xlsx``
-    2. Repo ``samples/Sample Books.xlsx`` (sibling of ``barcode_generator/``)
+    2. Next to the frozen executable (release ZIP layout)
+    3. Repo ``samples/Sample Books.xlsx`` (sibling of ``barcode_generator/``)
     """
+    candidates: list[Path] = []
+
     try:
         paths = ProjectPaths(project_root)
+        candidates.append(paths.sample_inventory_file)
+        candidates.append(paths.root.parent / "samples" / SAMPLE_INVENTORY_FILE_NAME)
     except FileNotFoundError:
-        return None
+        pass
 
-    candidates = [
-        paths.sample_inventory_file,
-        paths.root.parent / "samples" / SAMPLE_INVENTORY_FILE_NAME,
-    ]
+    # Release ZIP places Sample Books.xlsx beside the executable.
+    if is_frozen():
+        exe_dir = Path(sys.executable).resolve().parent
+        candidates.insert(0, exe_dir / SAMPLE_INVENTORY_FILE_NAME)
+        candidates.insert(1, exe_dir / "samples" / SAMPLE_INVENTORY_FILE_NAME)
+
     for candidate in candidates:
         try:
             if candidate.is_file() and candidate.stat().st_size > 0:

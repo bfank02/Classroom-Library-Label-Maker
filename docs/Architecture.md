@@ -701,6 +701,9 @@ UX notes:
 * Application icon loads from `assets/icons/` when a non-empty file is present
 * Teacher quick start: `docs/Quick Start.md`; sample inventory:
   `samples/Sample Books.xlsx`
+* Windows GUI release ZIP: `docs/Release.md` /
+  `releases/Classroom-Library-Label-Maker-<version>-windows.zip`
+* Desktop logs: `%LOCALAPPDATA%\Classroom Library Label Maker\logs\application.log`
 
 Progress originates in the engine (`progress.GenerationStage` /
 `GenerationProgress` / `GenerationProgressReporter`). The worker only forwards

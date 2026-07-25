@@ -22,7 +22,7 @@ When cutting a release, update these three places together:
 
 1. ``barcode_generator/VERSION``
 2. ``APP_VERSION`` in this module
-3. ``pyproject.toml`` ``[project].version`` (and related packaging fields)
+3. ``pyproject.toml`` ``[project].version`` (dynamic from ``VERSION``)
 """
 
 from __future__ import annotations
@@ -33,9 +33,10 @@ APP_NAME: str = "Classroom Library Label Maker"
 """Human-readable product name."""
 
 APP_DESCRIPTION: str = (
-    "Generate EAN-13 barcode PNGs for classroom library books from JSON input."
+    "Create printable Avery barcode labels for classroom library books "
+    "from an Excel inventory workbook."
 )
-"""Short product description (CLI help, packaging)."""
+"""Short product description (CLI help, packaging, EXE metadata)."""
 
 APP_AUTHOR: str = "Classroom Library Label Maker contributors"
 """Primary author / contributor attribution string."""
@@ -46,7 +47,7 @@ APP_COMPANY: str = "Classroom Library Label Maker"
 APP_COPYRIGHT: str = "Copyright (c) 2026 Classroom Library Label Maker contributors"
 """Copyright notice for about dialogs, logs, and documentation footers."""
 
-APP_VERSION: str = "0.1.0"
+APP_VERSION: str = "1.0.1"
 """Semantic version string. Keep synchronized with ``VERSION`` and pyproject."""
 
 APP_WEBSITE: str = "https://github.com/bfank02/Classroom-Library-Label-Maker"
@@ -60,14 +61,17 @@ APP_LICENSE: str = "MIT"
 APP_PACKAGE_NAME: str = "classroom_library_label_maker"
 """Importable Python package name."""
 
-APP_DISTRIBUTION_NAME: str = "classroom-library-barcode-generator"
+APP_DISTRIBUTION_NAME: str = "classroom-library-label-maker"
 """PyPI / install distribution name (``importlib.metadata``)."""
 
 APP_CLI_NAME: str = "barcode-generator"
-"""Console script / argparse ``prog`` name."""
+"""Console script / argparse ``prog`` name (developer CLI)."""
 
 APP_GUI_SCRIPT_NAME: str = "label-maker-gui"
 """Console script name that launches the desktop GUI."""
 
-APP_COMPONENT_NAME: str = "Barcode Generator"
+APP_GUI_EXE_NAME: str = "Classroom Library Label Maker"
+"""Windows GUI executable base name (no ``.exe`` suffix)."""
+
+APP_COMPONENT_NAME: str = "Desktop"
 """Name of this component within the larger product."""

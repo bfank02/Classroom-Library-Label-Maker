@@ -71,7 +71,8 @@ def test_escape_closes_window(qapp) -> None:
     window.close()
 
 
-def test_empty_icon_placeholders_are_ignored() -> None:
+def test_application_icon_loads() -> None:
     path = resolve_application_icon_path()
-    assert path is None  # assets currently ship empty placeholders
-    assert load_application_icon().isNull()
+    assert path is not None
+    assert path.stat().st_size > 0
+    assert not load_application_icon().isNull()
