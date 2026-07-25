@@ -6,14 +6,14 @@ Validates ISBN-13 values, imports books from Excel, generates EAN-13 barcode
 PNG images, orchestrates batches, lays out labels, and **saves** a printable
 label workbook. Packaged for Windows via PyInstaller.
 
-**Canonical pipeline (Feature 6):**
-`WorkbookGenerationService` =
+**Canonical pipeline:**
+`WorkbookGenerationService` (also the CLI `generate` runtime) =
 `ExcelImportService` → `BatchProcessingService` → `LabelLayoutService` →
 `WorkbookWriter.save`
 
 **Not implemented yet:** printing / print preview, Excel VBA UI.
 
-**Deprecated (CLI compatibility only):** `BatchProcessor`, `BarcodeGenerator`,
+**Deprecated (unused by CLI):** `BatchProcessor`, `BarcodeGenerator`,
 `BatchResults` — do not use for new development.
 
 **Package:** `classroom_library_label_maker`  
@@ -288,12 +288,44 @@ python -c "from pathlib import Path; from classroom_library_label_maker.config i
 - Default output: `{project_root}/output/library_labels.xlsx`
 - Depends on `WorkbookWriter` only for Excel output (never imports openpyxl)
 - Does **not** print or show UI
+- The CLI `generate` command is a thin adapter over this service
 
-### Deprecated CLI orchestration
+## CLI
 
-The CLI `generate` command still uses `BatchProcessor` + `BarcodeGenerator` +
-`BatchResults`. That path is **deprecated** for new development. Prefer the
-canonical services above. See [`docs/PublicAPI.md`](../docs/PublicAPI.md).
+Commands: `generate` (default), `version`, plus reserved `validate` /
+`clean` / `diagnostics`.
+
+```powershell
+# Preferred explicit form
+python -m classroom_library_label_maker generate `
+  --input tests\assets\workbooks\valid_books.xlsx `
+  --output-dir output\barcodes `
+  --labels-output output\library_labels.xlsx `
+  --results output\results.json `
+  --log-file logs\application.log
+
+# Flat flags still map to generate (no subcommand)
+python -m classroom_library_label_maker `
+  --input tests\assets\workbooks\valid_books.xlsx `
+  --labels-output output\library_labels.xlsx
+
+python -m classroom_library_label_maker version
+```
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Invalid arguments |
+| 2 | Input / import failure |
+| 3 | Generation failure |
+| 4 | Unexpected internal error |
+| 5 | Reserved command not implemented |
+
+On success, `generate` prints a concise summary from `WorkbookGenerationResult`
+(books imported/processed, labels, pages, barcodes generated/reused, output
+path, elapsed time).
 
 ### Manual barcode verification
 
@@ -384,27 +416,6 @@ Default `python -m pytest` does **not** collect these files (they are named
 - Keep `APP_VERSION` and `VERSION` identical when releasing
 - Human history: Keep a Changelog in [`CHANGELOG.md`](CHANGELOG.md)
 - Semantic Versioning: `MAJOR.MINOR.PATCH`
-
-## Run (CLI)
-
-Commands: `generate` (default), `version`, plus reserved `validate` /
-`clean` / `diagnostics`.
-
-```powershell
-# Preferred explicit form
-python -m classroom_library_label_maker generate `
-  --input assets\sample-data\sample-books.json `
-  --output-dir output\barcodes `
-  --results output\results.json `
-  --log-file logs\application.log
-
-# Legacy form (still supported; maps to generate)
-python -m classroom_library_label_maker `
-  --input assets\sample-data\sample-books.json `
-  --results output\results.json
-
-python -m classroom_library_label_maker version
-```
 
 ## Related documentation
 

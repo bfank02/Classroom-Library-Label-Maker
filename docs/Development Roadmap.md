@@ -23,9 +23,9 @@
 - [x] Excel import engine (`ExcelImportService` + `OpenPyxlWorkbookReader`)
 - [x] Label layout engine (`LabelLayoutService` + `LabelSheetTarget`)
 - [x] Workbook generation service (`WorkbookGenerationService` + `WorkbookWriter`)
-- [ ] JSON book loading (`BatchProcessor.load_books` — deprecated CLI path)
+- [x] CLI `generate` → `WorkbookGenerationService`
+- [ ] Remove deprecated stubs (`BatchProcessor` / `BarcodeGenerator`) when unused
 - [ ] Package as EXE (`build.bat` / PyInstaller)
-- [ ] Migrate CLI `generate` to `WorkbookGenerationService`
 
 ## Phase 2 — Excel Integration
 

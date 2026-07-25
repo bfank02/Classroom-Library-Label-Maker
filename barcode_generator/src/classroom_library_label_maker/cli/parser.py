@@ -30,6 +30,14 @@ KNOWN_COMMANDS: frozenset[str] = frozenset(
 )
 
 
+class CliArgumentError(Exception):
+    """Raised when CLI arguments are missing or invalid."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Create the top-level argument parser with subcommands.
 
@@ -60,7 +68,10 @@ def build_parser() -> argparse.ArgumentParser:
     generate = subparsers.add_parser(
         COMMAND_GENERATE,
         parents=[shared],
-        help="Generate barcode PNG images from a books JSON file.",
+        help=(
+            "Generate barcode PNGs and a printable label workbook from an "
+            "inventory Excel file."
+        ),
     )
     _add_generate_arguments(generate)
 
@@ -92,25 +103,46 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse CLI arguments, defaulting to the ``generate`` command.
 
     Preserves legacy invocations that omit an explicit subcommand
-    (flat ``--input`` / ``--results`` flags map to ``generate``).
+    (flat flags map to ``generate``).
 
     Args:
         argv: Optional argument list (defaults to ``sys.argv[1:]``).
 
     Returns:
         Parsed :class:`argparse.Namespace` including ``command``.
+
+    Raises:
+        CliArgumentError: When required arguments are missing or invalid.
+        SystemExit: When ``-h`` / ``--help`` is requested (code ``0``).
     """
     raw = list(sys.argv[1:] if argv is None else argv)
     parser = build_parser()
+    _patch_usage_errors(parser)
 
     if "--version" in raw and not _has_explicit_command(raw):
         filtered = [token for token in raw if token != "--version"]
-        return parser.parse_args([COMMAND_VERSION, *filtered])
+        raw = [COMMAND_VERSION, *filtered]
 
     if not _has_explicit_command(raw):
         raw = [COMMAND_GENERATE, *raw]
 
-    return parser.parse_args(raw)
+    try:
+        return parser.parse_args(raw)
+    except argparse.ArgumentError as exc:
+        raise CliArgumentError(str(exc)) from exc
+
+
+def _patch_usage_errors(parser: argparse.ArgumentParser) -> None:
+    """Make ``parser.error`` raise :class:`CliArgumentError` (including subparsers)."""
+
+    def _raise_usage(message: str) -> None:
+        raise CliArgumentError(message)
+
+    parser.error = _raise_usage  # type: ignore[method-assign]
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            for subparser in action.choices.values():
+                _patch_usage_errors(subparser)
 
 
 def _shared_options_parser() -> argparse.ArgumentParser:
@@ -142,7 +174,7 @@ def _add_generate_arguments(parser: argparse.ArgumentParser) -> None:
         "-i",
         type=Path,
         required=True,
-        help="Path to input JSON file containing books.",
+        help="Path to the inventory Excel workbook (.xlsx).",
     )
     parser.add_argument(
         "--output-dir",
@@ -155,11 +187,24 @@ def _add_generate_arguments(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
+        "--labels-output",
+        "-l",
+        type=Path,
+        default=None,
+        help=(
+            "Path for the generated label workbook "
+            "(default: <project>/output/library_labels.xlsx)."
+        ),
+    )
+    parser.add_argument(
         "--results",
         "-r",
         type=Path,
-        required=True,
-        help="Path to write the JSON results file.",
+        default=None,
+        help=(
+            "Optional path to write a JSON summary "
+            "(WorkbookGenerationResult.to_dict)."
+        ),
     )
     parser.add_argument(
         "--overwrite",

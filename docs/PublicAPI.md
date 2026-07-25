@@ -27,11 +27,12 @@ Supporting stables: `IsbnValidator`, `BarcodeGenerationService`,
 `LabelSheetTarget`.
 
 **Implemented:** import, validate, generate barcodes, batch orchestration,
-label layout, label workbook **save**.
+label layout, label workbook **save**, CLI `generate` via
+`WorkbookGenerationService`.
 
 **Not implemented:** **printing** / print preview, Excel VBA UI.
 
-**Deprecated (CLI compatibility only — do not use for new development):**
+**Deprecated (unused by CLI — transitional only):**
 `BatchProcessor`, `BarcodeGenerator`, `BatchResults`.
 
 ## Stability legend
@@ -268,9 +269,9 @@ Package: `classroom_library_label_maker.services`
 | `BatchProcessingService` | Stable | External | Multi-book orchestration (canonical) |
 | `ExcelImportService` | Stable | External | Workbook → `Book` import |
 | `LabelLayoutService` | Stable | External | Arrange books onto label sheets |
-| `WorkbookGenerationService` | Stable | External | End-to-end import → barcodes → layout → save |
-| `BatchProcessor` | Internal / Deprecated | CLI only | Legacy JSON adapter; do not use for Feature 6+ |
-| `BarcodeGenerator` | Internal / Deprecated | CLI only | Legacy stub; superseded by `BarcodeGenerationService` |
+| `WorkbookGenerationService` | Stable | External | End-to-end import → barcodes → layout → save (canonical runtime / CLI) |
+| `BatchProcessor` | Internal / Deprecated | Unused by CLI | Legacy JSON stub; do not use |
+| `BarcodeGenerator` | Internal / Deprecated | Unused by CLI | Legacy stub; superseded by `BarcodeGenerationService` |
 
 ---
 
@@ -440,6 +441,40 @@ layout labels → save label workbook. Does not print or display UI.
 | `generate(*, workbook_path=None, output_path=None)` | Optional inventory / output overrides | `WorkbookGenerationResult`; may raise `ConfigurationError`, `FileSystemError`, `InvalidWorkbookError`, `LabelLayoutError`, `WorkbookGenerationError` |
 
 Default `output_path`: `{project_root}/output/library_labels.xlsx`.
+
+The CLI `generate` command invokes this service only (thin adapter).
+
+---
+
+## CLI
+
+Module: `classroom_library_label_maker.cli` / entry `main.py`
+
+**Canonical runtime:** `WorkbookGenerationService` (no `BatchProcessor`).
+
+### `generate` — Stable
+
+| Flag | Role |
+|------|------|
+| `--input` / `-i` | Inventory Excel workbook (required) |
+| `--output-dir` / `-o` | Barcode PNG directory |
+| `--labels-output` / `-l` | Label workbook path (default under `output/`) |
+| `--results` / `-r` | Optional JSON summary (`WorkbookGenerationResult.to_dict`) |
+| `--overwrite` | Regenerate existing barcode PNGs |
+| `--log-level`, `--log-file` | Logging |
+
+Omitting a subcommand still maps flat flags to `generate`.
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success |
+| `1` | Invalid arguments |
+| `2` | Input / import failure |
+| `3` | Generation failure (barcodes, layout, or save) |
+| `4` | Unexpected internal error |
+| `5` | Reserved command not implemented |
 
 ### Workbook template versioning — Experimental — Extension point
 

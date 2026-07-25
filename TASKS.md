@@ -9,9 +9,10 @@
 - [x] Excel import
 - [x] Label templates + label layout
 - [x] Workbook generation (import → barcodes → layout → save)
+- [x] CLI generate → WorkbookGenerationService
 - [x] Logging
 - [ ] Package as EXE
-- [ ] Migrate CLI off deprecated `BatchProcessor` / `BarcodeGenerator`
+- [ ] Remove deprecated `BatchProcessor` / `BarcodeGenerator` stubs
 
 ## Sprint 2 – Excel Integration
 

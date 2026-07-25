@@ -1,7 +1,9 @@
 """Application entry point for the barcode generator component.
 
 Startup only: parse CLI arguments, initialize logging when needed, and
-dispatch to a command handler. Business logic lives under ``services/``.
+dispatch to a command handler. Business logic lives under ``services/``
+(:class:`~classroom_library_label_maker.services.workbook_generation_service.WorkbookGenerationService`
+for ``generate``).
 """
 
 from __future__ import annotations
@@ -9,13 +11,15 @@ from __future__ import annotations
 import sys
 
 from classroom_library_label_maker.cli.commands import (
-    EXIT_FAILURE,
+    EXIT_INTERNAL_ERROR,
+    EXIT_INVALID_ARGUMENTS,
     EXIT_NOT_IMPLEMENTED,
     dispatch,
 )
 from classroom_library_label_maker.cli.parser import (
     COMMAND_GENERATE,
     COMMAND_VERSION,
+    CliArgumentError,
     parse_args,
 )
 from classroom_library_label_maker.config import load_application_settings
@@ -31,17 +35,20 @@ def main(argv: list[str] | None = None) -> int:
         argv: Optional argument list (defaults to ``sys.argv[1:]``).
 
     Returns:
-        Process exit code (``0`` on success, non-zero on failure).
+        Process exit code (see ``cli.commands`` module docstring).
     """
-    args = parse_args(argv)
+    try:
+        args = parse_args(argv)
+    except CliArgumentError as exc:
+        print(f"error: {exc.message}", file=sys.stderr)
+        return EXIT_INVALID_ARGUMENTS
 
     if args.command == COMMAND_VERSION:
         return dispatch(args, settings=None)
 
-    settings = None
     if args.command == COMMAND_GENERATE:
         settings = load_application_settings(
-            input_path=args.input,
+            workbook_path=args.input,
             results_path=args.results,
             barcode_output_directory=args.output_dir,
             overwrite=args.overwrite,
@@ -70,13 +77,13 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("%s", exc)
         if exc.__cause__ is not None:
             logger.debug("Caused by: %s", exc.__cause__, exc_info=exc.__cause__)
-        return EXIT_FAILURE
+        return EXIT_INTERNAL_ERROR
     except NotImplementedError as exc:
         logger.error("Not implemented: %s", exc)
         return EXIT_NOT_IMPLEMENTED
     except Exception:
         logger.exception("Unhandled error during command execution")
-        return EXIT_FAILURE
+        return EXIT_INTERNAL_ERROR
 
 
 if __name__ == "__main__":
