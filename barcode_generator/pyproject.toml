@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 # Keep name/description/license/authors aligned with
 # classroom_library_label_maker.metadata (Python single source of truth).
 name = "classroom-library-barcode-generator"
-description = "Generate EAN-13 barcode PNGs for classroom library books from JSON input."
+description = "Generate printable Avery barcode labels for classroom library books from an Excel inventory workbook."
 readme = "README.md"
 requires-python = ">=3.13"
 license = { text = "MIT" }

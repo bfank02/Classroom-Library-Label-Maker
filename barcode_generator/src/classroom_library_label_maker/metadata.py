@@ -33,7 +33,8 @@ APP_NAME: str = "Classroom Library Label Maker"
 """Human-readable product name."""
 
 APP_DESCRIPTION: str = (
-    "Generate EAN-13 barcode PNGs for classroom library books from JSON input."
+    "Generate printable Avery barcode labels for classroom library books "
+    "from an Excel inventory workbook."
 )
 """Short product description (CLI help, packaging)."""
 
@@ -68,6 +69,12 @@ APP_CLI_NAME: str = "barcode-generator"
 
 APP_GUI_SCRIPT_NAME: str = "label-maker-gui"
 """Console script name that launches the desktop GUI."""
+
+APP_EXECUTABLE_NAME: str = "Classroom Library Label Maker"
+"""Desktop executable / .app bundle display name for packaged releases."""
+
+APP_BUNDLE_IDENTIFIER: str = "com.classroomlibrarylabelmaker.app"
+"""macOS bundle identifier (``CFBundleIdentifier``)."""
 
 APP_COMPONENT_NAME: str = "Barcode Generator"
 """Name of this component within the larger product."""

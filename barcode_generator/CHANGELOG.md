@@ -8,8 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Cross-platform packaging: shared `scripts/build_release.py`, macOS
+  `build_macos.sh`, updated Windows `build.bat`
+- Native macOS `.app` bundle support (Finder-launchable, bundled runtime)
+- `runtime_paths.py` for frozen resource roots and OS log/data directories
+- Real application icons (`logo.png`, `app.ico`, `app.icns`)
+- GUI rotating file logging to the platform log directory when packaged
+
 ### Changed
 
+- Packaged apps resolve assets via PyInstaller `_MEIPASS` instead of the
+  development project tree
+- Product description clarified for Excel inventory / Avery label workflow
+- Added `APP_EXECUTABLE_NAME` and `APP_BUNDLE_IDENTIFIER` packaging metadata
 - Renamed project directory from `barcode-generator` to `barcode_generator`
 - Adopted standard src-layout package `classroom_library_label_maker`
 - Reorganized assets into `icons/`, `templates/`, `sample-data/`, `resources/`
