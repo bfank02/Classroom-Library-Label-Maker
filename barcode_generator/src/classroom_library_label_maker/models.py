@@ -13,6 +13,7 @@ from classroom_library_label_maker.constants import (
     DEFAULT_BARCODE_MODULE_HEIGHT,
     DEFAULT_BARCODE_MODULE_WIDTH,
     DEFAULT_BARCODE_QUIET_ZONE,
+    DEFAULT_LABEL_TEMPLATE_ID,
     DEFAULT_WORKBOOK_COLUMN_AUTHOR,
     DEFAULT_WORKBOOK_COLUMN_COPIES,
     DEFAULT_WORKBOOK_COLUMN_ISBN,
@@ -557,6 +558,7 @@ class ApplicationSettings:
         workbook_column_author: Header name for the author column.
         workbook_column_copies: Header name for the copies column.
         workbook_header_row: 1-based header row index.
+        label_template_id: Registered label template id (e.g. ``avery-5160``).
     """
 
     barcode_output_directory: Path
@@ -582,6 +584,7 @@ class ApplicationSettings:
     workbook_column_author: str = DEFAULT_WORKBOOK_COLUMN_AUTHOR
     workbook_column_copies: str = DEFAULT_WORKBOOK_COLUMN_COPIES
     workbook_header_row: int = DEFAULT_WORKBOOK_HEADER_ROW
+    label_template_id: str = DEFAULT_LABEL_TEMPLATE_ID
 
     def __post_init__(self) -> None:
         """Normalize path fields to :class:`~pathlib.Path` instances."""
@@ -601,6 +604,8 @@ class ApplicationSettings:
             raise ValueError("app_version must not be empty")
         if not self.default_label_type.strip():
             raise ValueError("default_label_type must not be empty")
+        if not self.label_template_id.strip():
+            raise ValueError("label_template_id must not be empty")
         if self.barcode_module_width <= 0:
             raise ValueError("barcode_module_width must be positive")
         if self.barcode_module_height <= 0:

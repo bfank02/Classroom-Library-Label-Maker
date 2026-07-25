@@ -141,6 +141,10 @@ barcode_generator/src/classroom_library_label_maker/
 ├── workbooks/           Spreadsheet / workbook I/O (library-agnostic)
 │   ├── workbook_reader.py           WorkbookReader protocol
 │   └── openpyxl_workbook_reader.py  OpenPyxlWorkbookReader
+├── label_templates/     Physical label-sheet specs (inches, immutable)
+│   ├── label_template.py            LabelTemplate protocol + LabelTemplateSpec
+│   ├── avery_5160.py                Avery 5160 layout data
+│   └── template_registry.py         TemplateRegistry
 └── utils/
     └── file_utils.py
 ```
@@ -171,6 +175,7 @@ Root package `__init__` exports a narrow public API (models + exceptions +
 | `services.protocols` | Extension contracts for lookups / covers |
 | `rendering` | Library-agnostic barcode image rendering |
 | `workbooks` | Library-agnostic spreadsheet / workbook I/O |
+| `label_templates` | Immutable physical label-sheet specifications |
 | `utils.file_utils` | JSON + directory helpers |
 | `constants` | Operational defaults (paths, log sizes) — not product branding |
 
@@ -424,6 +429,58 @@ Additional backends can implement `WorkbookReader` without changing callers:
 
 Do not implement these until a feature sprint requires them.
 
+## Label templates (`label_templates/`)
+
+Physical **label-sheet geometry** is isolated from layout placement, Excel
+worksheets, and printing. Templates are immutable value objects measured in
+**inches only** — never pixels, points, printer dots, or Excel row/column units.
+
+```
+ApplicationSettings
+        │
+        ▼
+TemplateRegistry
+        │
+        ▼
+LabelTemplate
+        │
+        ▼
+Avery5160 / AVERY_5160
+        │
+        ▼
+LabelLayoutService (future)
+```
+
+**Why separate layout data from rendering?**
+
+* A future `LabelLayoutService` can place barcodes on a sheet using inches
+  without knowing Avery vs Brother vs custom vendors
+* Rendering engines convert inches → PDF/Excel/printer units at the edge
+* New templates register in `TemplateRegistry` without modifying the layout
+  service
+
+**Public API**
+
+* `LabelTemplate` — protocol for physical sheet specs
+* `LabelTemplateSpec` — frozen dataclass implementation
+* `TemplateRegistry` / `create_default_template_registry()`
+* `AVERY_5160` (`template_id`: `avery-5160`) — built-in Avery 5160 data
+
+`ApplicationSettings.label_template_id` defaults to `avery-5160`.
+
+### Future label template extension points
+
+| Future template | Intent |
+|-----------------|--------|
+| Avery 5163 | Larger shipping / barcode labels |
+| Avery 8160 | Same geometry as 5160 (Easy Peel variant) |
+| Avery 5260 | Compatible 5160-geometry product line |
+| A4-compatible templates | Metric page size / regional products |
+| Brother label sheets | Brother-branded sheet geometries |
+| Custom user-defined templates | Teacher-specific or district templates |
+
+Register new `LabelTemplateSpec` instances; do not change `LabelLayoutService`.
+
 ## Application metadata (`metadata.py`)
 
 Product-facing strings are centralized so installers, CLI help, logs, and
@@ -500,8 +557,11 @@ barcode generation remain separate services.
 5. **Workbook readers** — additional `WorkbookReader` implementations under
    `workbooks/` (CSV, Google Sheets, OneDrive, LibreOffice)
 6. **Inventory / checkout / reading levels** — extend `Book` optional fields
-7. **Multiple label templates** — `assets/templates/` + `default_label_type`
-8. **Auto-update / installer** — `installer/` + `releases/` driven by `VERSION`
+7. **Label templates** — additional `LabelTemplateSpec` entries (5163, 8160,
+   A4, Brother, custom) via `TemplateRegistry`
+8. **Label layout service** — place barcodes on sheets using `LabelTemplate`
+9. **Multiple label templates** — `assets/templates/` + `label_template_id`
+10. **Auto-update / installer** — `installer/` + `releases/` driven by `VERSION`
 
 ## Coding standards
 

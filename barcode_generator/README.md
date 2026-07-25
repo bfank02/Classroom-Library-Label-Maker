@@ -60,6 +60,10 @@ barcode_generator/
 │       ├── workbooks/              # Spreadsheet I/O (protocol + placeholder)
 │       │   ├── workbook_reader.py
 │       │   └── openpyxl_workbook_reader.py
+│       ├── label_templates/        # Physical label specs (inches, immutable)
+│       │   ├── label_template.py
+│       │   ├── avery_5160.py
+│       │   └── template_registry.py
 │       └── utils/
 │           └── file_utils.py
 │
@@ -221,6 +225,19 @@ python -c "from classroom_library_label_maker.config import load_application_set
 - Does **not** validate ISBNs or generate barcodes
 - Workbook template versioning is an extension point only (not enforced yet);
   see Architecture.md for where version metadata and checks will live
+
+### Label templates
+
+Immutable physical sheet specs (inches) live under `label_templates/`:
+
+```powershell
+python -c "from classroom_library_label_maker.label_templates import create_default_template_registry; t=create_default_template_registry().get('avery-5160'); print(t.template_name, t.labels_per_page, t.label_width)"
+```
+
+- `ApplicationSettings.label_template_id` defaults to `avery-5160`
+- `TemplateRegistry` looks up templates; unknown ids raise `ConfigurationError`
+- Future `LabelLayoutService` will consume `LabelTemplate` without knowing vendors
+- Add new templates by registering `LabelTemplateSpec` instances (no layout-engine changes)
 
 ### Manual barcode verification
 

@@ -4,8 +4,8 @@ Public surface of the **Classroom Library Label Maker** barcode generator
 package (`classroom_library_label_maker`).
 
 Prefer importing from documented submodules
-(`models`, `services`, `rendering`, `workbooks`, `exceptions`, `config`,
-`metadata`).
+(`models`, `services`, `rendering`, `workbooks`, `label_templates`,
+`exceptions`, `config`, `metadata`).
 The package root re-exports a narrow set of common types.
 
 ## Stability legend
@@ -305,6 +305,42 @@ treat instances as read-only after construction.
 mapping. Version metadata may live in a Meta sheet cell, document properties,
 or similar — see Architecture.md. Multiple template versions can later select
 different column maps via settings without changing `WorkbookReader`.
+
+---
+
+## Label templates
+
+Module: `classroom_library_label_maker.label_templates`
+
+Physical sheet geometry only (inches). No Excel, rendering, or printing.
+
+### `LabelTemplate` — Stable — External (protocol)
+
+**Purpose:** Immutable physical specification of a label sheet.
+
+Identification: `template_id`, `template_name`, `vendor`, `product_number`,
+`description`.  
+Page: `page_size`, `orientation`, `page_width`, `page_height`.  
+Layout: `rows`, `columns`, `label_width`, `label_height`, margins, gaps.  
+Derived: `labels_per_page`, `printable_width`, `printable_height`.
+
+### `LabelTemplateSpec` — Stable — External
+
+**Purpose:** Frozen dataclass implementing `LabelTemplate`.
+
+### `TemplateRegistry` — Stable — External
+
+| Method | Behavior |
+|--------|----------|
+| `register(template)` | Register by `template_id` |
+| `get(template_id)` | Lookup; raises `ConfigurationError` if unknown |
+| `list_templates()` | Sorted tuple of registered templates |
+
+`create_default_template_registry()` registers `AVERY_5160` (`avery-5160`).
+
+### `AVERY_5160` / `Avery5160` — Stable — External
+
+**Purpose:** Built-in Avery 5160 layout data (Letter, 3×10, 1×2.625 in).
 
 ---
 
