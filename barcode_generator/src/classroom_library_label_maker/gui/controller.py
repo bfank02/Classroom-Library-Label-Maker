@@ -42,6 +42,7 @@ from classroom_library_label_maker.models import (
     ApplicationSettings,
     WorkbookGenerationResult,
 )
+from classroom_library_label_maker.progress import GenerationProgress
 
 if TYPE_CHECKING:
     from classroom_library_label_maker.gui.main_window import MainWindow
@@ -252,6 +253,7 @@ class GuiController(QObject):
         )
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
+        worker.progress.connect(self._on_generation_progress)
         worker.completed.connect(self._on_generation_completed)
         worker.failed.connect(self._on_generation_failed)
         worker.completed.connect(thread.quit)
@@ -261,6 +263,14 @@ class GuiController(QObject):
         self._active_thread = thread
         self._active_worker = worker
         thread.start()
+
+    @Slot(object)
+    def _on_generation_progress(self, progress: object) -> None:
+        if not self._is_generating:
+            return
+        if not isinstance(progress, GenerationProgress):
+            return
+        self._set_status(progress.message, error=False)
 
     @Slot(object)
     def _on_generation_completed(self, result: object) -> None:

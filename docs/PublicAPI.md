@@ -28,10 +28,10 @@ Supporting stables: `IsbnValidator`, `BarcodeGenerationService`,
 
 **Implemented:** import, validate, generate barcodes, batch orchestration,
 label layout, label workbook **save**, CLI `generate` and desktop GUI via
-`WorkbookGenerationService`.
+`WorkbookGenerationService`, with optional stage progress reporting.
 
-**Not implemented:** **printing** / print preview, Excel VBA UI; GUI progress /
-threading / cancellation.
+**Not implemented:** **printing** / print preview, Excel VBA UI; GUI
+cancellation; CLI progress printing (reporter hooks exist).
 
 **Deprecated (unused by CLI — transitional only):**
 `BatchProcessor`, `BarcodeGenerator`, `BatchResults`.
@@ -453,14 +453,34 @@ layout labels → save label workbook. Does not print or display UI.
 
 | Method | Inputs | Outputs / errors |
 |--------|--------|------------------|
-| `__init__(settings, *, importer=None, batch_processor=None, layout_service=None, writer=None)` | Settings + optional collaborators | service |
-| `generate(*, workbook_path=None, output_path=None)` | Optional inventory / output overrides | `WorkbookGenerationResult`; may raise `ConfigurationError`, `FileSystemError`, `InvalidWorkbookError`, `LabelLayoutError`, `WorkbookGenerationError` |
+| `__init__(settings, *, importer=None, batch_processor=None, layout_service=None, writer=None, progress_reporter=None)` | Settings + optional collaborators / progress hook | service |
+| `generate(*, workbook_path=None, output_path=None, progress_reporter=None)` | Optional inventory / output / per-call progress override | `WorkbookGenerationResult`; may raise `ConfigurationError`, `FileSystemError`, `InvalidWorkbookError`, `LabelLayoutError`, `WorkbookGenerationError` |
 
 Default `output_path`: `{project_root}/output/library_labels.xlsx`.
+
+Optional progress uses Qt-free `GenerationProgressReporter` /
+`GenerationProgress` / `GenerationStage` from
+`classroom_library_label_maker.progress` (significant stage transitions only).
 
 The CLI `generate` command and the desktop GUI (`gui.GuiController`) both
 invoke this service as thin adapters — same generation path, no duplicated
 engine logic.
+
+---
+
+### `GenerationProgress` / `GenerationStage` / `GenerationProgressReporter` — Stable — External
+
+Module: `classroom_library_label_maker.progress`
+
+**Purpose:** Structured, UI-agnostic progress events for workbook generation.
+Consumable by the desktop GUI today and by a future CLI without changing the
+engine.
+
+| Symbol | Role |
+|--------|------|
+| `GenerationStage` | StrEnum milestones (`importing`, `validating`, …) |
+| `GenerationProgress` | Frozen event (`stage`, `message`); `for_stage(stage)` |
+| `GenerationProgressReporter` | Protocol: `on_progress(progress)` |
 
 ---
 
