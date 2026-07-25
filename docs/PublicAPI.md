@@ -27,10 +27,11 @@ Supporting stables: `IsbnValidator`, `BarcodeGenerationService`,
 `LabelSheetTarget`.
 
 **Implemented:** import, validate, generate barcodes, batch orchestration,
-label layout, label workbook **save**, CLI `generate` via
+label layout, label workbook **save**, CLI `generate` and desktop GUI via
 `WorkbookGenerationService`.
 
-**Not implemented:** **printing** / print preview, Excel VBA UI.
+**Not implemented:** **printing** / print preview, Excel VBA UI; GUI progress /
+threading / cancellation.
 
 **Deprecated (unused by CLI — transitional only):**
 `BatchProcessor`, `BarcodeGenerator`, `BatchResults`.
@@ -269,7 +270,7 @@ Package: `classroom_library_label_maker.services`
 | `BatchProcessingService` | Stable | External | Multi-book orchestration (canonical) |
 | `ExcelImportService` | Stable | External | Workbook → `Book` import |
 | `LabelLayoutService` | Stable | External | Arrange books onto label sheets |
-| `WorkbookGenerationService` | Stable | External | End-to-end import → barcodes → layout → save (canonical runtime / CLI) |
+| `WorkbookGenerationService` | Stable | External | End-to-end import → barcodes → layout → save (canonical runtime for CLI and desktop GUI) |
 | `BatchProcessor` | Internal / Deprecated | Unused by CLI | Legacy JSON stub; do not use |
 | `BarcodeGenerator` | Internal / Deprecated | Unused by CLI | Legacy stub; superseded by `BarcodeGenerationService` |
 
@@ -457,7 +458,9 @@ layout labels → save label workbook. Does not print or display UI.
 
 Default `output_path`: `{project_root}/output/library_labels.xlsx`.
 
-The CLI `generate` command invokes this service only (thin adapter).
+The CLI `generate` command and the desktop GUI (`gui.GuiController`) both
+invoke this service as thin adapters — same generation path, no duplicated
+engine logic.
 
 ---
 

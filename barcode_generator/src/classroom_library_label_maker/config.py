@@ -193,6 +193,7 @@ def load_application_settings(
     log_level: str = DEFAULT_LOG_LEVEL,
     log_file: Path | str | None = None,
     default_label_type: str = DEFAULT_LABEL_TYPE,
+    label_template_id: str = DEFAULT_LABEL_TEMPLATE_ID,
     workbook_path: Path | str | None = None,
     workbook_sheet_name: str = DEFAULT_WORKBOOK_SHEET_NAME,
 ) -> ApplicationSettings:
@@ -207,7 +208,9 @@ def load_application_settings(
         log_level: Logging level name.
         log_file: Optional log file path override.
         default_label_type: Deprecated compatibility field; prefer setting
-            ``ApplicationSettings.label_template_id`` for layout.
+            ``label_template_id`` for layout.
+        label_template_id: Registered template id for label layout (default
+            ``avery-5160``).
         workbook_path: Optional Excel workbook path for import.
         workbook_sheet_name: Worksheet name used by Excel import.
 
@@ -215,8 +218,7 @@ def load_application_settings(
         Populated :class:`ApplicationSettings`.
 
     Note:
-        ``label_template_id`` defaults to ``DEFAULT_LABEL_TEMPLATE_ID``
-        (``avery-5160``) and is the template setting consumed by
+        ``label_template_id`` is the template setting consumed by
         :class:`~classroom_library_label_maker.services.label_layout_service.LabelLayoutService`.
     """
     paths = ProjectPaths(project_root)
@@ -250,7 +252,7 @@ def load_application_settings(
         workbook_column_author=DEFAULT_WORKBOOK_COLUMN_AUTHOR,
         workbook_column_copies=DEFAULT_WORKBOOK_COLUMN_COPIES,
         workbook_header_row=DEFAULT_WORKBOOK_HEADER_ROW,
-        label_template_id=DEFAULT_LABEL_TEMPLATE_ID,
+        label_template_id=label_template_id,
     )
 
 

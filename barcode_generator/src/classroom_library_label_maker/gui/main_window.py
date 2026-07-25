@@ -116,8 +116,7 @@ class MainWindow(QMainWindow):
         self.generate_button.setDefault(True)
         self.generate_button.setMinimumWidth(160)
         self.generate_button.setToolTip(
-            "Validate inputs and prepare to generate labels "
-            "(generation is not connected yet)."
+            "Generate a printable label workbook using the selected inputs."
         )
         self.generate_button.setAccessibleName("Generate Labels")
         button_row.addWidget(self.generate_button)
