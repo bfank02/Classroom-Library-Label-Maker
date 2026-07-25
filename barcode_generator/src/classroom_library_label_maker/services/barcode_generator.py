@@ -1,4 +1,12 @@
-"""EAN-13 barcode PNG generation."""
+"""Deprecated legacy barcode path helpers (superseded by BarcodeGenerationService).
+
+**Deprecated for new development.** Use
+:class:`~classroom_library_label_maker.services.barcode_generation_service.BarcodeGenerationService`
+with :class:`~classroom_library_label_maker.rendering.renderer.BarcodeRenderer`.
+
+Retained for the CLI :class:`~classroom_library_label_maker.services.batch_processor.BatchProcessor`
+compatibility path. ``generate()`` remains unimplemented.
+"""
 
 from __future__ import annotations
 
@@ -12,10 +20,13 @@ _logger = get_logger("barcode_generator")
 
 
 class BarcodeGenerator:
-    """Generate EAN-13 barcode PNG images from validated ISBN-13 values.
+    """Deprecated: legacy path helpers for barcode PNGs.
 
-    This class isolates image generation so it can be swapped or extended
-    (additional symbologies, DPI options) without changing batch logic.
+    **Do not use for new features.** Prefer
+    :class:`~classroom_library_label_maker.services.barcode_generation_service.BarcodeGenerationService`.
+
+    Retained for CLI :class:`~classroom_library_label_maker.services.batch_processor.BatchProcessor`
+    compatibility. ``generate()`` raises ``NotImplementedError``.
     """
 
     def __init__(self, *, default_extension: str = DEFAULT_BARCODE_EXTENSION) -> None:

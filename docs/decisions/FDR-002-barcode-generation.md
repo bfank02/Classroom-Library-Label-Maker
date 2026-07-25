@@ -65,8 +65,9 @@ If `{normalized_isbn}.png` already exists, return `ALREADY_EXISTS` and do not
 overwrite. Safe for re-runs and shared classroom workflows.
 
 **No direct Excel dependency.**  
-Generation is a pure Python service over domain models. Excel remains a future
-input adapter.
+Generation is a pure Python service over domain models. Excel import is a
+separate adapter (`ExcelImportService` / `WorkbookReader`) and must not be
+wired into this service.
 
 ### Public API
 

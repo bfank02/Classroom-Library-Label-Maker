@@ -1,6 +1,18 @@
 """Service-layer components for barcode generation.
 
-Prefer importing concrete services from this package for typical call sites.
+Canonical pipeline for new development (Feature 6+)::
+
+* :class:`ExcelImportService`
+* :class:`BatchProcessingService`
+* :class:`LabelLayoutService`
+
+Also stable: :class:`IsbnValidator`, :class:`BarcodeGenerationService`.
+
+Deprecated / internal (CLI compatibility only — do not use for new work):
+
+* :class:`BatchProcessor`
+* :class:`BarcodeGenerator`
+
 Extension protocols live in ``services.protocols``; future providers belong
 under ``services.lookups`` and ``services.covers``.
 """

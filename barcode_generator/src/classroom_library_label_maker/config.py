@@ -206,12 +206,18 @@ def load_application_settings(
         overwrite: Whether to overwrite existing barcode images.
         log_level: Logging level name.
         log_file: Optional log file path override.
-        default_label_type: Default label template key.
+        default_label_type: Deprecated compatibility field; prefer setting
+            ``ApplicationSettings.label_template_id`` for layout.
         workbook_path: Optional Excel workbook path for import.
         workbook_sheet_name: Worksheet name used by Excel import.
 
     Returns:
         Populated :class:`ApplicationSettings`.
+
+    Note:
+        ``label_template_id`` defaults to ``DEFAULT_LABEL_TEMPLATE_ID``
+        (``avery-5160``) and is the template setting consumed by
+        :class:`~classroom_library_label_maker.services.label_layout_service.LabelLayoutService`.
     """
     paths = ProjectPaths(project_root)
     version = read_version(paths.root)

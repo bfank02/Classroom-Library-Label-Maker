@@ -1,4 +1,12 @@
-"""Batch orchestration for barcode generation from JSON input."""
+"""Deprecated CLI/JSON batch adapter (kept for current ``generate`` command).
+
+**Deprecated for new development.** Prefer the canonical pipeline:
+
+``ExcelImportService`` → ``BatchProcessingService`` → ``LabelLayoutService``.
+
+This module remains only because the CLI ``generate`` command still calls it.
+Do not use it as the public orchestration API for Feature 6+.
+"""
 
 from __future__ import annotations
 
@@ -25,10 +33,14 @@ _logger = get_logger("batch_processor")
 
 
 class BatchProcessor:
-    """Load books from JSON, validate ISBNs, and generate barcode images.
+    """Deprecated: CLI/JSON adapter around ISBN validation + stub generation.
 
-    Coordinates :class:`IsbnValidator` and :class:`BarcodeGenerator`. Optional
-    lookup/cover services can be injected later without changing the core flow.
+    **Do not use for new features.** Canonical orchestration is
+    :class:`~classroom_library_label_maker.services.batch_processing_service.BatchProcessingService`
+    (with :class:`~classroom_library_label_maker.services.barcode_generation_service.BarcodeGenerationService`).
+
+    Retained for compatibility with the existing CLI ``generate`` command.
+    Coordinates :class:`IsbnValidator` and legacy :class:`BarcodeGenerator`.
     """
 
     def __init__(

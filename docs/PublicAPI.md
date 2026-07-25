@@ -8,13 +8,35 @@ Prefer importing from documented submodules
 `exceptions`, `config`, `metadata`).
 The package root re-exports a narrow set of common types.
 
+## Canonical workflow (Feature 6+)
+
+```
+ExcelImportService
+        ↓
+BatchProcessingService
+        ↓
+LabelLayoutService
+```
+
+Supporting stables: `IsbnValidator`, `BarcodeGenerationService`,
+`LabelTemplate` / `TemplateRegistry`, `WorkbookReader`, `LabelSheetTarget`.
+
+**Implemented:** import, validate, generate barcodes, batch orchestration,
+label **layout**.
+
+**Not implemented:** workbook **save** after layout, **printing** / print
+preview, Excel VBA UI.
+
+**Deprecated (CLI compatibility only — do not use for new development):**
+`BatchProcessor`, `BarcodeGenerator`, `BatchResults`.
+
 ## Stability legend
 
 | Label | Meaning |
 |-------|---------|
-| **Stable** | Intended for consumption by future features (Excel, CLI, labels). Backward-compatible unless a major version bump. |
+| **Stable** | Intended for Feature 6+ and library callers. Backward-compatible unless a major version bump. |
 | **Experimental** | Usable, but shape may change as adjacent features land. |
-| **Internal** | Infrastructure or transitional API. Prefer not to depend on it from new call sites. |
+| **Internal / Deprecated** | Legacy or transitional. Do not depend on it from new call sites. |
 
 ---
 
@@ -101,18 +123,25 @@ recoverable diagnostics (e.g. missing barcode images).
 
 ### `ApplicationSettings` — Stable — External
 
-**Purpose:** Project paths, logging, and barcode render geometry for a run.
+**Purpose:** Project paths, logging, barcode render geometry, workbook import,
+and label template selection for a run.
 
 **Construction:** Prefer `config.load_application_settings(...)`.
 
-**Notable fields:** `barcode_output_directory`, `log_directory`,
-`barcode_module_width` / `height` / `quiet_zone` / `font_size` / `dpi`,
-optional `input_path` / `results_path`.
+**Notable fields:**
 
-### `BatchResults` — Experimental — External (legacy CLI)
+| Field | Role |
+|-------|------|
+| `label_template_id` | **Single source of truth** for `LabelLayoutService` / `TemplateRegistry` (default `avery-5160`) |
+| `default_label_type` | **Deprecated** compatibility field; not used by layout |
+| `workbook_path`, `workbook_sheet_name`, `workbook_column_*`, `workbook_header_row` | Excel import |
+| `barcode_output_directory`, `barcode_module_*` / `quiet_zone` / `font_size` / `dpi` | Barcode output + render geometry |
+| `input_path` / `results_path` | Legacy CLI JSON paths |
 
-**Purpose:** Older aggregate used by `BatchProcessor.write_results`. Prefer
-`BatchProcessingResult` for new orchestration.
+### `BatchResults` — Internal / Deprecated
+
+**Purpose:** Older aggregate used only by deprecated `BatchProcessor.write_results`.
+**Do not use for new development.** Prefer `BatchProcessingResult`.
 
 ### `IsbnLookupResult` / `CoverImageResult` — Experimental — External
 
@@ -154,7 +183,7 @@ re-validate ISBNs. Does not import third-party barcode libraries directly.
 | `generate_for_book(book)` | Validated `Book` | `BarcodeGenerationResult` (`GENERATED` or `ALREADY_EXISTS`); may raise `FileSystemError` / `BarcodeGenerationError` |
 | `output_path_for(isbn)` | Normalized ISBN stem | `Path` to `{dir}/{isbn}.png` |
 
-**External use:** Yes — primary generation API for all future features.
+**External use:** Yes — primary generation API for Feature 6+ and library callers.
 
 ---
 
@@ -177,7 +206,7 @@ Continues after per-book failures. Preserves input order.
 - `progress_reporter`: optional; see Protocols.
 - `cancellation_token`: accepted for API stability; **not enforced** yet.
 
-**External use:** Yes — orchestration layer for future Excel import.
+**External use:** Yes — canonical multi-book orchestration after Excel import.
 
 ---
 
@@ -222,11 +251,11 @@ Package: `classroom_library_label_maker.services`
 |------|-----------|----------|---------|
 | `IsbnValidator` | Stable | External | ISBN validation |
 | `BarcodeGenerationService` | Stable | External | Single-book PNG generation |
-| `BatchProcessingService` | Stable | External | Multi-book orchestration |
+| `BatchProcessingService` | Stable | External | Multi-book orchestration (canonical) |
 | `ExcelImportService` | Stable | External | Workbook → `Book` import |
 | `LabelLayoutService` | Stable | External | Arrange books onto label sheets |
-| `BatchProcessor` | Experimental | Internal / transitional | CLI/JSON adapter (`load_books` still stubbed) |
-| `BarcodeGenerator` | Internal | Transitional | Legacy path helpers; superseded by `BarcodeGenerationService` |
+| `BatchProcessor` | Internal / Deprecated | CLI only | Legacy JSON adapter; do not use for Feature 6+ |
+| `BarcodeGenerator` | Internal / Deprecated | CLI only | Legacy stub; superseded by `BarcodeGenerationService` |
 
 ---
 
@@ -348,9 +377,11 @@ workbooks, print, or save.
 | `__init__(settings, *, registry=None)` | `ApplicationSettings`; optional registry | service |
 | `layout_books(books, target, *, template=None, barcode_paths=None)` | Books, target, optional template / ISBN→PNG map | `LabelLayoutResult`; may raise `ConfigurationError`, `LabelLayoutError` |
 
-Uses `settings.label_template_id` when `template` is omitted. Missing barcode
-images become placeholders with warnings (`missing_barcode`,
-`barcode_file_missing`).
+Uses `settings.label_template_id` (canonical template setting) when `template`
+is omitted. Missing barcode images become placeholders with warnings
+(`missing_barcode`, `barcode_file_missing`).
+
+**Does not** print or save workbooks.
 
 ### `LabelLayoutResult` / `LabelLayoutWarning` — Stable — External
 
@@ -399,6 +430,8 @@ Derived: `labels_per_page`, `printable_width`, `printable_height`.
 | `list_templates()` | Sorted tuple of registered templates |
 
 `create_default_template_registry()` registers `AVERY_5160` (`avery-5160`).
+Select templates via `ApplicationSettings.label_template_id` (not
+`default_label_type`).
 
 ### `AVERY_5160` / `Avery5160` — Stable — External
 
