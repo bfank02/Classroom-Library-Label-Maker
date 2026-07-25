@@ -174,6 +174,7 @@ def test_generate_labels_uses_injected_service(
         ApplicationSettings,
         WorkbookGenerationResult,
     )
+    from gui_test_helpers import wait_until_generation_finished
 
     window = MainWindow()
     calls: list[object] = []
@@ -195,6 +196,7 @@ def test_generate_labels_uses_injected_service(
     controller.set_barcode_folder(tmp_paths["barcodes"])
     controller.set_output_workbook(tmp_paths["output"])
     controller.on_generate_labels()
+    wait_until_generation_finished(controller)
 
     assert calls == [
         (tmp_paths["inventory"].resolve(), tmp_paths["output"].resolve())
