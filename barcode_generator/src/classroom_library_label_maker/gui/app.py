@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QApplication
 
 from classroom_library_label_maker.gui.controller import GuiController
 from classroom_library_label_maker.gui.main_window import MainWindow
+from classroom_library_label_maker.logger import setup_logging
 from classroom_library_label_maker.metadata import APP_NAME, APP_VERSION
 
 
@@ -52,6 +53,7 @@ def run(argv: list[str] | None = None) -> int:
     Returns:
         Exit code from ``QApplication.exec()``.
     """
+    setup_logging()
     app = create_application(argv)
     window = create_main_window()
     window.show()

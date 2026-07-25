@@ -146,8 +146,9 @@ barcode_generator/src/classroom_library_label_maker/
 ├── gui/                 Desktop presentation layer (PySide6)
 │   ├── __main__.py      python -m classroom_library_label_maker.gui
 │   ├── app.py           QApplication bootstrap + event loop
-│   ├── main_window.py   Main window shell
-│   └── controller.py    UI orchestration (stub; no business logic)
+│   ├── main_window.py   Input form (paths, template, Generate)
+│   ├── controller.py    Form state actions + lightweight validation
+│   └── form_state.py    Immutable selections + validation messages
 ├── services/
 │   ├── isbn_validator.py
 │   ├── barcode_generation_service.py
@@ -199,6 +200,7 @@ Root package `__init__` exports a narrow public API (models + exceptions +
 | `main` | Startup: parse → configure → log → dispatch |
 | `cli` | CLI parsing and command handlers |
 | `gui` | Desktop presentation (PySide6); thin adapter only |
+| `gui.form_state` | Immutable GUI selections + field validation messages |
 | `metadata` | Single source of truth for product identity |
 | `models` | Domain dataclasses and `BarcodeStatus` enum |
 | `exceptions` | Typed application errors |
@@ -645,11 +647,11 @@ logs/application.log (rotating)
 
 **Implemented today:** import, validation, barcode generation, batch
 orchestration, label layout, label workbook **save**, CLI `generate` via
-`WorkbookGenerationService`, and a launchable PySide6 GUI **shell**
-(`python -m classroom_library_label_maker.gui`).
+`WorkbookGenerationService`, and a PySide6 GUI that collects generation
+inputs (`python -m classroom_library_label_maker.gui`).
 
-**Not implemented:** GUI generation workflow (file pickers / progress /
-dialogs), **printing** / print preview, Excel VBA UI (Phase 2).
+**Not implemented:** GUI → `WorkbookGenerationService` wiring (progress /
+dialogs / threading), **printing** / print preview, Excel VBA UI (Phase 2).
 
 ### Desktop GUI launch
 
@@ -657,14 +659,29 @@ dialogs), **printing** / print preview, Excel VBA UI (Phase 2).
 python -m classroom_library_label_maker.gui
     → classroom_library_label_maker.gui:main
         → create QApplication
-        → MainWindow + GuiController (stub)
+        → MainWindow + GuiController
         → event loop
 
 label-maker-gui   # same entry point after pip install
 ```
 
-The GUI package must remain a presentation adapter. It must not import
-openpyxl or python-barcode, and must not duplicate engine logic.
+### Desktop GUI workflow (RC3.1 — input only)
+
+```
+MainWindow
+  Inventory workbook  → Browse (QFileDialog)
+  Barcode folder      → Browse (QFileDialog)
+  Output workbook     → Browse (QFileDialog)
+  Label template      → combo (TemplateRegistry; default Avery 5160)
+  Generate Labels     → lightweight validation only
+                         (logs / informs that generation would begin;
+                          does NOT call WorkbookGenerationService)
+```
+
+`GuiController` owns `GenerationFormState`, updates path labels, and enables
+**Generate Labels** only when required fields validate. The GUI package must
+remain a presentation adapter. It must not import openpyxl or python-barcode,
+and must not duplicate engine logic.
 
 ### CLI `generate` (canonical runtime)
 
@@ -704,8 +721,8 @@ by `WorkbookGenerationService`.
 
 ## Future extension points
 
-1. **Desktop GUI workflow** — wire `GuiController` to
-   `WorkbookGenerationService` (progress, success/error dialogs)
+1. **Desktop GUI generation** — wire `GuiController` to
+   `WorkbookGenerationService` (progress, success/error dialogs, threading)
 2. **CLI commands** — `validate`, `clean`, `diagnostics` already registered
 3. **ISBN lookup APIs** — `IsbnLookupService` under `services/lookups/`
 4. **Cover downloads** — `CoverDownloadService` under `services/covers/`

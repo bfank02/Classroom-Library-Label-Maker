@@ -1,7 +1,7 @@
 """RC3 readiness tests for the desktop GUI package structure.
 
 These tests verify import hygiene and entry points. They do not exercise
-interactive widgets or workbook generation. Qt runs offscreen.
+workbook generation. Qt runs offscreen.
 """
 
 from __future__ import annotations
@@ -57,7 +57,8 @@ def test_create_application_and_main_window(qapp: object) -> None:
 
     window = create_main_window()
     assert APP_NAME in window.windowTitle()
-    assert window.findChild(object, "guiPlaceholderLabel") is not None
+    assert window.findChild(object, "generateButton") is not None
+    assert window.findChild(object, "inventoryBrowseButton") is not None
     window.show()
     qapp.processEvents()  # type: ignore[attr-defined]
     window.close()
