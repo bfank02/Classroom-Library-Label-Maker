@@ -16,6 +16,7 @@ DEFAULT_LOG_LEVEL = "INFO"
 
 # Label templates (Sprint 3+)
 DEFAULT_LABEL_TYPE = "avery_5160"
+DEFAULT_LABEL_TEMPLATE_ID = "avery-5160"
 
 # Barcode image files
 DEFAULT_BARCODE_EXTENSION = ".png"

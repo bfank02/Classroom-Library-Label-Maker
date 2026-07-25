@@ -22,6 +22,9 @@ from classroom_library_label_maker.services.isbn_validator import (
     ISBNValidator,
     IsbnValidator,
 )
+from classroom_library_label_maker.services.label_layout_service import (
+    LabelLayoutService,
+)
 
 __all__ = [
     "BarcodeGenerationService",
@@ -31,4 +34,5 @@ __all__ = [
     "ExcelImportService",
     "ISBNValidator",
     "IsbnValidator",
+    "LabelLayoutService",
 ]

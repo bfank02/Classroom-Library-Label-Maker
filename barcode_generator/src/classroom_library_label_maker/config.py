@@ -12,6 +12,7 @@ from classroom_library_label_maker.constants import (
     DEFAULT_BARCODE_MODULE_HEIGHT,
     DEFAULT_BARCODE_MODULE_WIDTH,
     DEFAULT_BARCODE_QUIET_ZONE,
+    DEFAULT_LABEL_TEMPLATE_ID,
     DEFAULT_LABEL_TYPE,
     DEFAULT_LOG_FILE_NAME,
     DEFAULT_LOG_LEVEL,
@@ -243,6 +244,7 @@ def load_application_settings(
         workbook_column_author=DEFAULT_WORKBOOK_COLUMN_AUTHOR,
         workbook_column_copies=DEFAULT_WORKBOOK_COLUMN_COPIES,
         workbook_header_row=DEFAULT_WORKBOOK_HEADER_ROW,
+        label_template_id=DEFAULT_LABEL_TEMPLATE_ID,
     )
 
 

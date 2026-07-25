@@ -16,6 +16,7 @@ from classroom_library_label_maker.constants import (
     DEFAULT_BARCODE_MODULE_HEIGHT,
     DEFAULT_BARCODE_MODULE_WIDTH,
     DEFAULT_BARCODE_QUIET_ZONE,
+    DEFAULT_LABEL_TEMPLATE_ID,
     DEFAULT_LABEL_TYPE,
 )
 
@@ -39,6 +40,7 @@ def test_load_application_settings_reads_version(tmp_path: Path) -> None:
     assert settings.log_directory == tmp_path / "logs"
     assert settings.template_directory == tmp_path / "assets" / "templates"
     assert settings.default_label_type == DEFAULT_LABEL_TYPE
+    assert settings.label_template_id == DEFAULT_LABEL_TEMPLATE_ID
     assert settings.log_file == tmp_path / "logs" / "application.log"
     assert settings.barcode_module_width == DEFAULT_BARCODE_MODULE_WIDTH
     assert settings.barcode_module_height == DEFAULT_BARCODE_MODULE_HEIGHT

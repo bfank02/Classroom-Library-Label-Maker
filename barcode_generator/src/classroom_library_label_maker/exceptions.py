@@ -59,3 +59,7 @@ class BarcodeGenerationError(ApplicationError):
 
 class FileSystemError(ApplicationError):
     """Raised when required files or directories cannot be read or written."""
+
+
+class LabelLayoutError(ApplicationError):
+    """Raised when label layout fails unrecoverably."""

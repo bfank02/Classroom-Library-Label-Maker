@@ -17,6 +17,7 @@ from classroom_library_label_maker.exceptions import (
     FileSystemError,
     InvalidISBNError,
     InvalidWorkbookError,
+    LabelLayoutError,
     ValidationError,
 )
 from classroom_library_label_maker.metadata import (
@@ -38,6 +39,8 @@ from classroom_library_label_maker.models import (
     BookProcessingStatus,
     ImportResult,
     ImportWarning,
+    LabelLayoutResult,
+    LabelLayoutWarning,
     ValidationErrorCode,
     ValidationResult,
 )
@@ -64,6 +67,9 @@ __all__ = [
     "ImportWarning",
     "InvalidISBNError",
     "InvalidWorkbookError",
+    "LabelLayoutError",
+    "LabelLayoutResult",
+    "LabelLayoutWarning",
     "ValidationError",
     "ValidationErrorCode",
     "ValidationResult",

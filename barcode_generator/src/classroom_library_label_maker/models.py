@@ -13,6 +13,7 @@ from classroom_library_label_maker.constants import (
     DEFAULT_BARCODE_MODULE_HEIGHT,
     DEFAULT_BARCODE_MODULE_WIDTH,
     DEFAULT_BARCODE_QUIET_ZONE,
+    DEFAULT_LABEL_TEMPLATE_ID,
     DEFAULT_WORKBOOK_COLUMN_AUTHOR,
     DEFAULT_WORKBOOK_COLUMN_COPIES,
     DEFAULT_WORKBOOK_COLUMN_ISBN,
@@ -529,6 +530,80 @@ class ImportResult:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class LabelLayoutWarning:
+    """Recoverable layout issue with diagnostic context.
+
+    Attributes:
+        message: Human-readable description.
+        isbn: ISBN related to the warning, when applicable.
+        page_number: 1-based page when applicable.
+        code: Short machine-readable code.
+    """
+
+    message: str
+    isbn: str | None = None
+    page_number: int | None = None
+    code: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize this warning to a JSON-compatible dictionary."""
+        return {
+            "message": self.message,
+            "isbn": self.isbn,
+            "page_number": self.page_number,
+            "code": self.code,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class LabelLayoutResult:
+    """Outcome of arranging books onto label worksheet pages.
+
+    Immutable value object — treat instances as read-only after construction.
+
+    Attributes:
+        pages_created: Number of worksheet pages created.
+        labels_placed: Number of labels successfully placed.
+        empty_labels_remaining_on_last_page: Unused slots on the final page.
+        elapsed_seconds: Wall-clock duration of the layout run.
+        warnings: Recoverable issues encountered during layout.
+        template_id: Template used for layout.
+    """
+
+    pages_created: int = 0
+    labels_placed: int = 0
+    empty_labels_remaining_on_last_page: int = 0
+    elapsed_seconds: float = 0.0
+    warnings: tuple[LabelLayoutWarning, ...] = ()
+    template_id: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize layout results to a JSON-compatible dictionary."""
+        return {
+            "summary": {
+                "pages_created": self.pages_created,
+                "labels_placed": self.labels_placed,
+                "empty_labels_remaining_on_last_page": (
+                    self.empty_labels_remaining_on_last_page
+                ),
+                "elapsed_seconds": self.elapsed_seconds,
+                "warning_count": len(self.warnings),
+                "template_id": self.template_id,
+            },
+            "warnings": [warning.to_dict() for warning in self.warnings],
+        }
+
+    def __repr__(self) -> str:
+        """Return a developer-friendly representation."""
+        return (
+            f"LabelLayoutResult(pages={self.pages_created}, "
+            f"labels={self.labels_placed}, "
+            f"empty_remaining={self.empty_labels_remaining_on_last_page}, "
+            f"elapsed_seconds={self.elapsed_seconds!r})"
+        )
+
+
 @dataclass(slots=True)
 class ApplicationSettings:
     """Project-wide and per-run application settings.
@@ -557,6 +632,7 @@ class ApplicationSettings:
         workbook_column_author: Header name for the author column.
         workbook_column_copies: Header name for the copies column.
         workbook_header_row: 1-based header row index.
+        label_template_id: Registered label template id (e.g. ``avery-5160``).
     """
 
     barcode_output_directory: Path
@@ -582,6 +658,7 @@ class ApplicationSettings:
     workbook_column_author: str = DEFAULT_WORKBOOK_COLUMN_AUTHOR
     workbook_column_copies: str = DEFAULT_WORKBOOK_COLUMN_COPIES
     workbook_header_row: int = DEFAULT_WORKBOOK_HEADER_ROW
+    label_template_id: str = DEFAULT_LABEL_TEMPLATE_ID
 
     def __post_init__(self) -> None:
         """Normalize path fields to :class:`~pathlib.Path` instances."""
@@ -601,6 +678,8 @@ class ApplicationSettings:
             raise ValueError("app_version must not be empty")
         if not self.default_label_type.strip():
             raise ValueError("default_label_type must not be empty")
+        if not self.label_template_id.strip():
+            raise ValueError("label_template_id must not be empty")
         if self.barcode_module_width <= 0:
             raise ValueError("barcode_module_width must be positive")
         if self.barcode_module_height <= 0:

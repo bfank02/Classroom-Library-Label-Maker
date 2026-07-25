@@ -130,6 +130,7 @@ barcode_generator/src/classroom_library_label_maker/
 │   ├── barcode_generation_service.py
 │   ├── batch_processing_service.py
 │   ├── excel_import_service.py
+│   ├── label_layout_service.py
 │   ├── barcode_generator.py
 │   ├── batch_processor.py
 │   ├── protocols.py
@@ -139,8 +140,15 @@ barcode_generator/src/classroom_library_label_maker/
 │   ├── renderer.py      BarcodeRenderer protocol
 │   └── barcode_renderer.py  PythonBarcodeRenderer (EAN-13 PNG)
 ├── workbooks/           Spreadsheet / workbook I/O (library-agnostic)
-│   ├── workbook_reader.py           WorkbookReader protocol
-│   └── openpyxl_workbook_reader.py  OpenPyxlWorkbookReader
+│   ├── workbook_reader.py              WorkbookReader protocol
+│   ├── openpyxl_workbook_reader.py     OpenPyxlWorkbookReader
+│   ├── label_sheet_target.py           LabelSheetTarget + LabelPlacement
+│   ├── in_memory_label_sheet_target.py InMemoryLabelSheetTarget
+│   └── openpyxl_label_sheet_target.py  OpenPyxlLabelSheetTarget (no save)
+├── label_templates/     Physical label-sheet specs (inches, immutable)
+│   ├── label_template.py            LabelTemplate protocol + LabelTemplateSpec
+│   ├── avery_5160.py                Avery 5160 layout data
+│   └── template_registry.py         TemplateRegistry
 └── utils/
     └── file_utils.py
 ```
@@ -167,10 +175,11 @@ Root package `__init__` exports a narrow public API (models + exceptions +
 | `exceptions` | Typed application errors |
 | `config` | Project root, VERSION, asset/runtime paths |
 | `logger` | Production logging setup (no import-time side effects) |
-| `services.*` | Validation, generation, batch orchestration |
+| `services.*` | Validation, generation, batch, import, label layout |
 | `services.protocols` | Extension contracts for lookups / covers |
 | `rendering` | Library-agnostic barcode image rendering |
-| `workbooks` | Library-agnostic spreadsheet / workbook I/O |
+| `workbooks` | Library-agnostic spreadsheet read / label-sheet write |
+| `label_templates` | Immutable physical label-sheet specifications |
 | `utils.file_utils` | JSON + directory helpers |
 | `constants` | Operational defaults (paths, log sizes) — not product branding |
 
@@ -336,9 +345,9 @@ Do not implement these until a feature sprint requires them.
 
 ## Workbook layer (`workbooks/`)
 
-Spreadsheet **I/O** is isolated from import orchestration and domain mapping
-so a future Excel Import Engine can load rows without depending on openpyxl
-(or any other vendor) in services.
+Spreadsheet **I/O** is isolated from import orchestration, label layout, and
+domain mapping so services never depend on openpyxl (or any other vendor)
+directly.
 
 ```
 Application
@@ -352,21 +361,37 @@ OpenPyxlWorkbookReader      (workbooks/openpyxl_workbook_reader.py)
 openpyxl
 ```
 
+```
+Application
+    ↓
+LabelLayoutService          (services/label_layout_service.py)
+    ↓
+LabelSheetTarget            (workbooks/label_sheet_target.py — protocol)
+    ↓
+OpenPyxlLabelSheetTarget / InMemoryLabelSheetTarget
+    ↓
+openpyxl (write path only; no workbook save)
+```
+
 **Why isolate Excel-specific code?**
 
 * Keeps openpyxl types (workbooks, worksheets, cells) out of services and CLI
-* Allows swapping backends without rewriting import / batch orchestration
-* Makes testing import logic possible with a fake `WorkbookReader`
+* Allows swapping backends without rewriting import / layout orchestration
+* Makes testing possible with fake readers / `InMemoryLabelSheetTarget`
 * Mirrors the `BarcodeRenderer` pattern used for barcode image encoding
 
 **Public API**
 
 * `WorkbookReader` — protocol: `open`, `close`, `sheet_names`, `iter_rows`
 * `OpenPyxlWorkbookReader` — openpyxl backend (plain string cells only)
+* `LabelSheetTarget` — protocol: `begin_page`, `place_label`
+* `LabelPlacement` — immutable placement payload (title, author, ISBN, barcode)
+* `InMemoryLabelSheetTarget` — records pages/placements for tests
+* `OpenPyxlLabelSheetTarget` — openpyxl placement adapter (**does not save**)
 
 `iter_rows` yields plain `(str | None, ...)` tuples only — never vendor cell
 objects. Mapping those rows into `Book` instances is the job of
-`ExcelImportService`.
+`ExcelImportService`. Layout writes go through `LabelPlacement` only.
 
 ### Excel import service (`services/excel_import_service.py`)
 
@@ -424,6 +449,75 @@ Additional backends can implement `WorkbookReader` without changing callers:
 
 Do not implement these until a feature sprint requires them.
 
+## Label templates (`label_templates/`)
+
+Physical **label-sheet geometry** is isolated from layout placement, Excel
+worksheets, and printing. Templates are immutable value objects measured in
+**inches only** — never pixels, points, printer dots, or Excel row/column units.
+
+```
+ApplicationSettings.label_template_id
+        │
+        ▼
+TemplateRegistry
+        │
+        ▼
+LabelTemplate / AVERY_5160
+        │
+        ▼
+LabelLayoutService
+        │
+        ▼
+LabelSheetTarget
+```
+
+**Why separate layout data from rendering?**
+
+* `LabelLayoutService` places labels using inches from `LabelTemplate` without
+  knowing Avery vs Brother vs custom vendors
+* Worksheet adapters convert inches → Excel column/row units at the edge
+* New templates register in `TemplateRegistry` without modifying the layout
+  service
+
+**Public API**
+
+* `LabelTemplate` — protocol for physical sheet specs
+* `LabelTemplateSpec` — frozen dataclass implementation
+* `TemplateRegistry` / `create_default_template_registry()`
+* `AVERY_5160` (`template_id`: `avery-5160`) — built-in Avery 5160 data
+
+`ApplicationSettings.label_template_id` defaults to `avery-5160`.
+
+### Label layout service (`services/label_layout_service.py`)
+
+`LabelLayoutService` arranges already-imported `Book` objects onto worksheet
+pages using the selected `LabelTemplate` and a `LabelSheetTarget`:
+
+* Calculates grid positions from `template.rows` / `template.columns`
+* Paginates when a page is full (never silently discards labels)
+* Places title, author, ISBN, and barcode image (or placeholder)
+* Returns immutable `LabelLayoutResult` with pages/labels/empty-slot stats,
+  timing, and warnings
+* Raises `ConfigurationError` for unknown templates and `LabelLayoutError`
+  for unrecoverable layout failures
+
+It does **not** generate barcodes, validate ISBNs, import workbooks, print,
+save workbooks, or display UI. Optional `barcode_paths` map ISBN → PNG;
+missing files become placeholders with warnings.
+
+### Future label template extension points
+
+| Future template | Intent |
+|-----------------|--------|
+| Avery 5163 | Larger shipping / barcode labels |
+| Avery 8160 | Same geometry as 5160 (Easy Peel variant) |
+| Avery 5260 | Compatible 5160-geometry product line |
+| A4-compatible templates | Metric page size / regional products |
+| Brother label sheets | Brother-branded sheet geometries |
+| Custom user-defined templates | Teacher-specific or district templates |
+
+Register new `LabelTemplateSpec` instances; do not change `LabelLayoutService`.
+
 ## Application metadata (`metadata.py`)
 
 Product-facing strings are centralized so installers, CLI help, logs, and
@@ -463,15 +557,21 @@ BatchProcessingService.process_books()
     └─ BarcodeGenerationService.generate_for_book()  (valid only)
     │
     ▼
-BatchProcessingResult  (counts, elapsed_seconds, per-book outcomes)
+BatchProcessingResult + barcode PNG paths
     │
     ▼
-results JSON + output/barcodes/*.png   (CLI / BatchProcessor adapters)
+LabelLayoutService.layout_books()
+    │
+    ├─ TemplateRegistry / LabelTemplate
+    └─ LabelSheetTarget.place_label()
+    │
+    ▼
+LabelLayoutResult  (pages, labels, empty slots, warnings)
 logs/application.log (rotating)
 ```
 
-`ExcelImportService` only produces `Book` + `ImportResult`. Validation and
-barcode generation remain separate services.
+`ExcelImportService` only produces `Book` + `ImportResult`. Validation,
+barcode generation, and label layout remain separate services.
 
 ## Folder purposes
 
@@ -500,8 +600,11 @@ barcode generation remain separate services.
 5. **Workbook readers** — additional `WorkbookReader` implementations under
    `workbooks/` (CSV, Google Sheets, OneDrive, LibreOffice)
 6. **Inventory / checkout / reading levels** — extend `Book` optional fields
-7. **Multiple label templates** — `assets/templates/` + `default_label_type`
-8. **Auto-update / installer** — `installer/` + `releases/` driven by `VERSION`
+7. **Label templates** — additional `LabelTemplateSpec` entries (5163, 8160,
+   A4, Brother, custom) via `TemplateRegistry`
+8. **Workbook save / print** — persist layout worksheets; print preview
+9. **Multiple label templates** — `assets/templates/` + `label_template_id`
+10. **Auto-update / installer** — `installer/` + `releases/` driven by `VERSION`
 
 ## Coding standards
 
