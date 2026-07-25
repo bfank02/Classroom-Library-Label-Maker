@@ -13,8 +13,8 @@ label workbook. Packaged for Windows via PyInstaller.
 
 **Desktop GUI:** PySide6 main window collects inputs and invokes
 `WorkbookGenerationService` on a background Qt worker thread (same engine as
-CLI). Progress / cancellation not implemented yet. **Not implemented yet:**
-printing / print preview, Excel VBA UI.
+CLI), with stage progress in the status line. Cancellation not implemented yet.
+**Not implemented yet:** printing / print preview, Excel VBA UI.
 
 **Deprecated (unused by CLI):** `BatchProcessor`, `BarcodeGenerator`,
 `BatchResults` — do not use for new development.
@@ -58,6 +58,7 @@ barcode_generator/
 │       ├── cli/
 │       │   ├── parser.py           # Argparse + subcommands
 │       │   └── commands.py         # Command handlers + dispatch
+│       ├── progress.py             # GenerationStage / GenerationProgress
 │       ├── gui/                    # Desktop presentation (PySide6)
 │       │   ├── __main__.py         # python -m …gui
 │       │   ├── app.py              # QApplication bootstrap
@@ -333,7 +334,7 @@ label-maker-gui
 Both call `classroom_library_label_maker.gui:main`, which creates
 `QApplication`, shows `MainWindow`, and runs the Qt event loop.
 
-### Current user workflow (RC3.3)
+### Current user workflow (RC3.4)
 
 The main window collects generation inputs and runs the engine **in the
 background**:
@@ -346,8 +347,10 @@ background**:
    `WorkbookGenerationService` on a Qt worker thread
 
 While generating, Browse buttons, the template combo, and Generate are
-disabled (duplicate Generate clicks are ignored). The window stays responsive
-(move / minimize / repaint). Status shows `Generating labels…`.
+disabled (duplicate Generate clicks are ignored). The window stays responsive.
+The status line shows engine stage updates (`Importing workbook...`,
+`Validating books...`, `Generating barcodes...`, `Creating labels...`,
+`Saving workbook...`).
 
 On success, the status area shows a concise summary (labels / pages / output
 path). On failure, it shows a user-friendly message (no Python traceback).
@@ -360,13 +363,15 @@ The generated workbook is **not** opened automatically.
 | `gui/app.py` | `QApplication` bootstrap + event loop |
 | `gui/main_window.py` | Widgets / layout / accessibility |
 | `gui/controller.py` | Form actions, validation, start/finish generation |
-| `gui/generation_worker.py` | `QObject` worker: run service, emit completed/failed |
+| `gui/generation_worker.py` | `QObject` worker: run service, emit progress/completed/failed |
 | `gui/form_state.py` | Immutable selections + validation messages |
+| `progress.py` | Qt-free `GenerationStage` / `GenerationProgress` / reporter protocol |
 
 - Importing `classroom_library_label_maker.gui` does not start Qt; only `main()`
   does
 - Controller must not contain ISBN / import / barcode / layout business logic
 - Worker must not touch widgets; service must not import Qt
+- Progress originates in `WorkbookGenerationService` (reusable by a future CLI)
 - Native `QFileDialog` for files and folders (no platform-specific branches)
 - GUI and CLI share `WorkbookGenerationService` (identical generation path)
 

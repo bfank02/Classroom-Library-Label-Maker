@@ -42,6 +42,11 @@ from classroom_library_label_maker.workbooks.openpyxl_workbook_writer import (
     OpenPyxlWorkbookWriter,
 )
 from classroom_library_label_maker.workbooks.workbook_writer import WorkbookWriter
+from classroom_library_label_maker.progress import (
+    GenerationProgress,
+    GenerationProgressReporter,
+    GenerationStage,
+)
 
 _logger = get_logger("workbook_generation_service")
 
@@ -65,6 +70,7 @@ class WorkbookGenerationService:
         batch_processor: BatchProcessingService | None = None,
         layout_service: LabelLayoutService | None = None,
         writer: WorkbookWriter | None = None,
+        progress_reporter: GenerationProgressReporter | None = None,
     ) -> None:
         """Initialize the generation service.
 
@@ -75,18 +81,21 @@ class WorkbookGenerationService:
             layout_service: Optional layout service override.
             writer: Optional workbook writer (defaults to
                 :class:`OpenPyxlWorkbookWriter`).
+            progress_reporter: Optional progress hook (GUI/CLI); Qt-unaware.
         """
         self._settings = settings
         self._importer = importer or ExcelImportService(settings)
         self._batch = batch_processor or BatchProcessingService(settings)
         self._layout = layout_service or LabelLayoutService(settings)
         self._writer: WorkbookWriter = writer or OpenPyxlWorkbookWriter()
+        self._progress = progress_reporter
 
     def generate(
         self,
         *,
         workbook_path: Path | None = None,
         output_path: Path | None = None,
+        progress_reporter: GenerationProgressReporter | None = None,
     ) -> WorkbookGenerationResult:
         """Import books, generate barcodes, layout labels, and save a workbook.
 
@@ -94,6 +103,8 @@ class WorkbookGenerationService:
             workbook_path: Optional inventory workbook override.
             output_path: Optional destination for the label workbook. Defaults to
                 ``{project_root}/output/library_labels.xlsx``.
+            progress_reporter: Optional per-call progress override. When omitted,
+                uses the reporter supplied at construction (if any).
 
         Returns:
             Immutable :class:`WorkbookGenerationResult`.
@@ -105,6 +116,9 @@ class WorkbookGenerationService:
             LabelLayoutError: When layout fails unrecoverably.
             WorkbookGenerationError: When orchestration fails unrecoverably.
         """
+        reporter = (
+            progress_reporter if progress_reporter is not None else self._progress
+        )
         started = time.perf_counter()
         destination = self._resolve_output_path(output_path)
         warnings: list[WorkbookGenerationWarning] = []
@@ -116,6 +130,7 @@ class WorkbookGenerationService:
         )
 
         try:
+            self._report(reporter, GenerationStage.IMPORTING)
             imported = self._importer.import_books(workbook_path)
             _logger.info(
                 "Workbook imported: books=%s warnings=%s",
@@ -124,6 +139,8 @@ class WorkbookGenerationService:
             )
             warnings.extend(self._from_import_warnings(imported.warnings))
 
+            self._report(reporter, GenerationStage.VALIDATING)
+            self._report(reporter, GenerationStage.GENERATING_BARCODES)
             batch = self._batch.process_books(imported.books)
             _logger.info(
                 "Barcode generation complete: processed=%s generated=%s reused=%s",
@@ -138,6 +155,7 @@ class WorkbookGenerationService:
 
             self._writer.create_workbook()
             try:
+                self._report(reporter, GenerationStage.CREATING_LABELS)
                 layout = self._layout.layout_books(
                     books_for_layout,
                     self._writer.get_label_sheet_target(),
@@ -151,6 +169,7 @@ class WorkbookGenerationService:
                 )
                 warnings.extend(self._from_layout_warnings(layout.warnings))
 
+                self._report(reporter, GenerationStage.SAVING)
                 try:
                     saved = self._writer.save(destination)
                 except OSError as exc:
@@ -200,6 +219,22 @@ class WorkbookGenerationService:
             result.elapsed_seconds,
         )
         return result
+
+    def _report(
+        self,
+        reporter: GenerationProgressReporter | None,
+        stage: GenerationStage,
+    ) -> None:
+        if reporter is None:
+            return
+        progress = GenerationProgress.for_stage(stage)
+        try:
+            reporter.on_progress(progress)
+        except Exception:
+            _logger.exception(
+                "Progress reporter failed for stage %s",
+                stage.value,
+            )
 
     def _resolve_output_path(self, output_path: Path | None) -> Path:
         if output_path is not None:

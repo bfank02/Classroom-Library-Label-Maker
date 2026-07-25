@@ -78,6 +78,7 @@ class _RecordingService:
         *,
         workbook_path: Path | None = None,
         output_path: Path | None = None,
+        progress_reporter=None,
     ) -> WorkbookGenerationResult:
         self.calls.append(
             {"workbook_path": workbook_path, "output_path": output_path}
@@ -224,10 +225,12 @@ def test_gui_generation_matches_direct_service_path(
                 *,
                 workbook_path: Path | None = None,
                 output_path: Path | None = None,
+                progress_reporter=None,
             ) -> WorkbookGenerationResult:
                 result = self._inner.generate(
                     workbook_path=workbook_path,
                     output_path=output_path,
+                    progress_reporter=progress_reporter,
                 )
                 gui_results.append(result)
                 return result

@@ -88,7 +88,7 @@ def test_generation_worker_emits_completed(qapp, tmp_paths: dict[str, Path]) -> 
 
     def factory(_settings: ApplicationSettings) -> object:
         class Stub:
-            def generate(self, *, workbook_path=None, output_path=None):
+            def generate(self, *, workbook_path=None, output_path=None, progress_reporter=None):
                 return WorkbookGenerationResult(
                     labels_created=3,
                     pages_created=1,
@@ -123,7 +123,7 @@ def test_generation_worker_emits_failed(qapp, tmp_paths: dict[str, Path]) -> Non
 
     def factory(_settings: ApplicationSettings) -> object:
         class Stub:
-            def generate(self, *, workbook_path=None, output_path=None):
+            def generate(self, *, workbook_path=None, output_path=None, progress_reporter=None):
                 raise InvalidWorkbookError("bad workbook")
 
         return Stub()
@@ -145,7 +145,7 @@ def test_controls_disabled_during_generation_and_restored_on_success(
 
     def factory(_settings: ApplicationSettings) -> object:
         class Slow:
-            def generate(self, *, workbook_path=None, output_path=None):
+            def generate(self, *, workbook_path=None, output_path=None, progress_reporter=None):
                 time.sleep(0.25)
                 return WorkbookGenerationResult(
                     labels_created=1,
@@ -184,7 +184,7 @@ def test_controls_restored_after_failure(
 
     def factory(_settings: ApplicationSettings) -> object:
         class SlowFail:
-            def generate(self, *, workbook_path=None, output_path=None):
+            def generate(self, *, workbook_path=None, output_path=None, progress_reporter=None):
                 time.sleep(0.25)
                 raise InvalidWorkbookError("Inventory workbook could not be read.")
 
@@ -211,7 +211,7 @@ def test_duplicate_generate_ignored_while_running(
 
     def factory(_settings: ApplicationSettings) -> object:
         class Slow:
-            def generate(self, *, workbook_path=None, output_path=None):
+            def generate(self, *, workbook_path=None, output_path=None, progress_reporter=None):
                 calls["count"] += 1
                 time.sleep(0.25)
                 return WorkbookGenerationResult(

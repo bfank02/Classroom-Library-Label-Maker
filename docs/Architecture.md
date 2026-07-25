@@ -143,12 +143,13 @@ barcode_generator/src/classroom_library_label_maker/
 ├── cli/
 │   ├── parser.py        Argparse + subcommands
 │   └── commands.py      Handlers + dispatch registry
+├── progress.py          GenerationStage / GenerationProgress / reporter protocol
 ├── gui/                 Desktop presentation layer (PySide6)
 │   ├── __main__.py      python -m classroom_library_label_maker.gui
 │   ├── app.py           QApplication bootstrap + event loop
 │   ├── main_window.py   Input form (paths, template, Generate)
 │   ├── controller.py    Form state actions + start/finish generation
-│   ├── generation_worker.py  QObject worker (service call only)
+│   ├── generation_worker.py  QObject worker (service call + progress forward)
 │   └── form_state.py    Immutable selections + validation messages
 ├── services/
 │   ├── isbn_validator.py
@@ -200,6 +201,7 @@ Root package `__init__` exports a narrow public API (models + exceptions +
 |------|----------------|
 | `main` | Startup: parse → configure → log → dispatch |
 | `cli` | CLI parsing and command handlers |
+| `progress` | Qt-free generation stage events for GUI/CLI adapters |
 | `gui` | Desktop presentation (PySide6); thin adapter only |
 | `gui.generation_worker` | Background `QObject` that runs the generation service |
 | `gui.form_state` | Immutable GUI selections + field validation messages |
@@ -651,10 +653,10 @@ logs/application.log (rotating)
 orchestration, label layout, label workbook **save**, CLI `generate` and
 desktop GUI via `WorkbookGenerationService`
 (`python -m classroom_library_label_maker.gui`). GUI generation runs on a
-Qt worker thread so the window stays responsive.
+Qt worker thread with stage progress in the status line.
 
-**Not implemented:** GUI progress reporting / cancellation, **printing** /
-print preview, Excel VBA UI (Phase 2).
+**Not implemented:** GUI cancellation, **printing** / print preview, Excel VBA
+UI (Phase 2). CLI does not yet print progress events (hooks are ready).
 
 ### Desktop GUI launch
 
@@ -668,27 +670,35 @@ python -m classroom_library_label_maker.gui
 label-maker-gui   # same entry point after pip install
 ```
 
-### Desktop GUI workflow (RC3.3 — responsive)
+### Desktop GUI workflow (RC3.4 — progress)
 
 ```
 MainWindow
-  Inventory / Barcode / Output / Template  → form inputs
   Generate Labels
       → GuiController validates + build_application_settings()
       → GenerationJob (immutable inputs)
       → QThread + GenerationWorker.run()
-            → WorkbookGenerationService.generate()   # same engine as CLI
-            → emit completed(result) | failed(exc)
-      → GuiController updates status + restores controls
+            → WorkbookGenerationService.generate(progress_reporter=…)
+                → GenerationProgress (stage + message)
+            → emit progress / completed(result) | failed(exc)
+      → GuiController updates status label
 ```
 
-While a job is running, Browse / template / Generate are disabled and
-duplicate Generate requests are ignored. The worker never touches widgets;
-`WorkbookGenerationService` never imports Qt.
+Progress originates in the engine (`progress.GenerationStage` /
+`GenerationProgress` / `GenerationProgressReporter`). The worker only forwards
+events; the controller only displays them. `WorkbookGenerationService` remains
+Qt-unaware and can feed a future CLI progress consumer without API redesign.
 
-`GuiController` remains a thin adapter: form state + settings construction +
-start/finish handling. It must not import openpyxl or python-barcode, and must
-not duplicate engine logic.
+Stages (significant transitions only):
+
+* Importing workbook...
+* Validating books...
+* Generating barcodes...
+* Creating labels...
+* Saving workbook...
+
+While a job is running, Browse / template / Generate are disabled and
+duplicate Generate requests are ignored.
 
 ### CLI `generate` (canonical runtime)
 
@@ -728,23 +738,25 @@ by `WorkbookGenerationService`.
 
 ## Future extension points
 
-1. **Desktop GUI progress / cancellation** — optional progress UI and
-   cooperative cancel (keep `WorkbookGenerationService` unaware of Qt)
-2. **CLI commands** — `validate`, `clean`, `diagnostics` already registered
-3. **ISBN lookup APIs** — `IsbnLookupService` under `services/lookups/`
-4. **Cover downloads** — `CoverDownloadService` under `services/covers/`
-5. **Rendering backends** — additional `BarcodeRenderer` implementations under
+1. **Desktop GUI cancellation** — cooperative cancel (keep
+   `WorkbookGenerationService` unaware of Qt)
+2. **CLI progress output** — consume `GenerationProgressReporter` without
+   changing the generation pipeline
+3. **CLI commands** — `validate`, `clean`, `diagnostics` already registered
+4. **ISBN lookup APIs** — `IsbnLookupService` under `services/lookups/`
+5. **Cover downloads** — `CoverDownloadService` under `services/covers/`
+6. **Rendering backends** — additional `BarcodeRenderer` implementations under
    `rendering/` (SVG, QR, Code128, alternate libraries)
-6. **Workbook readers** — additional `WorkbookReader` implementations under
+7. **Workbook readers** — additional `WorkbookReader` implementations under
    `workbooks/` (CSV, Google Sheets, OneDrive, LibreOffice)
-7. **Inventory / checkout / reading levels** — extend `Book` optional fields
-8. **Label templates** — additional `LabelTemplateSpec` entries (5163, 8160,
+8. **Inventory / checkout / reading levels** — extend `Book` optional fields
+9. **Label templates** — additional `LabelTemplateSpec` entries (5163, 8160,
    A4, Brother, custom) via `TemplateRegistry`
-9. **Print / print preview** — print the saved label workbook
-10. **Additional label templates** — register more `LabelTemplateSpec` ids;
+10. **Print / print preview** — print the saved label workbook
+11. **Additional label templates** — register more `LabelTemplateSpec` ids;
    configure via `label_template_id`
-11. **Auto-update / installer** — `installer/` + `releases/` driven by `VERSION`
-12. **Remove deprecated stubs** — `BatchProcessor` / `BarcodeGenerator` /
+12. **Auto-update / installer** — `installer/` + `releases/` driven by `VERSION`
+13. **Remove deprecated stubs** — `BatchProcessor` / `BarcodeGenerator` /
     `BatchResults` once no transitional imports remain
 
 ## Coding standards

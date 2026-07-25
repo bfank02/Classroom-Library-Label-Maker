@@ -183,7 +183,7 @@ def test_generate_labels_uses_injected_service(
         def __init__(self, settings: ApplicationSettings) -> None:
             self.settings = settings
 
-        def generate(self, *, workbook_path=None, output_path=None):
+        def generate(self, *, workbook_path=None, output_path=None, progress_reporter=None):
             calls.append((workbook_path, output_path))
             return WorkbookGenerationResult(
                 labels_created=1,
