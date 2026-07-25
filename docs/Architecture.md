@@ -132,6 +132,9 @@ barcode_generator/src/classroom_library_label_maker/
 │   ├── protocols.py
 │   ├── lookups/         Future catalog APIs
 │   └── covers/          Future cover downloads
+├── rendering/           Barcode image rendering (library-agnostic)
+│   ├── renderer.py      BarcodeRenderer protocol
+│   └── barcode_renderer.py  PythonBarcodeRenderer placeholder
 └── utils/
     └── file_utils.py
 ```
@@ -160,6 +163,7 @@ Root package `__init__` exports a narrow public API (models + exceptions +
 | `logger` | Production logging setup (no import-time side effects) |
 | `services.*` | Validation, generation, batch orchestration |
 | `services.protocols` | Extension contracts for lookups / covers |
+| `rendering` | Library-agnostic barcode image rendering |
 | `utils.file_utils` | JSON + directory helpers |
 | `constants` | Operational defaults (paths, log sizes) — not product branding |
 
@@ -195,6 +199,50 @@ is populated from that message.
 Engineering timings live under `barcode_generator/tests/benchmarks/`. They are
 **not** part of the normal unit-test suite and must **never** fail CI. See the
 barcode generator README for how to run them and how to interpret results.
+
+## Rendering layer (`rendering/`)
+
+Barcode **image encoding** is isolated from business logic so the generation
+service can orchestrate validation, skip/overwrite rules, and results JSON
+without depending on a specific barcode library.
+
+```
+Application (CLI / future Excel)
+        ↓
+Barcode Generation Service  (services/barcode_generator.py)
+        ↓
+BarcodeRenderer             (rendering/renderer.py — protocol)
+        ↓
+PythonBarcodeRenderer       (rendering/barcode_renderer.py — placeholder)
+        ↓
+Third-party barcode library (e.g. python-barcode + Pillow — future)
+```
+
+**Why isolate rendering?**
+
+* Keeps vendor types (python-barcode, Pillow, etc.) out of services and CLI
+* Allows swapping backends without rewriting batch orchestration
+* Makes testing the service possible with a fake/mock renderer
+
+**Public API**
+
+* `BarcodeRenderer` — protocol: `render_to_file(data, output_path, *, symbology) -> Path`
+* `BarcodeSymbology` — `EAN13` (planned), plus reserved `CODE128` / `QR`
+* `PythonBarcodeRenderer` — placeholder; raises `NotImplementedError` until the
+  Barcode Generation Engine sprint
+
+### Future renderer extension points
+
+Additional backends can implement `BarcodeRenderer` without changing callers:
+
+| Future renderer | Intent |
+|-----------------|--------|
+| SVG renderer | Vector barcodes for print pipelines |
+| QR code renderer | Alternate symbology via `BarcodeSymbology.QR` |
+| Code128 renderer | Non-ISBN linear codes via `BarcodeSymbology.CODE128` |
+| Alternate libraries | Drop-in replacements for python-barcode |
+
+Do not implement these until a feature sprint requires them.
 
 ## Application metadata (`metadata.py`)
 
@@ -260,9 +308,10 @@ ApplicationSettings ──► BatchProcessor.run()
 1. **CLI commands** — `validate`, `clean`, `diagnostics` already registered
 2. **ISBN lookup APIs** — `IsbnLookupService` under `services/lookups/`
 3. **Cover downloads** — `CoverDownloadService` under `services/covers/`
-4. **Inventory / checkout / reading levels** — extend `Book` optional fields
-5. **Multiple label templates** — `assets/templates/` + `default_label_type`
-6. **Additional barcode formats** — new generator strategies beside EAN-13
+4. **Rendering backends** — additional `BarcodeRenderer` implementations under
+   `rendering/` (SVG, QR, Code128, alternate libraries)
+5. **Inventory / checkout / reading levels** — extend `Book` optional fields
+6. **Multiple label templates** — `assets/templates/` + `default_label_type`
 7. **Auto-update / installer** — `installer/` + `releases/` driven by `VERSION`
 
 ## Coding standards

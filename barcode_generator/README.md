@@ -51,6 +51,9 @@ barcode_generator/
 │       │   ├── protocols.py        # Lookup / cover contracts
 │       │   ├── lookups/            # Future ISBN APIs
 │       │   └── covers/             # Future cover downloads
+│       ├── rendering/              # Barcode image rendering (protocol + backends)
+│       │   ├── renderer.py
+│       │   └── barcode_renderer.py
 │       └── utils/
 │           └── file_utils.py
 │
