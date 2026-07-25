@@ -10,6 +10,7 @@
 - [x] Label templates + label layout
 - [x] Workbook generation (import → barcodes → layout → save)
 - [x] CLI generate → WorkbookGenerationService
+- [x] Workbook presentation / print readiness
 - [x] Logging
 - [ ] Package as EXE
 - [ ] Remove deprecated `BatchProcessor` / `BarcodeGenerator` stubs

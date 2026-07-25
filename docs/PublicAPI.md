@@ -347,7 +347,21 @@ a `LabelSheetTarget` for layout, and saving to disk.
 ### `OpenPyxlWorkbookWriter` — Stable — External (default write backend)
 
 **Purpose:** openpyxl create/save adapter. Owns an `OpenPyxlLabelSheetTarget`
-for placement. **Does not print.**
+for placement. At save time applies workbook presentation (document properties,
+active `Labels 1` sheet). **Does not print.**
+
+### `workbook_presentation` — Stable — External (helpers)
+
+Module: `classroom_library_label_maker.workbooks.workbook_presentation`
+
+**Purpose:** Print-ready presentation helpers used by openpyxl adapters.
+Separate from generation orchestration.
+
+| Helper | Role |
+|--------|------|
+| `apply_workbook_properties(workbook, *, template=None)` | Title, subject, creator |
+| `activate_first_label_sheet(workbook)` | Active sheet = first `Labels N` |
+| `apply_worksheet_presentation(sheet, template)` | Gridlines, zoom, page setup, margins, print area from `LabelTemplate` |
 
 ### `InMemoryWorkbookWriter` — Stable — External
 
@@ -375,8 +389,9 @@ optional barcode path, and placeholder flag.
 ### `OpenPyxlLabelSheetTarget` — Stable — External (default write backend)
 
 **Purpose:** Place centered title/author/ISBN (and optional barcode image) onto
-openpyxl worksheets. Persisting the workbook is the job of
-`OpenPyxlWorkbookWriter` / `WorkbookWriter.save`.
+openpyxl worksheets with wrapping title text and worksheet print presentation.
+Persisting the workbook is the job of `OpenPyxlWorkbookWriter` /
+`WorkbookWriter.save`.
 
 ### `ExcelImportService` — Stable — External
 

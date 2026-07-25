@@ -24,6 +24,7 @@
 - [x] Label layout engine (`LabelLayoutService` + `LabelSheetTarget`)
 - [x] Workbook generation service (`WorkbookGenerationService` + `WorkbookWriter`)
 - [x] CLI `generate` → `WorkbookGenerationService`
+- [x] Workbook presentation / print readiness (openpyxl adapters)
 - [ ] Remove deprecated stubs (`BatchProcessor` / `BarcodeGenerator`) when unused
 - [ ] Package as EXE (`build.bat` / PyInstaller)
 
