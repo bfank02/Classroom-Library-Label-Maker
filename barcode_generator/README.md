@@ -26,7 +26,7 @@ barcode_generator/
 ├── pyproject.toml
 ├── .ruff.toml
 ├── .pre-commit-config.yaml
-├── requirements.txt
+├── requirements.txt            # Runtime only (python-barcode + Pillow)
 ├── build.bat
 ├── README.md
 │
@@ -45,18 +45,23 @@ barcode_generator/
 │       │   ├── parser.py           # Argparse + subcommands
 │       │   └── commands.py         # Command handlers + dispatch
 │       ├── services/
+│       │   ├── barcode_generation_service.py
 │       │   ├── barcode_generator.py
 │       │   ├── batch_processor.py
 │       │   ├── isbn_validator.py
 │       │   ├── protocols.py        # Lookup / cover contracts
 │       │   ├── lookups/            # Future ISBN APIs
 │       │   └── covers/             # Future cover downloads
+│       ├── rendering/              # Barcode image rendering (protocol + backends)
+│       │   ├── renderer.py
+│       │   └── barcode_renderer.py
 │       └── utils/
 │           └── file_utils.py
 │
 ├── tests/
 │   ├── conftest.py
 │   ├── benchmarks/             # Manual ISBN timing (not CI)
+│   ├── golden/                 # Optional golden PNGs + helpers
 │   ├── integration/                # Reserved for E2E tests
 │   └── test_*.py
 │
@@ -86,6 +91,18 @@ python -m pip install -e ".[dev,build]"
 python -m pytest
 python -m classroom_library_label_maker --version
 ```
+
+Dependency split:
+
+| Install | What you get |
+|---------|----------------|
+| `pip install -r requirements.txt` or `pip install .` | Runtime only: `python-barcode`, `Pillow` |
+| `pip install -e ".[dev]"` | + pytest, ruff, mypy, pre-commit, … |
+| `pip install -e ".[build]"` | + PyInstaller |
+| `pip install -e ".[dev,build]"` | Full local development (recommended) |
+
+The PyInstaller EXE bundles only what the app imports at runtime (stdlib +
+`python-barcode` + `Pillow`). Dev/build tools are never required inside the EXE.
 
 ### Linting and formatting (Ruff)
 
@@ -139,6 +156,46 @@ python -c "from classroom_library_label_maker.services import IsbnValidator; v=I
 Failure text comes from `ValidationErrorCode.message`. See
 [`docs/Architecture.md`](../docs/Architecture.md) for the full contract.
 
+### Barcode generation
+
+`BarcodeGenerationService` creates EAN-13 PNG files for validated books:
+
+```powershell
+python -c "
+from pathlib import Path
+from classroom_library_label_maker.config import load_application_settings
+from classroom_library_label_maker.models import Book
+from classroom_library_label_maker.services import BarcodeGenerationService
+
+settings = load_application_settings()
+book = Book(isbn='9780064400558', title='Demo', author='Author', copies=1)
+result = BarcodeGenerationService(settings).generate_for_book(book)
+print(result.status, result.output_path)
+"
+```
+
+- Output path: `{settings.barcode_output_directory}/{normalized_isbn}.png`
+- Existing files return `ALREADY_EXISTS` (no overwrite)
+- Rendering goes through `BarcodeRenderer` / `PythonBarcodeRenderer`
+- Renderer geometry comes from `ApplicationSettings` (`barcode_module_width`,
+  `barcode_module_height`, `barcode_quiet_zone`, `barcode_font_size`,
+  `barcode_dpi`) — defaults match the current EAN-13 PNG look
+
+### Manual barcode verification
+
+After changing renderer settings or dependencies, scan a sample PNG and confirm
+the decode equals the normalized ISBN-13 (example: **`9780064400558`**).
+
+Full checklist: [`docs/Barcode Scan Verification.md`](../docs/Barcode%20Scan%20Verification.md).
+
+### Golden barcode images
+
+`tests/golden/` stores optional known-good reference PNGs and comparison
+helpers. Comparisons use size tolerance + average-hash distance — **not**
+pixel-perfect or byte-identical checks. Missing goldens skip. See
+[`tests/golden/README.md`](tests/golden/README.md) for update steps
+(`UPDATE_GOLDEN=1`).
+
 ## Build process
 
 ```powershell
@@ -157,7 +214,8 @@ python -m pytest
 
 - Unit tests live beside fixtures in `tests/`.
 - `tests/integration/` is reserved for end-to-end runs once generation works.
-- Incomplete engine features remain `xfail` until implemented.
+- `tests/golden/` holds optional reference barcode PNGs (non-brittle compares).
+- Incomplete batch/label features may remain `xfail` until implemented.
 
 ### ISBN validator benchmarks (manual only)
 
@@ -226,11 +284,10 @@ python -m classroom_library_label_maker `
 python -m classroom_library_label_maker version
 ```
 
-> Core ISBN check-digit validation and PNG generation still raise
-> `NotImplementedError` by design until Sprint 1 feature work.
 ## Related documentation
 
 - [Architecture](../docs/Architecture.md)
+- [Barcode scan verification](../docs/Barcode%20Scan%20Verification.md)
 - [Software Design Specification](../docs/Software%20Design%20Specification.md)
 - [Development Roadmap](../docs/Development%20Roadmap.md)
 - [Sprint tasks](../TASKS.md)
