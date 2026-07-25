@@ -66,5 +66,8 @@ APP_DISTRIBUTION_NAME: str = "classroom-library-barcode-generator"
 APP_CLI_NAME: str = "barcode-generator"
 """Console script / argparse ``prog`` name."""
 
+APP_GUI_SCRIPT_NAME: str = "label-maker-gui"
+"""Console script name that launches the desktop GUI."""
+
 APP_COMPONENT_NAME: str = "Barcode Generator"
 """Name of this component within the larger product."""

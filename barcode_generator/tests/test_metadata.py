@@ -13,6 +13,7 @@ from classroom_library_label_maker.metadata import (
     APP_COPYRIGHT,
     APP_DESCRIPTION,
     APP_DISTRIBUTION_NAME,
+    APP_GUI_SCRIPT_NAME,
     APP_LICENSE,
     APP_NAME,
     APP_PACKAGE_NAME,
@@ -34,6 +35,7 @@ def test_metadata_constants_are_non_empty() -> None:
     assert APP_PACKAGE_NAME
     assert APP_DISTRIBUTION_NAME
     assert APP_CLI_NAME
+    assert APP_GUI_SCRIPT_NAME
     assert APP_COMPONENT_NAME
 
 

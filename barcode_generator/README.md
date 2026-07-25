@@ -11,7 +11,9 @@ label workbook. Packaged for Windows via PyInstaller.
 `ExcelImportService` → `BatchProcessingService` → `LabelLayoutService` →
 `WorkbookWriter.save`
 
-**Not implemented yet:** printing / print preview, Excel VBA UI.
+**Desktop GUI:** PySide6 main window collects inventory / barcode / output /
+template inputs (RC3.1). Generation is not wired yet. **Not implemented yet:**
+printing / print preview, Excel VBA UI.
 
 **Deprecated (unused by CLI):** `BatchProcessor`, `BarcodeGenerator`,
 `BatchResults` — do not use for new development.
@@ -55,6 +57,12 @@ barcode_generator/
 │       ├── cli/
 │       │   ├── parser.py           # Argparse + subcommands
 │       │   └── commands.py         # Command handlers + dispatch
+│       ├── gui/                    # Desktop presentation (PySide6)
+│       │   ├── __main__.py         # python -m …gui
+│       │   ├── app.py              # QApplication bootstrap
+│       │   ├── main_window.py      # Input form layout
+│       │   ├── controller.py       # Form actions + validation
+│       │   └── form_state.py       # Immutable selections
 │       ├── services/
 │       │   ├── isbn_validator.py
 │       │   ├── barcode_generation_service.py
@@ -119,20 +127,21 @@ python -m venv .venv
 python -m pip install -e ".[dev,build]"
 python -m pytest
 python -m classroom_library_label_maker --version
+python -m classroom_library_label_maker.gui
 ```
 
 Dependency split:
 
 | Install | What you get |
 |---------|----------------|
-| `pip install -r requirements.txt` or `pip install .` | Runtime: `python-barcode`, `Pillow`, `openpyxl` |
+| `pip install -r requirements.txt` or `pip install .` | Runtime: `python-barcode`, `Pillow`, `openpyxl`, `PySide6` |
 | `pip install -e ".[dev]"` | + pytest, ruff, mypy, pre-commit, … |
 | `pip install -e ".[build]"` | + PyInstaller |
 | `pip install -e ".[dev,build]"` | Full local development (recommended) |
 
 The PyInstaller EXE bundles only what the app imports at runtime (stdlib +
-`python-barcode` + `Pillow` + `openpyxl`). Dev/build tools are never required
-inside the EXE.
+`python-barcode` + `Pillow` + `openpyxl` + `PySide6`). Dev/build tools are
+never required inside the EXE.
 
 ### Linting and formatting (Ruff)
 
@@ -305,6 +314,49 @@ pages are created / the workbook is saved:
 
 Teachers can open the `.xlsx` and use Excel **Print** without manual setup.
 This project still does **not** send jobs to a printer.
+
+## Desktop GUI
+
+Presentation-only PySide6 desktop app. Official launch methods (after editable
+install):
+
+```powershell
+# Canonical (development / from source)
+python -m classroom_library_label_maker.gui
+
+# Installed console script (same entry point)
+label-maker-gui
+```
+
+Both call `classroom_library_label_maker.gui:main`, which creates
+`QApplication`, shows `MainWindow`, and runs the Qt event loop.
+
+### Current user workflow (RC3.1)
+
+The main window collects generation inputs only:
+
+1. **Inventory workbook** — Browse… (Excel `.xlsx` / `.xlsm`)
+2. **Barcode folder** — Browse… (directory for PNG barcodes)
+3. **Output workbook** — Browse… (save path for label workbook)
+4. **Label template** — combo (default **Avery 5160**)
+5. **Generate Labels** — enabled when all fields validate
+
+`Generate Labels` performs lightweight validation and reports that generation
+*would* begin. It does **not** call `WorkbookGenerationService` yet.
+
+### Package layout
+
+| Module | Role |
+|--------|------|
+| `gui/app.py` | `QApplication` bootstrap + event loop |
+| `gui/main_window.py` | Widgets / layout / accessibility |
+| `gui/controller.py` | Form actions, path updates, enablement |
+| `gui/form_state.py` | Immutable selections + validation messages |
+
+- Importing `classroom_library_label_maker.gui` does not start Qt; only `main()`
+  does
+- Controller must not contain ISBN / import / barcode / layout business logic
+- Native `QFileDialog` for files and folders (no platform-specific branches)
 
 ## CLI
 
