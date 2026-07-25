@@ -646,12 +646,12 @@ logs/application.log (rotating)
 ```
 
 **Implemented today:** import, validation, barcode generation, batch
-orchestration, label layout, label workbook **save**, CLI `generate` via
-`WorkbookGenerationService`, and a PySide6 GUI that collects generation
-inputs (`python -m classroom_library_label_maker.gui`).
+orchestration, label layout, label workbook **save**, CLI `generate` and
+desktop GUI via `WorkbookGenerationService`
+(`python -m classroom_library_label_maker.gui`).
 
-**Not implemented:** GUI → `WorkbookGenerationService` wiring (progress /
-dialogs / threading), **printing** / print preview, Excel VBA UI (Phase 2).
+**Not implemented:** GUI progress / threading / cancellation, **printing** /
+print preview, Excel VBA UI (Phase 2).
 
 ### Desktop GUI launch
 
@@ -665,7 +665,7 @@ python -m classroom_library_label_maker.gui
 label-maker-gui   # same entry point after pip install
 ```
 
-### Desktop GUI workflow (RC3.1 — input only)
+### Desktop GUI workflow (RC3.2)
 
 ```
 MainWindow
@@ -673,15 +673,18 @@ MainWindow
   Barcode folder      → Browse (QFileDialog)
   Output workbook     → Browse (QFileDialog)
   Label template      → combo (TemplateRegistry; default Avery 5160)
-  Generate Labels     → lightweight validation only
-                         (logs / informs that generation would begin;
-                          does NOT call WorkbookGenerationService)
+  Generate Labels
+      → GuiController.build_application_settings()
+      → WorkbookGenerationService.generate()   # same engine as CLI
+      → status label (success summary or friendly error)
 ```
 
-`GuiController` owns `GenerationFormState`, updates path labels, and enables
-**Generate Labels** only when required fields validate. The GUI package must
-remain a presentation adapter. It must not import openpyxl or python-barcode,
-and must not duplicate engine logic.
+Generation runs **synchronously** on the UI thread for this milestone (brief
+blocking is acceptable). No progress dialog, worker thread, or cancellation yet.
+
+`GuiController` remains a thin adapter: form state + settings construction +
+service call. It must not import openpyxl or python-barcode, and must not
+duplicate engine logic.
 
 ### CLI `generate` (canonical runtime)
 
@@ -721,8 +724,8 @@ by `WorkbookGenerationService`.
 
 ## Future extension points
 
-1. **Desktop GUI generation** — wire `GuiController` to
-   `WorkbookGenerationService` (progress, success/error dialogs, threading)
+1. **Desktop GUI responsiveness** — background generation, progress, and
+   cancellation (keep `WorkbookGenerationService` unchanged)
 2. **CLI commands** — `validate`, `clean`, `diagnostics` already registered
 3. **ISBN lookup APIs** — `IsbnLookupService` under `services/lookups/`
 4. **Cover downloads** — `CoverDownloadService` under `services/covers/`

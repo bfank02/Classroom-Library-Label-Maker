@@ -1,24 +1,28 @@
-"""GUI controller — owns form state and user-input actions.
+"""GUI controller — owns form state and invokes workbook generation.
 
-Responsibilities for this milestone:
+Responsibilities:
 
 * own :class:`GenerationFormState`
 * handle browse / template / generate actions
 * update path labels and Generate enablement
-* lightweight validation with user-friendly messages
+* lightweight form validation
+* construct :class:`ApplicationSettings` and call
+  :class:`~classroom_library_label_maker.services.workbook_generation_service.WorkbookGenerationService`
 
-Does **not** invoke ``WorkbookGenerationService``, start threads, or report
-progress. Generate confirms that generation *would* begin.
+Does **not** implement ISBN / import / barcode / layout logic, background
+threads, progress reporting, or cancellation. Generation runs synchronously.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
-from PySide6.QtWidgets import QFileDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QFileDialog
 
+from classroom_library_label_maker.config import load_application_settings
+from classroom_library_label_maker.exceptions import ApplicationError
 from classroom_library_label_maker.gui.form_state import GenerationFormState
 from classroom_library_label_maker.label_templates import (
     LabelTemplate,
@@ -26,7 +30,13 @@ from classroom_library_label_maker.label_templates import (
     create_default_template_registry,
 )
 from classroom_library_label_maker.logger import get_logger
-from classroom_library_label_maker.metadata import APP_NAME
+from classroom_library_label_maker.models import (
+    ApplicationSettings,
+    WorkbookGenerationResult,
+)
+from classroom_library_label_maker.services.workbook_generation_service import (
+    WorkbookGenerationService,
+)
 
 if TYPE_CHECKING:
     from classroom_library_label_maker.gui.main_window import MainWindow
@@ -34,6 +44,22 @@ if TYPE_CHECKING:
 OpenFileDialog = Callable[[], Path | None]
 OpenDirDialog = Callable[[], Path | None]
 SaveFileDialog = Callable[[], Path | None]
+
+
+class WorkbookGenerator(Protocol):
+    """Minimal protocol for the generation engine used by the GUI."""
+
+    def generate(
+        self,
+        *,
+        workbook_path: Path | None = None,
+        output_path: Path | None = None,
+    ) -> WorkbookGenerationResult:
+        """Run generation and return a result."""
+        ...
+
+
+GenerationServiceFactory = Callable[[ApplicationSettings], WorkbookGenerator]
 
 
 def template_display_name(template: LabelTemplate) -> str:
@@ -45,8 +71,12 @@ def template_display_name(template: LabelTemplate) -> str:
     return template.template_name
 
 
+def _default_generation_service(settings: ApplicationSettings) -> WorkbookGenerator:
+    return WorkbookGenerationService(settings)
+
+
 class GuiController:
-    """Connects the main window to presentation-layer form state."""
+    """Connects the main window to presentation-layer form state and generation."""
 
     def __init__(
         self,
@@ -56,7 +86,7 @@ class GuiController:
         open_inventory_dialog: OpenFileDialog | None = None,
         open_barcode_folder_dialog: OpenDirDialog | None = None,
         save_output_dialog: SaveFileDialog | None = None,
-        show_info_dialog: bool = True,
+        generation_service_factory: GenerationServiceFactory | None = None,
     ) -> None:
         self._window = window
         self._logger = get_logger("gui")
@@ -66,7 +96,9 @@ class GuiController:
             open_barcode_folder_dialog or self._default_open_barcode_folder
         )
         self._save_output_dialog = save_output_dialog or self._default_save_output
-        self._show_info_dialog = show_info_dialog
+        self._generation_service_factory = (
+            generation_service_factory or _default_generation_service
+        )
         self._state = GenerationFormState()
 
         self._populate_templates()
@@ -134,36 +166,99 @@ class GuiController:
         else:
             self.set_label_template_id(None)
 
-    def on_generate_labels(self) -> None:
-        """Validate the form and report that generation would begin.
+    def build_application_settings(self) -> ApplicationSettings:
+        """Build settings for generation from the validated form state.
 
-        Does not call ``WorkbookGenerationService``.
+        Raises:
+            ApplicationError: When required form fields are missing.
         """
+        messages = self._state.validation_messages()
+        if messages:
+            raise ApplicationError(messages[0])
+
+        inventory = self._state.inventory_workbook
+        barcodes = self._state.barcode_folder
+        template_id = self._state.label_template_id
+        assert inventory is not None
+        assert barcodes is not None
+        assert template_id is not None
+
+        return load_application_settings(
+            workbook_path=inventory,
+            barcode_output_directory=barcodes,
+            label_template_id=template_id,
+            overwrite=False,
+        )
+
+    def on_generate_labels(self) -> None:
+        """Validate the form and run :class:`WorkbookGenerationService` synchronously."""
         messages = self._state.validation_messages()
         if messages:
             self._set_status(" ".join(messages), error=True)
             self._window.generate_button.setEnabled(False)
             return
 
-        summary = (
-            "Generation would begin with:\n"
-            f"  inventory: {self._state.inventory_workbook}\n"
-            f"  barcodes:  {self._state.barcode_folder}\n"
-            f"  output:    {self._state.output_workbook}\n"
-            f"  template:  {self._state.label_template_id}"
-        )
-        self._logger.info("%s", summary.replace("\n", " | "))
-        self._set_status(
-            "Inputs look good. Workbook generation is not connected yet.",
-            error=False,
-        )
-        if self._show_info_dialog:
-            QMessageBox.information(
-                self._window,
-                APP_NAME,
-                "Generation would begin.\n\n"
-                "Workbook generation is not connected in this release.",
+        inventory = self._state.inventory_workbook
+        output = self._state.output_workbook
+        assert inventory is not None
+        assert output is not None
+
+        self._window.generate_button.setEnabled(False)
+        self._set_status("Generating labels…", error=False)
+        QApplication.processEvents()
+
+        try:
+            settings = self.build_application_settings()
+            service = self._generation_service_factory(settings)
+            self._logger.info(
+                "Running generate via WorkbookGenerationService "
+                "(inventory=%s, barcodes=%s, output=%s, template=%s)",
+                inventory,
+                settings.barcode_output_directory,
+                output,
+                settings.label_template_id,
             )
+            result = service.generate(
+                workbook_path=inventory,
+                output_path=output,
+            )
+        except ApplicationError as exc:
+            self._logger.error("%s", exc)
+            if exc.__cause__ is not None:
+                self._logger.debug(
+                    "Caused by: %s",
+                    exc.__cause__,
+                    exc_info=exc.__cause__,
+                )
+            self._set_status(exc.message, error=True)
+            self._window.generate_button.setEnabled(self._state.is_valid)
+            return
+        except Exception:
+            self._logger.exception("Unhandled error during workbook generation")
+            self._set_status(
+                "Generation failed unexpectedly. See the log for details.",
+                error=True,
+            )
+            self._window.generate_button.setEnabled(self._state.is_valid)
+            return
+
+        self._logger.info(
+            "Generation complete: %s",
+            result.to_dict()["summary"],
+        )
+        self._set_status(self._success_status(result), error=False)
+        self._window.generate_button.setEnabled(self._state.is_valid)
+
+    def _success_status(self, result: WorkbookGenerationResult) -> str:
+        output = result.output_path
+        warning_note = (
+            f" ({len(result.warnings)} warning(s))" if result.warnings else ""
+        )
+        return (
+            f"Generated {result.labels_created} label(s) on "
+            f"{result.pages_created} page(s){warning_note}. "
+            f"Saved to {output}"
+        )
 
     def _populate_templates(self) -> None:
         combo = self._window.label_template_combo
@@ -242,7 +337,6 @@ class GuiController:
     def _set_status(self, message: str, *, error: bool) -> None:
         self._window.status_label.setText(message)
         self._window.status_label.setProperty("error", error)
-        # Keep color subtle via stylesheet property for future theming.
         color = "#a1260d" if error else "#0b6a0b"
         self._window.status_label.setStyleSheet(f"color: {color};")
 

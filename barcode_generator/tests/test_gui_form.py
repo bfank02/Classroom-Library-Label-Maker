@@ -106,7 +106,7 @@ def test_main_window_builds_input_controls(qapp) -> None:
 
 def test_controller_defaults_template_and_disables_generate(qapp) -> None:
     window = MainWindow()
-    controller = GuiController(window, show_info_dialog=False)
+    controller = GuiController(window)
     assert controller.state.label_template_id == DEFAULT_LABEL_TEMPLATE_ID
     assert window.label_template_combo.currentText() == "Avery 5160"
     assert not window.generate_button.isEnabled()
@@ -118,7 +118,7 @@ def test_controller_path_updates_enable_generate(
     qapp, tmp_paths: dict[str, Path]
 ) -> None:
     window = MainWindow()
-    controller = GuiController(window, show_info_dialog=False)
+    controller = GuiController(window)
 
     controller.set_inventory_workbook(tmp_paths["inventory"])
     assert tmp_paths["inventory"].name in window.inventory_path_label.text()
@@ -137,7 +137,6 @@ def test_controller_browse_dialogs_update_paths(
     window = MainWindow()
     controller = GuiController(
         window,
-        show_info_dialog=False,
         open_inventory_dialog=lambda: tmp_paths["inventory"],
         open_barcode_folder_dialog=lambda: tmp_paths["barcodes"],
         save_output_dialog=lambda: tmp_paths["output"],
@@ -157,9 +156,7 @@ def test_controller_browse_dialogs_update_paths(
 def test_controller_template_selection(qapp) -> None:
     window = MainWindow()
     registry = create_default_template_registry()
-    controller = GuiController(
-        window, template_registry=registry, show_info_dialog=False
-    )
+    controller = GuiController(window, template_registry=registry)
 
     window.label_template_combo.setCurrentIndex(0)
     assert controller.state.label_template_id == DEFAULT_LABEL_TEMPLATE_ID
@@ -170,20 +167,39 @@ def test_controller_template_selection(qapp) -> None:
     window.close()
 
 
-def test_generate_labels_without_service(
-    qapp, tmp_paths: dict[str, Path], caplog: pytest.LogCaptureFixture
+def test_generate_labels_uses_injected_service(
+    qapp, tmp_paths: dict[str, Path]
 ) -> None:
+    from classroom_library_label_maker.models import (
+        ApplicationSettings,
+        WorkbookGenerationResult,
+    )
+
     window = MainWindow()
-    controller = GuiController(window, show_info_dialog=False)
+    calls: list[object] = []
+
+    class Stub:
+        def __init__(self, settings: ApplicationSettings) -> None:
+            self.settings = settings
+
+        def generate(self, *, workbook_path=None, output_path=None):
+            calls.append((workbook_path, output_path))
+            return WorkbookGenerationResult(
+                labels_created=1,
+                pages_created=1,
+                output_path=output_path,
+            )
+
+    controller = GuiController(window, generation_service_factory=Stub)
     controller.set_inventory_workbook(tmp_paths["inventory"])
     controller.set_barcode_folder(tmp_paths["barcodes"])
     controller.set_output_workbook(tmp_paths["output"])
+    controller.on_generate_labels()
 
-    with caplog.at_level("INFO"):
-        controller.on_generate_labels()
-
-    assert any("generation would begin" in r.message.lower() for r in caplog.records)
-    assert "not connected" in window.status_label.text().lower()
+    assert calls == [
+        (tmp_paths["inventory"].resolve(), tmp_paths["output"].resolve())
+    ]
+    assert "generated 1 label" in window.status_label.text().lower()
     window.close()
 
 
