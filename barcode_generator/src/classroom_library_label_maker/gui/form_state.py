@@ -36,36 +36,32 @@ class GenerationFormState:
         return replace(self, label_template_id=template_id)
 
     def validation_messages(self) -> tuple[str, ...]:
-        """Return user-friendly messages for each invalid required field."""
+        """Return concise, actionable messages for each invalid required field."""
         messages: list[str] = []
 
         if self.inventory_workbook is None:
-            messages.append("Select an inventory workbook.")
+            messages.append("Choose an inventory workbook.")
         elif not self.inventory_workbook.is_file():
-            messages.append(
-                f"Inventory workbook not found: {self.inventory_workbook}"
-            )
+            messages.append("That inventory workbook could not be found.")
 
         if self.barcode_folder is None:
-            messages.append("Select a barcode folder.")
+            messages.append("Choose a folder for barcode images.")
         elif not self.barcode_folder.is_dir():
-            messages.append(f"Barcode folder not found: {self.barcode_folder}")
+            messages.append("That barcode folder could not be found.")
 
         if self.output_workbook is None:
-            messages.append("Select an output workbook path.")
+            messages.append("Choose where to save the label workbook.")
         else:
             parent = self.output_workbook.parent
             if str(parent) not in ("", ".") and not parent.is_dir():
-                messages.append(
-                    f"Output workbook folder does not exist: {parent}"
-                )
+                messages.append("The save folder doesn't exist yet.")
             elif self.output_workbook.suffix.lower() not in {".xlsx", ".xlsm"}:
                 messages.append(
-                    "Output workbook must be an Excel file (.xlsx or .xlsm)."
+                    "Save the label workbook as an Excel file (.xlsx)."
                 )
 
         if not self.label_template_id or not self.label_template_id.strip():
-            messages.append("Select a label template.")
+            messages.append("Choose a label template.")
 
         return tuple(messages)
 

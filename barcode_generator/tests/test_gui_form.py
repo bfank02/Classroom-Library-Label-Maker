@@ -50,7 +50,7 @@ def test_form_state_invalid_when_empty() -> None:
     assert not state.is_valid
     assert any("inventory" in m.lower() for m in messages)
     assert any("barcode" in m.lower() for m in messages)
-    assert any("output" in m.lower() for m in messages)
+    assert any("save" in m.lower() for m in messages)
     assert any("template" in m.lower() for m in messages)
 
 
@@ -73,7 +73,7 @@ def test_form_state_rejects_missing_inventory(tmp_paths: dict[str, Path]) -> Non
         label_template_id=DEFAULT_LABEL_TEMPLATE_ID,
     )
     assert not state.is_valid
-    assert any("not found" in m.lower() for m in state.validation_messages())
+    assert any("could not be found" in m.lower() for m in state.validation_messages())
 
 
 def test_form_state_rejects_non_excel_output(tmp_paths: dict[str, Path]) -> None:
@@ -201,7 +201,8 @@ def test_generate_labels_uses_injected_service(
     assert calls == [
         (tmp_paths["inventory"].resolve(), tmp_paths["output"].resolve())
     ]
-    assert "generated 1 label" in window.status_label.text().lower()
+    assert "1 label" in window.status_label.text().lower()
+    assert "done" in window.status_label.text().lower()
     window.close()
 
 

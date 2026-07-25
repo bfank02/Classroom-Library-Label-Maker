@@ -158,7 +158,8 @@ def test_controller_updates_status_from_progress(
 
     wait_until_generation_finished(controller)
     assert any("Importing workbook" in item for item in seen)
-    assert "generated 2 label" in window.status_label.text().lower()
+    assert "2 labels" in window.status_label.text().lower()
+    assert "done" in window.status_label.text().lower()
     window.close()
 
 
@@ -196,7 +197,8 @@ def test_completion_replaces_progress_message(
     wait_until_generation_finished(controller)
 
     assert "saving workbook" not in window.status_label.text().lower()
-    assert "generated 1 label" in window.status_label.text().lower()
+    assert "1 label" in window.status_label.text().lower()
+    assert "done" in window.status_label.text().lower()
     window.close()
 
 

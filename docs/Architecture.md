@@ -150,6 +150,7 @@ barcode_generator/src/classroom_library_label_maker/
 │   ├── main_window.py   Input form (paths, template, Generate)
 │   ├── controller.py    Form state actions + start/finish generation
 │   ├── generation_worker.py  QObject worker (service call + progress forward)
+│   ├── icons.py         Application icon discovery (placeholder-safe)
 │   └── form_state.py    Immutable selections + validation messages
 ├── services/
 │   ├── isbn_validator.py
@@ -670,7 +671,7 @@ python -m classroom_library_label_maker.gui
 label-maker-gui   # same entry point after pip install
 ```
 
-### Desktop GUI workflow (RC3.4 — progress)
+### Desktop GUI workflow (RC3.5 — polished)
 
 ```
 MainWindow
@@ -683,6 +684,14 @@ MainWindow
             → emit progress / completed(result) | failed(exc)
       → GuiController updates status label
 ```
+
+UX notes:
+
+* Window title is the product name; Esc closes the window
+* Save dialog defaults to `library_labels.xlsx` and applies/preserves Excel
+  extensions
+* Status wording is concise and actionable (no Python tracebacks)
+* Application icon loads from `assets/icons/` when a non-empty file is present
 
 Progress originates in the engine (`progress.GenerationStage` /
 `GenerationProgress` / `GenerationProgressReporter`). The worker only forwards
