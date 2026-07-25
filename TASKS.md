@@ -8,6 +8,7 @@
 - [x] Batch processing service
 - [x] Excel import
 - [x] Label templates + label layout
+- [x] Workbook generation (import → barcodes → layout → save)
 - [x] Logging
 - [ ] Package as EXE
 - [ ] Migrate CLI off deprecated `BatchProcessor` / `BarcodeGenerator`
@@ -16,15 +17,14 @@
 
 - [ ] Dashboard
 - [ ] Books sheet
-- [ ] Generate Barcodes button (canonical: Import → Batch → Layout)
+- [ ] Generate Barcodes button (wire to `WorkbookGenerationService`)
 - [ ] Status updates
 
 ## Sprint 3 – Label Printing
 
-- [ ] Workbook save after layout
 - [ ] Print preview
 - [ ] Print integration
 
-Note: Avery 5160 geometry and label layout are already implemented in the
-Python package (`label_templates/` + `LabelLayoutService`). Sprint 3 is
-save/print only.
+Note: Avery 5160 geometry, label layout, and label workbook save are already
+implemented (`label_templates/`, `LabelLayoutService`,
+`WorkbookGenerationService`). Sprint 3 is printing only.

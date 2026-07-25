@@ -15,13 +15,14 @@ Copy into a PR description or a filled
 - [ ] Dependencies remain directional (e.g. services → rendering protocol;
       no third-party barcode types in orchestration)
 - [ ] Extension points used instead of hardwiring future UI/Excel concerns
-- [ ] New work uses the canonical pipeline
-      (`ExcelImportService` → `BatchProcessingService` → `LabelLayoutService`),
+- [ ] New work uses `WorkbookGenerationService` (or its collaborators),
       not deprecated `BatchProcessor` / `BarcodeGenerator`
 - [ ] Unexpected failures map to the existing exception hierarchy where
       applicable
 - [ ] Template selection uses `label_template_id` (not deprecated
       `default_label_type`)
+- [ ] Excel output goes through `WorkbookWriter` (services must not import
+      openpyxl)
 ## Testing
 
 - [ ] Unit tests added for new behavior

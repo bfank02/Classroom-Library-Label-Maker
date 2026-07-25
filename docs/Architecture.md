@@ -19,23 +19,29 @@ Architecture for **Classroom Library Label Maker**, with emphasis on the
 │                                      results JSON             │
 │                                                 │             │
 │  ┌─────────────┐   LabelTemplate +   ┌──────────▼───────────┐ │
-│  │ Print/save  │   LabelLayoutService│ label_templates/     │ │
-│  │ (not yet)   │ ◄── (layout done;   │ + LabelSheetTarget   │ │
-│  └─────────────┘     print/save no)  └──────────────────────┘ │
+│  │ Print       │   WorkbookGeneration│ label_templates/     │ │
+│  │ (not yet)   │ ◄── Service (save   │ + WorkbookWriter     │ │
+│  └─────────────┘     done; print no) └──────────────────────┘ │
 │                                                               │
 │  installer/ → ships EXE + workbook     releases/ → artifacts  │
 └───────────────────────────────────────────────────────────────┘
 ```
 
-**Canonical library workflow (Feature 6+):**
+**Canonical library workflow (Feature 6):**
 
 ```
-ExcelImportService → BatchProcessingService → LabelLayoutService
+ExcelImportService
+        ↓
+BatchProcessingService
+        ↓
+WorkbookWriter + LabelLayoutService
+        ↓
+saved label workbook (.xlsx)
 ```
 
-Layout places labels onto a `LabelSheetTarget`. **Workbook save and printing
-are not implemented.** The CLI `generate` command still uses the deprecated
-`BatchProcessor` path (compatibility only).
+Orchestrated by `WorkbookGenerationService`. **Printing is not implemented.**
+The CLI `generate` command still uses the deprecated `BatchProcessor` path
+(compatibility only).
 
 ## Startup sequence / application lifecycle
 
@@ -57,10 +63,10 @@ Workbook / caller
         │             generate* | version | validate* | clean* | diagnostics*
         ▼
      Services       *generate today: deprecated BatchProcessor (CLI only)
-        │             Library / Feature 6+: ExcelImport → BatchProcessing
-        │             → LabelLayout (see Data flow below)
+        │             Library: WorkbookGenerationService
+        │             (Import → Batch → Layout → Save)
         ▼
-      Output        output/barcodes/*.png  +  results JSON  +  logs/
+      Output        output/barcodes/*.png  +  label .xlsx  +  logs/
 ```
 
 \* Reserved commands are registered now and return “not implemented” until
@@ -115,6 +121,7 @@ ApplicationError
 │   └── InvalidWorkbookError
 ├── BarcodeGenerationError
 ├── LabelLayoutError
+├── WorkbookGenerationError
 └── FileSystemError
 ```
 
@@ -144,6 +151,7 @@ barcode_generator/src/classroom_library_label_maker/
 │   ├── batch_processing_service.py
 │   ├── excel_import_service.py
 │   ├── label_layout_service.py
+│   ├── workbook_generation_service.py
 │   ├── barcode_generator.py          # Deprecated CLI helper
 │   ├── batch_processor.py            # Deprecated CLI adapter
 │   ├── protocols.py
@@ -155,9 +163,12 @@ barcode_generator/src/classroom_library_label_maker/
 ├── workbooks/           Spreadsheet / workbook I/O (library-agnostic)
 │   ├── workbook_reader.py              WorkbookReader protocol
 │   ├── openpyxl_workbook_reader.py     OpenPyxlWorkbookReader
+│   ├── workbook_writer.py              WorkbookWriter protocol
+│   ├── openpyxl_workbook_writer.py     OpenPyxlWorkbookWriter
 │   ├── label_sheet_target.py           LabelSheetTarget + LabelPlacement
 │   ├── in_memory_label_sheet_target.py InMemoryLabelSheetTarget
-│   └── openpyxl_label_sheet_target.py  OpenPyxlLabelSheetTarget (no save)
+│   ├── in_memory_workbook_writer.py    InMemoryWorkbookWriter
+│   └── openpyxl_label_sheet_target.py  OpenPyxlLabelSheetTarget
 ├── label_templates/     Physical label-sheet specs (inches, immutable)
 │   ├── label_template.py            LabelTemplate protocol + LabelTemplateSpec
 │   ├── avery_5160.py                Avery 5160 layout data
@@ -188,7 +199,7 @@ Root package `__init__` exports a narrow public API (models + exceptions +
 | `exceptions` | Typed application errors |
 | `config` | Project root, VERSION, asset/runtime paths |
 | `logger` | Production logging setup (no import-time side effects) |
-| `services.*` | Validation, generation, batch, import, label layout |
+| `services.*` | Validation, generation, batch, import, layout, workbook generation |
 | `services.protocols` | Extension contracts for lookups / covers |
 | `rendering` | Library-agnostic barcode image rendering |
 | `workbooks` | Library-agnostic spreadsheet read / label-sheet write |
@@ -388,28 +399,45 @@ LabelSheetTarget            (workbooks/label_sheet_target.py — protocol)
     ↓
 OpenPyxlLabelSheetTarget / InMemoryLabelSheetTarget
     ↓
-openpyxl (write path only; no workbook save)
+openpyxl (placement cells / images)
+```
+
+```
+Application
+    ↓
+WorkbookGenerationService   (services/workbook_generation_service.py)
+    ↓
+WorkbookWriter              (workbooks/workbook_writer.py — protocol)
+    ↓
+OpenPyxlWorkbookWriter      (owns OpenPyxlLabelSheetTarget + save)
+    ↓
+openpyxl
 ```
 
 **Why isolate Excel-specific code?**
 
 * Keeps openpyxl types (workbooks, worksheets, cells) out of services and CLI
-* Allows swapping backends without rewriting import / layout orchestration
-* Makes testing possible with fake readers / `InMemoryLabelSheetTarget`
+* Allows swapping backends without rewriting import / layout / generation
+* Makes testing possible with fake readers / `InMemoryWorkbookWriter`
 * Mirrors the `BarcodeRenderer` pattern used for barcode image encoding
 
 **Public API**
 
 * `WorkbookReader` — protocol: `open`, `close`, `sheet_names`, `iter_rows`
 * `OpenPyxlWorkbookReader` — openpyxl backend (plain string cells only)
+* `WorkbookWriter` — protocol: `create_workbook`, `get_label_sheet_target`,
+  `save`, `close`
+* `OpenPyxlWorkbookWriter` — create/save adapter (default for generation)
+* `InMemoryWorkbookWriter` — test writer
 * `LabelSheetTarget` — protocol: `begin_page`, `place_label`
 * `LabelPlacement` — immutable placement payload (title, author, ISBN, barcode)
 * `InMemoryLabelSheetTarget` — records pages/placements for tests
-* `OpenPyxlLabelSheetTarget` — openpyxl placement adapter (**does not save**)
+* `OpenPyxlLabelSheetTarget` — openpyxl placement adapter (used by writer)
 
 `iter_rows` yields plain `(str | None, ...)` tuples only — never vendor cell
 objects. Mapping those rows into `Book` instances is the job of
 `ExcelImportService`. Layout writes go through `LabelPlacement` only.
+Workbook persistence goes through `WorkbookWriter.save` only.
 
 ### Excel import service (`services/excel_import_service.py`)
 
@@ -525,6 +553,19 @@ It does **not** generate barcodes, validate ISBNs, import workbooks, print,
 save workbooks, or display UI. Optional `barcode_paths` map ISBN → PNG;
 missing files become placeholders with warnings.
 
+### Workbook generation service (`services/workbook_generation_service.py`)
+
+`WorkbookGenerationService` is the end-to-end orchestrator:
+
+1. `ExcelImportService.import_books`
+2. `BatchProcessingService.process_books` (validate + generate/reuse barcodes)
+3. `WorkbookWriter.create_workbook`
+4. `LabelLayoutService.layout_books` on `writer.get_label_sheet_target()`
+5. `WorkbookWriter.save`
+
+Returns immutable `WorkbookGenerationResult`. Does **not** print or show UI.
+Default output path: `{project_root}/output/library_labels.xlsx`.
+
 ### Future label template extension points
 
 | Future template | Intent |
@@ -561,39 +602,29 @@ when the project tree is present and falls back to `APP_VERSION`.
 ## Data flow (canonical library pipeline)
 
 ```
-Excel workbook
+Inventory Excel workbook
     │
     ▼
-ExcelImportService.import_books()
+WorkbookGenerationService.generate()
+    │
+    ├─ ExcelImportService.import_books()
+    ├─ BatchProcessingService.process_books()
+    │     ├─ IsbnValidator
+    │     └─ BarcodeGenerationService
+    ├─ WorkbookWriter.create_workbook()
+    ├─ LabelLayoutService.layout_books(target=writer.get_label_sheet_target())
+    └─ WorkbookWriter.save(output_path)
     │
     ▼
-list[Book]
-    │
-    ▼
-BatchProcessingService.process_books()
-    │
-    ├─ IsbnValidator.validate()
-    └─ BarcodeGenerationService.generate_for_book()  (valid only)
-    │
-    ▼
-BatchProcessingResult + barcode PNG paths
-    │
-    ▼
-LabelLayoutService.layout_books()
-    │
-    ├─ TemplateRegistry / LabelTemplate  (settings.label_template_id)
-    └─ LabelSheetTarget.place_label()
-    │
-    ▼
-LabelLayoutResult  (pages, labels, empty slots, warnings)
+WorkbookGenerationResult  +  output/*.xlsx  +  output/barcodes/*.png
 logs/application.log (rotating)
 ```
 
 **Implemented today:** import, validation, barcode generation, batch
-orchestration, and label **layout**.
+orchestration, label layout, and label workbook **save**.
 
-**Not implemented:** workbook **save** after layout, **printing** / print
-preview, Excel VBA UI (Phase 2).
+**Not implemented:** **printing** / print preview, Excel VBA UI (Phase 2),
+CLI migration off deprecated `BatchProcessor`.
 
 ### CLI `generate` (legacy, compatibility only)
 
@@ -602,11 +633,11 @@ CLI generate → BatchProcessor → IsbnValidator + BarcodeGenerator (stub)
              → BatchResults JSON + (intended) PNG paths
 ```
 
-Do not extend this path for Feature 6. Migrate callers to the canonical
-pipeline above.
+Do not extend this path. Prefer `WorkbookGenerationService` for Feature 6+.
 
 `ExcelImportService` only produces `Book` + `ImportResult`. Validation,
-barcode generation, and label layout remain separate services.
+barcode generation, layout, and save remain separate collaborators coordinated
+by `WorkbookGenerationService`.
 ## Folder purposes
 
 | Path | Tracked? | Purpose |
@@ -636,11 +667,11 @@ barcode generation, and label layout remain separate services.
 6. **Inventory / checkout / reading levels** — extend `Book` optional fields
 7. **Label templates** — additional `LabelTemplateSpec` entries (5163, 8160,
    A4, Brother, custom) via `TemplateRegistry`
-8. **Workbook save / print** — persist layout worksheets; print preview
+8. **Print / print preview** — print the saved label workbook
 9. **Additional label templates** — register more `LabelTemplateSpec` ids;
    configure via `label_template_id`
 10. **Auto-update / installer** — `installer/` + `releases/` driven by `VERSION`
-11. **CLI migration** — point `generate` at the canonical service pipeline
+11. **CLI migration** — point `generate` at `WorkbookGenerationService`
 
 ## Coding standards
 

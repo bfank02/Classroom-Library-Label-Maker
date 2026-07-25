@@ -5,6 +5,7 @@ Canonical pipeline for new development (Feature 6+)::
 * :class:`ExcelImportService`
 * :class:`BatchProcessingService`
 * :class:`LabelLayoutService`
+* :class:`WorkbookGenerationService` (end-to-end orchestration)
 
 Also stable: :class:`IsbnValidator`, :class:`BarcodeGenerationService`.
 
@@ -37,6 +38,9 @@ from classroom_library_label_maker.services.isbn_validator import (
 from classroom_library_label_maker.services.label_layout_service import (
     LabelLayoutService,
 )
+from classroom_library_label_maker.services.workbook_generation_service import (
+    WorkbookGenerationService,
+)
 
 __all__ = [
     "BarcodeGenerationService",
@@ -47,4 +51,5 @@ __all__ = [
     "ISBNValidator",
     "IsbnValidator",
     "LabelLayoutService",
+    "WorkbookGenerationService",
 ]

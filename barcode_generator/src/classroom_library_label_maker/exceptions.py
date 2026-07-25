@@ -63,3 +63,7 @@ class FileSystemError(ApplicationError):
 
 class LabelLayoutError(ApplicationError):
     """Raised when label layout fails unrecoverably."""
+
+
+class WorkbookGenerationError(ApplicationError):
+    """Raised when end-to-end workbook generation fails unrecoverably."""

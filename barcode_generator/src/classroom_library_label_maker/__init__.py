@@ -19,6 +19,7 @@ from classroom_library_label_maker.exceptions import (
     InvalidWorkbookError,
     LabelLayoutError,
     ValidationError,
+    WorkbookGenerationError,
 )
 from classroom_library_label_maker.metadata import (
     APP_AUTHOR,
@@ -43,6 +44,8 @@ from classroom_library_label_maker.models import (
     LabelLayoutWarning,
     ValidationErrorCode,
     ValidationResult,
+    WorkbookGenerationResult,
+    WorkbookGenerationWarning,
 )
 
 __all__ = [
@@ -73,6 +76,9 @@ __all__ = [
     "ValidationError",
     "ValidationErrorCode",
     "ValidationResult",
+    "WorkbookGenerationError",
+    "WorkbookGenerationResult",
+    "WorkbookGenerationWarning",
     "__version__",
 ]
 

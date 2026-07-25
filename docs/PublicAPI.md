@@ -8,24 +8,28 @@ Prefer importing from documented submodules
 `exceptions`, `config`, `metadata`).
 The package root re-exports a narrow set of common types.
 
-## Canonical workflow (Feature 6+)
+## Canonical workflow (Feature 6)
 
 ```
 ExcelImportService
         ↓
 BatchProcessingService
         ↓
-LabelLayoutService
+WorkbookWriter + LabelLayoutService
+        ↓
+WorkbookWriter.save → label workbook (.xlsx)
 ```
 
+Orchestrated by `WorkbookGenerationService`.
+
 Supporting stables: `IsbnValidator`, `BarcodeGenerationService`,
-`LabelTemplate` / `TemplateRegistry`, `WorkbookReader`, `LabelSheetTarget`.
+`LabelTemplate` / `TemplateRegistry`, `WorkbookReader`, `WorkbookWriter`,
+`LabelSheetTarget`.
 
 **Implemented:** import, validate, generate barcodes, batch orchestration,
-label **layout**.
+label layout, label workbook **save**.
 
-**Not implemented:** workbook **save** after layout, **printing** / print
-preview, Excel VBA UI.
+**Not implemented:** **printing** / print preview, Excel VBA UI.
 
 **Deprecated (CLI compatibility only — do not use for new development):**
 `BatchProcessor`, `BarcodeGenerator`, `BatchResults`.
@@ -120,6 +124,16 @@ recoverable diagnostics (e.g. missing barcode images).
 **Fields:** `pages_created`, `labels_placed`,
 `empty_labels_remaining_on_last_page`, `elapsed_seconds`, `warnings`,
 `template_id`.
+
+### `WorkbookGenerationResult` / `WorkbookGenerationWarning` — Stable — External
+
+**Purpose:** End-to-end generation outcome and recoverable diagnostics.
+
+**Public methods:** `to_dict()`.
+
+**Fields:** `books_imported`, `books_processed`, `labels_created`,
+`pages_created`, `barcodes_generated`, `barcodes_reused`, `output_path`,
+`elapsed_seconds`, `warnings`.
 
 ### `ApplicationSettings` — Stable — External
 
@@ -254,6 +268,7 @@ Package: `classroom_library_label_maker.services`
 | `BatchProcessingService` | Stable | External | Multi-book orchestration (canonical) |
 | `ExcelImportService` | Stable | External | Workbook → `Book` import |
 | `LabelLayoutService` | Stable | External | Arrange books onto label sheets |
+| `WorkbookGenerationService` | Stable | External | End-to-end import → barcodes → layout → save |
 | `BatchProcessor` | Internal / Deprecated | CLI only | Legacy JSON adapter; do not use for Feature 6+ |
 | `BarcodeGenerator` | Internal / Deprecated | CLI only | Legacy stub; superseded by `BarcodeGenerationService` |
 
@@ -316,6 +331,27 @@ as plain string cells.
 **External use:** Prefer depending on `WorkbookReader` in services; construct
 `OpenPyxlWorkbookReader` when injecting the concrete backend.
 
+### `WorkbookWriter` — Stable — External (protocol)
+
+**Purpose:** Library-agnostic contract for creating a label workbook, exposing
+a `LabelSheetTarget` for layout, and saving to disk.
+
+| Method | Inputs | Outputs |
+|--------|--------|---------|
+| `create_workbook()` | — | — |
+| `get_label_sheet_target()` | — | `LabelSheetTarget` |
+| `save(path)` | Destination `Path` | `Path` written |
+| `close()` | — | — |
+
+### `OpenPyxlWorkbookWriter` — Stable — External (default write backend)
+
+**Purpose:** openpyxl create/save adapter. Owns an `OpenPyxlLabelSheetTarget`
+for placement. **Does not print.**
+
+### `InMemoryWorkbookWriter` — Stable — External
+
+**Purpose:** Test double that records create/save/close (optional marker file).
+
 ### `LabelSheetTarget` — Stable — External (protocol)
 
 **Purpose:** Library-agnostic contract for creating label pages and placing
@@ -338,8 +374,8 @@ optional barcode path, and placeholder flag.
 ### `OpenPyxlLabelSheetTarget` — Stable — External (default write backend)
 
 **Purpose:** Place centered title/author/ISBN (and optional barcode image) onto
-openpyxl worksheets. **Does not save** the workbook; expose `.workbook` for a
-future save/print adapter.
+openpyxl worksheets. Persisting the workbook is the job of
+`OpenPyxlWorkbookWriter` / `WorkbookWriter.save`.
 
 ### `ExcelImportService` — Stable — External
 
@@ -381,7 +417,7 @@ Uses `settings.label_template_id` (canonical template setting) when `template`
 is omitted. Missing barcode images become placeholders with warnings
 (`missing_barcode`, `barcode_file_missing`).
 
-**Does not** print or save workbooks.
+**Does not** print or save workbooks (save belongs to `WorkbookWriter`).
 
 ### `LabelLayoutResult` / `LabelLayoutWarning` — Stable — External
 
@@ -390,6 +426,20 @@ is omitted. Missing barcode images become placeholders with warnings
 `template_id`) and recoverable diagnostics.
 
 Both are **immutable value objects** (`dataclass(frozen=True)`).
+
+### `WorkbookGenerationService` — Stable — External
+
+Module: `classroom_library_label_maker.services.workbook_generation_service`
+
+**Purpose:** End-to-end orchestration: import inventory → process barcodes →
+layout labels → save label workbook. Does not print or display UI.
+
+| Method | Inputs | Outputs / errors |
+|--------|--------|------------------|
+| `__init__(settings, *, importer=None, batch_processor=None, layout_service=None, writer=None)` | Settings + optional collaborators | service |
+| `generate(*, workbook_path=None, output_path=None)` | Optional inventory / output overrides | `WorkbookGenerationResult`; may raise `ConfigurationError`, `FileSystemError`, `InvalidWorkbookError`, `LabelLayoutError`, `WorkbookGenerationError` |
+
+Default `output_path`: `{project_root}/output/library_labels.xlsx`.
 
 ### Workbook template versioning — Experimental — Extension point
 
@@ -451,12 +501,13 @@ ApplicationError
 │   └── InvalidWorkbookError
 ├── BarcodeGenerationError
 ├── LabelLayoutError
+├── WorkbookGenerationError
 └── FileSystemError
 ```
 
 Use these for unexpected failures. Expected invalid ISBNs use
-`ValidationResult`, not exceptions. Recoverable layout issues use
-`LabelLayoutWarning` inside `LabelLayoutResult`.
+`ValidationResult`, not exceptions. Recoverable layout/generation issues use
+warning objects inside result types.
 
 ---
 

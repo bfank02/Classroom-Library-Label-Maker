@@ -22,9 +22,10 @@
 - [x] Batch processing engine (`BatchProcessingService` over Book collections)
 - [x] Excel import engine (`ExcelImportService` + `OpenPyxlWorkbookReader`)
 - [x] Label layout engine (`LabelLayoutService` + `LabelSheetTarget`)
+- [x] Workbook generation service (`WorkbookGenerationService` + `WorkbookWriter`)
 - [ ] JSON book loading (`BatchProcessor.load_books` — deprecated CLI path)
 - [ ] Package as EXE (`build.bat` / PyInstaller)
-- [ ] Migrate CLI `generate` to the canonical service pipeline
+- [ ] Migrate CLI `generate` to `WorkbookGenerationService`
 
 ## Phase 2 — Excel Integration
 
@@ -32,18 +33,16 @@
 - [ ] Dashboard sheet
 - [ ] Books sheet (aligned with `Book` fields)
 - [ ] Generate Barcodes button → invoke EXE / JSON contract
-  (wire to `ExcelImportService` → `BatchProcessingService` → `LabelLayoutService`)
+  (wire to `WorkbookGenerationService`)
 - [ ] Status updates from results JSON
 
 ## Phase 3 — Label Printing
 
-- [ ] Workbook **save** after `LabelLayoutService` (persist `LabelSheetTarget`)
 - [ ] Print preview
 - [ ] Print integration
 
-Label **geometry** (Avery 5160) and **layout** already live in
-`label_templates/` + `LabelLayoutService`. Phase 3 is save/print only — do not
-re-implement Avery layout under `assets/templates/`.
+Label **geometry**, **layout**, and workbook **save** already exist.
+Phase 3 is printing only.
 ## Phase 4 — Packaging & distribution
 
 - [ ] Installer / setup under `installer/`

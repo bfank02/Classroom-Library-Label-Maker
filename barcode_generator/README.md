@@ -3,14 +3,15 @@
 Python component of **Classroom Library Label Maker**.
 
 Validates ISBN-13 values, imports books from Excel, generates EAN-13 barcode
-PNG images, orchestrates batches, and lays out labels onto worksheet targets.
-Packaged for Windows via PyInstaller.
+PNG images, orchestrates batches, lays out labels, and **saves** a printable
+label workbook. Packaged for Windows via PyInstaller.
 
-**Canonical pipeline (Feature 6+):**
-`ExcelImportService` → `BatchProcessingService` → `LabelLayoutService`
+**Canonical pipeline (Feature 6):**
+`WorkbookGenerationService` =
+`ExcelImportService` → `BatchProcessingService` → `LabelLayoutService` →
+`WorkbookWriter.save`
 
-**Not implemented yet:** workbook save after layout, printing / print preview,
-Excel VBA UI. Layout exists; print/save do not.
+**Not implemented yet:** printing / print preview, Excel VBA UI.
 
 **Deprecated (CLI compatibility only):** `BatchProcessor`, `BarcodeGenerator`,
 `BatchResults` — do not use for new development.
@@ -60,6 +61,7 @@ barcode_generator/
 │       │   ├── batch_processing_service.py
 │       │   ├── excel_import_service.py
 │       │   ├── label_layout_service.py
+│       │   ├── workbook_generation_service.py
 │       │   ├── barcode_generator.py    # Deprecated CLI helper
 │       │   ├── batch_processor.py      # Deprecated CLI adapter
 │       │   ├── protocols.py            # Lookup / cover / progress contracts
@@ -71,8 +73,11 @@ barcode_generator/
 │       ├── workbooks/                  # Spreadsheet read / label-sheet write
 │       │   ├── workbook_reader.py
 │       │   ├── openpyxl_workbook_reader.py
+│       │   ├── workbook_writer.py
+│       │   ├── openpyxl_workbook_writer.py
 │       │   ├── label_sheet_target.py
 │       │   ├── in_memory_label_sheet_target.py
+│       │   ├── in_memory_workbook_writer.py
 │       │   └── openpyxl_label_sheet_target.py
 │       ├── label_templates/            # Physical label specs (inches, immutable)
 │       │   ├── label_template.py
@@ -266,9 +271,23 @@ python -c "from classroom_library_label_maker.config import load_application_set
 - Returns `LabelLayoutResult` (`pages_created`, `labels_placed`,
   `empty_labels_remaining_on_last_page`, `elapsed_seconds`, warnings)
 - Optional `barcode_paths` map ISBN → PNG; missing images use placeholders
-- `OpenPyxlLabelSheetTarget` writes centered cells (does **not** save)
-- Does **not** generate barcodes, validate ISBNs, import, print, or save
-- **Printing and workbook save are not implemented** (layout only)
+- `OpenPyxlLabelSheetTarget` writes centered cells; `OpenPyxlWorkbookWriter`
+  persists the workbook
+- Does **not** generate barcodes, validate ISBNs, import, or print
+- **Printing is not implemented** (workbook save is)
+
+### Workbook generation (end-to-end)
+
+`WorkbookGenerationService` runs the full pipeline and saves a label workbook:
+
+```powershell
+python -c "from pathlib import Path; from classroom_library_label_maker.config import load_application_settings; from classroom_library_label_maker.services import WorkbookGenerationService; s=load_application_settings(workbook_path=r'tests\assets\workbooks\valid_books.xlsx'); r=WorkbookGenerationService(s).generate(output_path=Path('temp')/'library_labels.xlsx'); print(r.to_dict()['summary'])"
+```
+
+- Returns `WorkbookGenerationResult` (import/batch/layout/save statistics)
+- Default output: `{project_root}/output/library_labels.xlsx`
+- Depends on `WorkbookWriter` only for Excel output (never imports openpyxl)
+- Does **not** print or show UI
 
 ### Deprecated CLI orchestration
 
