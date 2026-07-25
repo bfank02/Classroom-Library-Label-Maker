@@ -45,6 +45,7 @@ cd barcode_generator
 python -m pip install -e ".[dev,build]"
 python -m pytest
 python -m classroom_library_label_maker --version
+python -m classroom_library_label_maker.gui
 ```
 
 Runtime folders (`output/`, `logs/`, `temp/`) hold generated files and are

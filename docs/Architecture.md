@@ -143,6 +143,11 @@ barcode_generator/src/classroom_library_label_maker/
 ├── cli/
 │   ├── parser.py        Argparse + subcommands
 │   └── commands.py      Handlers + dispatch registry
+├── gui/                 Desktop presentation layer (PySide6)
+│   ├── __main__.py      python -m classroom_library_label_maker.gui
+│   ├── app.py           QApplication bootstrap + event loop
+│   ├── main_window.py   Main window shell
+│   └── controller.py    UI orchestration (stub; no business logic)
 ├── services/
 │   ├── isbn_validator.py
 │   ├── barcode_generation_service.py
@@ -193,6 +198,7 @@ Root package `__init__` exports a narrow public API (models + exceptions +
 |------|----------------|
 | `main` | Startup: parse → configure → log → dispatch |
 | `cli` | CLI parsing and command handlers |
+| `gui` | Desktop presentation (PySide6); thin adapter only |
 | `metadata` | Single source of truth for product identity |
 | `models` | Domain dataclasses and `BarcodeStatus` enum |
 | `exceptions` | Typed application errors |
@@ -638,10 +644,27 @@ logs/application.log (rotating)
 ```
 
 **Implemented today:** import, validation, barcode generation, batch
-orchestration, label layout, label workbook **save**, and CLI `generate`
-via `WorkbookGenerationService`.
+orchestration, label layout, label workbook **save**, CLI `generate` via
+`WorkbookGenerationService`, and a launchable PySide6 GUI **shell**
+(`python -m classroom_library_label_maker.gui`).
 
-**Not implemented:** **printing** / print preview, Excel VBA UI (Phase 2).
+**Not implemented:** GUI generation workflow (file pickers / progress /
+dialogs), **printing** / print preview, Excel VBA UI (Phase 2).
+
+### Desktop GUI launch
+
+```
+python -m classroom_library_label_maker.gui
+    → classroom_library_label_maker.gui:main
+        → create QApplication
+        → MainWindow + GuiController (stub)
+        → event loop
+
+label-maker-gui   # same entry point after pip install
+```
+
+The GUI package must remain a presentation adapter. It must not import
+openpyxl or python-barcode, and must not duplicate engine logic.
 
 ### CLI `generate` (canonical runtime)
 
@@ -681,21 +704,23 @@ by `WorkbookGenerationService`.
 
 ## Future extension points
 
-1. **CLI commands** — `validate`, `clean`, `diagnostics` already registered
-2. **ISBN lookup APIs** — `IsbnLookupService` under `services/lookups/`
-3. **Cover downloads** — `CoverDownloadService` under `services/covers/`
-4. **Rendering backends** — additional `BarcodeRenderer` implementations under
+1. **Desktop GUI workflow** — wire `GuiController` to
+   `WorkbookGenerationService` (progress, success/error dialogs)
+2. **CLI commands** — `validate`, `clean`, `diagnostics` already registered
+3. **ISBN lookup APIs** — `IsbnLookupService` under `services/lookups/`
+4. **Cover downloads** — `CoverDownloadService` under `services/covers/`
+5. **Rendering backends** — additional `BarcodeRenderer` implementations under
    `rendering/` (SVG, QR, Code128, alternate libraries)
-5. **Workbook readers** — additional `WorkbookReader` implementations under
+6. **Workbook readers** — additional `WorkbookReader` implementations under
    `workbooks/` (CSV, Google Sheets, OneDrive, LibreOffice)
-6. **Inventory / checkout / reading levels** — extend `Book` optional fields
-7. **Label templates** — additional `LabelTemplateSpec` entries (5163, 8160,
+7. **Inventory / checkout / reading levels** — extend `Book` optional fields
+8. **Label templates** — additional `LabelTemplateSpec` entries (5163, 8160,
    A4, Brother, custom) via `TemplateRegistry`
-8. **Print / print preview** — print the saved label workbook
-9. **Additional label templates** — register more `LabelTemplateSpec` ids;
+9. **Print / print preview** — print the saved label workbook
+10. **Additional label templates** — register more `LabelTemplateSpec` ids;
    configure via `label_template_id`
-10. **Auto-update / installer** — `installer/` + `releases/` driven by `VERSION`
-11. **Remove deprecated stubs** — `BatchProcessor` / `BarcodeGenerator` /
+11. **Auto-update / installer** — `installer/` + `releases/` driven by `VERSION`
+12. **Remove deprecated stubs** — `BatchProcessor` / `BarcodeGenerator` /
     `BatchResults` once no transitional imports remain
 
 ## Coding standards
