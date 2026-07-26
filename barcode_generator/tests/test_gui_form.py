@@ -225,14 +225,11 @@ def test_label_content_checkboxes_flow_into_settings(
 
     assert window.show_title_checkbox.isChecked()
     assert window.show_author_checkbox.isChecked()
-    assert window.show_isbn_checkbox.isChecked()
     assert window.show_barcode_checkbox.isChecked()
 
     window.show_author_checkbox.setChecked(False)
-    window.show_isbn_checkbox.setChecked(False)
     settings = controller.build_application_settings()
     assert settings.label_content.show_title is True
     assert settings.label_content.show_author is False
-    assert settings.label_content.show_isbn is False
     assert settings.label_content.show_barcode is True
     window.close()

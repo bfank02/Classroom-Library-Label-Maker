@@ -135,24 +135,17 @@ class MainWindow(QMainWindow):
         self.show_author_checkbox.setToolTip("Print the author on each label.")
         self.show_author_checkbox.setAccessibleName("Show author on labels")
 
-        self.show_isbn_checkbox = QCheckBox("ISBN")
-        self.show_isbn_checkbox.setObjectName("showIsbnCheckBox")
-        self.show_isbn_checkbox.setChecked(True)
-        self.show_isbn_checkbox.setToolTip("Print the ISBN on each label.")
-        self.show_isbn_checkbox.setAccessibleName("Show ISBN on labels")
-
         self.show_barcode_checkbox = QCheckBox("Barcode")
         self.show_barcode_checkbox.setObjectName("showBarcodeCheckBox")
         self.show_barcode_checkbox.setChecked(True)
         self.show_barcode_checkbox.setToolTip(
-            "Print the barcode image on each label."
+            "Print the barcode image on each label (includes the ISBN digits)."
         )
         self.show_barcode_checkbox.setAccessibleName("Show barcode on labels")
 
         for checkbox in (
             self.show_title_checkbox,
             self.show_author_checkbox,
-            self.show_isbn_checkbox,
             self.show_barcode_checkbox,
         ):
             content_layout.addWidget(checkbox)
@@ -268,6 +261,5 @@ class MainWindow(QMainWindow):
         QWidget.setTabOrder(self.output_browse_button, self.label_template_combo)
         QWidget.setTabOrder(self.label_template_combo, self.show_title_checkbox)
         QWidget.setTabOrder(self.show_title_checkbox, self.show_author_checkbox)
-        QWidget.setTabOrder(self.show_author_checkbox, self.show_isbn_checkbox)
-        QWidget.setTabOrder(self.show_isbn_checkbox, self.show_barcode_checkbox)
+        QWidget.setTabOrder(self.show_author_checkbox, self.show_barcode_checkbox)
         QWidget.setTabOrder(self.show_barcode_checkbox, self.generate_button)

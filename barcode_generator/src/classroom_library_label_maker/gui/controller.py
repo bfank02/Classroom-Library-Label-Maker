@@ -166,7 +166,6 @@ class GuiController(QObject):
         content = LabelContentOptions(
             show_title=window.show_title_checkbox.isChecked(),
             show_author=window.show_author_checkbox.isChecked(),
-            show_isbn=window.show_isbn_checkbox.isChecked(),
             show_barcode=window.show_barcode_checkbox.isChecked(),
         )
         self.set_label_content(content)
@@ -356,7 +355,6 @@ class GuiController(QObject):
         window.label_template_combo.setEnabled(enabled)
         window.show_title_checkbox.setEnabled(enabled)
         window.show_author_checkbox.setEnabled(enabled)
-        window.show_isbn_checkbox.setEnabled(enabled)
         window.show_barcode_checkbox.setEnabled(enabled)
         if enabled:
             window.generate_button.setEnabled(self._state.is_valid)
@@ -383,7 +381,6 @@ class GuiController(QObject):
         window.label_template_combo.currentIndexChanged.connect(self.on_template_changed)
         window.show_title_checkbox.toggled.connect(self.on_label_content_changed)
         window.show_author_checkbox.toggled.connect(self.on_label_content_changed)
-        window.show_isbn_checkbox.toggled.connect(self.on_label_content_changed)
         window.show_barcode_checkbox.toggled.connect(self.on_label_content_changed)
         window.generate_button.clicked.connect(self.on_generate_labels)
 
@@ -423,7 +420,6 @@ class GuiController(QObject):
         for checkbox, checked in (
             (window.show_title_checkbox, content.show_title),
             (window.show_author_checkbox, content.show_author),
-            (window.show_isbn_checkbox, content.show_isbn),
             (window.show_barcode_checkbox, content.show_barcode),
         ):
             if checkbox.isChecked() != checked:

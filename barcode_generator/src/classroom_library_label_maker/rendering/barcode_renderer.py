@@ -14,6 +14,7 @@ from classroom_library_label_maker.constants import (
     DEFAULT_BARCODE_MODULE_HEIGHT,
     DEFAULT_BARCODE_MODULE_WIDTH,
     DEFAULT_BARCODE_QUIET_ZONE,
+    DEFAULT_BARCODE_TEXT_DISTANCE,
 )
 from classroom_library_label_maker.logger import get_logger
 from classroom_library_label_maker.models import ApplicationSettings
@@ -39,6 +40,7 @@ class PythonBarcodeRenderer:
         module_height: float = DEFAULT_BARCODE_MODULE_HEIGHT,
         quiet_zone: float = DEFAULT_BARCODE_QUIET_ZONE,
         font_size: int = DEFAULT_BARCODE_FONT_SIZE,
+        text_distance: float = DEFAULT_BARCODE_TEXT_DISTANCE,
         dpi: int = DEFAULT_BARCODE_DPI,
     ) -> None:
         """Initialize renderer options.
@@ -48,12 +50,14 @@ class PythonBarcodeRenderer:
             module_height: Bar module height in millimeters.
             quiet_zone: Quiet-zone margin in millimeters.
             font_size: Human-readable text size in points.
+            text_distance: Space between bars and human-readable text (mm).
             dpi: Output image resolution.
         """
         self._module_width = module_width
         self._module_height = module_height
         self._quiet_zone = quiet_zone
         self._font_size = font_size
+        self._text_distance = text_distance
         self._dpi = dpi
 
     @classmethod
@@ -74,6 +78,7 @@ class PythonBarcodeRenderer:
             "module_height": self._module_height,
             "quiet_zone": self._quiet_zone,
             "font_size": self._font_size,
+            "text_distance": self._text_distance,
             "dpi": self._dpi,
         }
 

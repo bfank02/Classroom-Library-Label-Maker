@@ -34,11 +34,10 @@ from classroom_library_label_maker.workbooks.openpyxl_workbook_writer import (
 def test_label_content_options_defaults_all_enabled() -> None:
     content = LabelContentOptions()
     assert content.is_valid
-    assert content.enabled_count == 4
+    assert content.enabled_count == 3
     assert content.to_dict() == {
         "show_title": True,
         "show_author": True,
-        "show_isbn": True,
         "show_barcode": True,
     }
 
@@ -47,7 +46,6 @@ def test_label_content_options_invalid_when_empty() -> None:
     content = LabelContentOptions(
         show_title=False,
         show_author=False,
-        show_isbn=False,
         show_barcode=False,
     )
     assert not content.is_valid
@@ -67,7 +65,6 @@ def test_application_settings_rejects_empty_label_content(
             label_content=LabelContentOptions(
                 show_title=False,
                 show_author=False,
-                show_isbn=False,
                 show_barcode=False,
             ),
         )
@@ -89,7 +86,6 @@ def test_form_state_requires_at_least_one_content_field(
         label_content=LabelContentOptions(
             show_title=False,
             show_author=False,
-            show_isbn=False,
             show_barcode=False,
         ),
     )
@@ -97,11 +93,15 @@ def test_form_state_requires_at_least_one_content_field(
     assert any("at least one field" in m.lower() for m in state.validation_messages())
 
 
-def test_distribute_row_spans_prefers_earlier_slots() -> None:
-    assert _distribute_row_spans(4, 4) == [(0, 1), (1, 1), (2, 1), (3, 1)]
-    assert _distribute_row_spans(2, 4) == [(0, 2), (2, 2)]
-    assert _distribute_row_spans(1, 4) == [(0, 4)]
-    assert _distribute_row_spans(3, 4) == [(0, 2), (2, 1), (3, 1)]
+def test_distribute_row_spans_prefers_barcode_height() -> None:
+    assert _distribute_row_spans(["title", "author", "barcode"], 6) == [
+        (0, 1),
+        (1, 1),
+        (2, 4),
+    ]
+    assert _distribute_row_spans(["title", "barcode"], 6) == [(0, 1), (1, 5)]
+    assert _distribute_row_spans(["barcode"], 6) == [(0, 6)]
+    assert _distribute_row_spans(["title", "author"], 6) == [(0, 3), (3, 3)]
 
 
 def test_layout_skips_barcode_resolution_when_barcode_hidden(
@@ -110,7 +110,6 @@ def test_layout_skips_barcode_resolution_when_barcode_hidden(
     app_settings.label_content = LabelContentOptions(
         show_title=True,
         show_author=False,
-        show_isbn=False,
         show_barcode=False,
     )
     target = InMemoryLabelSheetTarget()
@@ -144,20 +143,19 @@ def test_openpyxl_omits_hidden_fields(tmp_path: Path) -> None:
             content=LabelContentOptions(
                 show_title=True,
                 show_author=False,
-                show_isbn=False,
                 show_barcode=True,
             ),
         )
     )
     sheet = target.workbook[f"{LABEL_SHEET_PREFIX}1"]
+    # Title gets the first row; barcode uses the remaining rows of the block.
     assert sheet.cell(1, 1).value == "Charlotte's Web"
-    # Title gets the first two rows (merged); barcode uses the last two.
-    assert sheet.cell(3, 1).value in {None, ""}
     assert "E. B. White" not in {
-        sheet.cell(r, 1).value for r in range(1, 5)
+        sheet.cell(r, 1).value for r in range(1, 7)
     }
+    # ISBN is only in the barcode image, not a separate text cell.
     assert "9780064400558" not in {
-        sheet.cell(r, 1).value for r in range(1, 5)
+        sheet.cell(r, 1).value for r in range(1, 7)
     }
     assert len(sheet._images) == 1
 
@@ -176,7 +174,6 @@ def test_generation_respects_title_only_content(
     app_settings.label_content = LabelContentOptions(
         show_title=True,
         show_author=False,
-        show_isbn=False,
         show_barcode=False,
     )
 
@@ -191,7 +188,7 @@ def test_generation_respects_title_only_content(
     try:
         sheet = workbook["Labels 1"]
         assert sheet.cell(1, 1).value is not None
-        # With only title enabled, the full 4-row block is the title merge.
+        # With only title enabled, the full block is the title merge.
         assert sheet.cell(2, 1).value is None or sheet.cell(2, 1).value == sheet.cell(
             1, 1
         ).value

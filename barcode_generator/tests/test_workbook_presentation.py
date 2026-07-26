@@ -61,7 +61,7 @@ def test_worksheet_presentation_and_page_setup() -> None:
 
     assert sheet.print_area is not None
     assert "A1" in sheet.print_area.replace("$", "")
-    assert "C40" in sheet.print_area.replace("$", "")
+    assert "C60" in sheet.print_area.replace("$", "")
     assert sheet.print_options.horizontalCentered is True
 
 
@@ -130,11 +130,13 @@ def test_label_formatting_wraps_long_titles() -> None:
 
 
 def test_barcode_image_is_sized_and_centered(tmp_path: Path) -> None:
-    """Barcode images must fit the barcode cell and use a centered anchor."""
+    """Barcode images must fill the barcode slot and use a centered anchor."""
     from PIL import Image as PILImage
 
+    from classroom_library_label_maker.constants import LABEL_WORKSHEET_ROWS_PER_LABEL
+
     png = tmp_path / "9780064400558.png"
-    # Wide barcode-like image that would overflow lower rows if only width-scaled.
+    # Wide barcode-like image that would overflow if only width-scaled.
     PILImage.new("RGB", (1200, 400), color=(0, 0, 0)).save(png)
 
     target = OpenPyxlLabelSheetTarget()
@@ -165,20 +167,23 @@ def test_barcode_image_is_sized_and_centered(tmp_path: Path) -> None:
     )
 
     sheet = target.workbook[f"{LABEL_SHEET_PREFIX}1"]
-    assert sheet.cell(5, 1).value == "Matilda"
+    second_title_row = LABEL_WORKSHEET_ROWS_PER_LABEL + 1
+    assert sheet.cell(second_title_row, 1).value == "Matilda"
     assert len(sheet._images) == 1
     image = sheet._images[0]
-    assert image.width is not None and image.height is not None
-    # Barcode cell is 1/4 of a 1" label → 0.25"; at 96 DPI ≈ 24px tall budget.
-    # Allow some slack but require a hard cap well below a full label height.
-    assert image.height <= 40
-    assert image.width <= int(AVERY_5160.label_width * 96)
-
     anchor = image.anchor
     assert getattr(anchor, "_from", None) is not None
+    assert getattr(anchor, "ext", None) is not None
     assert anchor._from.colOff >= 0
     assert anchor._from.rowOff >= 0
-    assert getattr(anchor, "ext", None) is not None
+
+    # With all four fields on a 6-row label, barcode owns 3 rows → ~0.5".
+    emu_per_inch = 914_400
+    height_inches = anchor.ext.cy / emu_per_inch
+    width_inches = anchor.ext.cx / emu_per_inch
+    assert 0.35 <= height_inches <= 0.55
+    assert width_inches <= AVERY_5160.label_width
+    assert width_inches >= 1.0
 
 
 def test_apply_presentation_helpers_are_idempotent() -> None:
@@ -189,4 +194,4 @@ def test_apply_presentation_helpers_are_idempotent() -> None:
     apply_worksheet_presentation(sheet, AVERY_5160)
     apply_workbook_properties(target.workbook, template=AVERY_5160)
     assert sheet.print_area is not None
-    assert "C40" in sheet.print_area.replace("$", "")
+    assert "C60" in sheet.print_area.replace("$", "")

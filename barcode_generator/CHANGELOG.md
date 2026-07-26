@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   teachers can choose what appears on each printed label
 - ``LabelContentOptions`` shared by settings, layout, and Excel placement
 
+### Changed
+
+- Print barcodes render at 600 DPI with taller bars and fill more of the
+  label; barcode row allocation grows when fewer text fields are shown
+
 ### Fixed
 
 - Packaged builds now collect `python-barcode` font data so EAN-13 PNG
