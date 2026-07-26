@@ -13,6 +13,7 @@ from classroom_library_label_maker.constants import (
     DEFAULT_BARCODE_MODULE_HEIGHT,
     DEFAULT_BARCODE_MODULE_WIDTH,
     DEFAULT_BARCODE_QUIET_ZONE,
+    DEFAULT_BARCODE_TEXT_DISTANCE,
     DEFAULT_LABEL_TEMPLATE_ID,
     DEFAULT_WORKBOOK_COLUMN_AUTHOR,
     DEFAULT_WORKBOOK_COLUMN_COPIES,
@@ -782,6 +783,7 @@ class ApplicationSettings:
         barcode_module_height: Barcode bar module height in millimeters.
         barcode_quiet_zone: Quiet-zone margin in millimeters.
         barcode_font_size: Human-readable text font size (points).
+        barcode_text_distance: Space between bars and human-readable text (mm).
         barcode_dpi: Output image resolution in dots per inch.
         workbook_path: Optional Excel workbook path for import.
         workbook_sheet_name: Worksheet name to import.
@@ -810,6 +812,7 @@ class ApplicationSettings:
     barcode_module_height: float = DEFAULT_BARCODE_MODULE_HEIGHT
     barcode_quiet_zone: float = DEFAULT_BARCODE_QUIET_ZONE
     barcode_font_size: int = DEFAULT_BARCODE_FONT_SIZE
+    barcode_text_distance: float = DEFAULT_BARCODE_TEXT_DISTANCE
     barcode_dpi: int = DEFAULT_BARCODE_DPI
     workbook_path: Path | None = None
     workbook_sheet_name: str = DEFAULT_WORKBOOK_SHEET_NAME
@@ -851,6 +854,8 @@ class ApplicationSettings:
             raise ValueError("barcode_quiet_zone must be non-negative")
         if self.barcode_font_size <= 0:
             raise ValueError("barcode_font_size must be positive")
+        if self.barcode_text_distance < 0:
+            raise ValueError("barcode_text_distance must be non-negative")
         if self.barcode_dpi <= 0:
             raise ValueError("barcode_dpi must be positive")
         if not self.workbook_sheet_name.strip():

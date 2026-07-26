@@ -30,7 +30,9 @@ _ROW_HEIGHT_POINTS_PER_INCH = 72.0
 _EMU_PER_INCH = 914_400
 
 # Fill most of the barcode slot; leave a thin quiet margin inside the cell.
+# Title+Barcode layouts use a slightly higher fill to maximize scan area.
 _BARCODE_SLOT_FILL = 0.96
+_BARCODE_SLOT_FILL_TITLE_BARCODE = 0.98
 
 # Consistent sheet title prefix (page number appended).
 LABEL_SHEET_PREFIX = "Labels "
@@ -147,6 +149,7 @@ class OpenPyxlLabelSheetTarget:
                     and not placement.used_placeholder_barcode
                     and Path(placement.barcode_image_path).is_file()
                 ):
+                    title_barcode_only = kinds == ["title", "barcode"]
                     self._add_barcode_image(
                         sheet,
                         path=Path(placement.barcode_image_path),
@@ -155,6 +158,11 @@ class OpenPyxlLabelSheetTarget:
                         template=template,
                         row_span=row_span,
                         block_rows=block_rows,
+                        slot_fill=(
+                            _BARCODE_SLOT_FILL_TITLE_BARCODE
+                            if title_barcode_only
+                            else _BARCODE_SLOT_FILL
+                        ),
                     )
 
     def _apply_page_geometry(self, sheet: Any, template: LabelTemplate) -> None:
@@ -181,6 +189,7 @@ class OpenPyxlLabelSheetTarget:
         template: LabelTemplate,
         row_span: int = 1,
         block_rows: int = LABEL_WORKSHEET_ROWS_PER_LABEL,
+        slot_fill: float = _BARCODE_SLOT_FILL,
     ) -> None:
         try:
             from openpyxl.drawing.image import Image as XLImage
@@ -202,8 +211,9 @@ class OpenPyxlLabelSheetTarget:
         cell_height_emu = int(
             (template.label_height * (row_span / float(block_rows))) * _EMU_PER_INCH
         )
-        max_width_emu = int(cell_width_emu * _BARCODE_SLOT_FILL)
-        max_height_emu = int(cell_height_emu * _BARCODE_SLOT_FILL)
+        fill = min(1.0, max(0.5, float(slot_fill)))
+        max_width_emu = int(cell_width_emu * fill)
+        max_height_emu = int(cell_height_emu * fill)
 
         # Size by physical slot + source aspect ratio (not 96-DPI pixel EMUs).
         # This fills the barcode region responsively while keeping bars sharp

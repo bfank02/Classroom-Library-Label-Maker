@@ -68,6 +68,7 @@ class PythonBarcodeRenderer:
             module_height=settings.barcode_module_height,
             quiet_zone=settings.barcode_quiet_zone,
             font_size=settings.barcode_font_size,
+            text_distance=settings.barcode_text_distance,
             dpi=settings.barcode_dpi,
         )
 

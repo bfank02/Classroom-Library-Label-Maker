@@ -103,7 +103,7 @@ def test_existing_barcode_detection(
     service: BarcodeGenerationService,
     sample_book: Book,
 ) -> None:
-    """Existing files should yield ALREADY_EXISTS without overwrite."""
+    """Existing files with a matching render key should yield ALREADY_EXISTS."""
     first = service.generate_for_book(sample_book)
     assert first.status == BarcodeStatus.GENERATED
     assert first.output_path is not None
@@ -120,6 +120,78 @@ def test_existing_barcode_detection(
     assert second.output_path == first.output_path
     assert second.output_path.stat().st_size == original_size
     renderer.render_to_file.assert_not_called()
+
+
+def test_stale_render_profile_regenerates_barcode(
+    service: BarcodeGenerationService,
+    sample_book: Book,
+) -> None:
+    """PNGs from an older render profile must not be reused silently."""
+    from classroom_library_label_maker.services.barcode_generation_service import (
+        render_key_path_for,
+    )
+
+    first = service.generate_for_book(sample_book)
+    assert first.status == BarcodeStatus.GENERATED
+    assert first.output_path is not None
+    key_path = render_key_path_for(first.output_path)
+    key_path.write_text("stale-profile\n", encoding="utf-8")
+    stale_bytes = first.output_path.read_bytes()
+
+    second = service.generate_for_book(sample_book)
+    assert second.status == BarcodeStatus.GENERATED
+    assert second.output_path is not None
+    assert second.output_path.read_bytes().startswith(b"\x89PNG")
+    assert key_path.read_text(encoding="utf-8").strip() != "stale-profile"
+    # File was rewritten under the current profile (size may match, content stamped).
+    assert key_path.read_text(encoding="utf-8").strip() == service._render_key
+    assert second.output_path.stat().st_size > 0
+    del stale_bytes
+
+
+def test_missing_render_key_regenerates_barcode(
+    service: BarcodeGenerationService,
+    sample_book: Book,
+) -> None:
+    """Legacy PNGs without a sidecar must regenerate under the current profile."""
+    from classroom_library_label_maker.services.barcode_generation_service import (
+        render_key_path_for,
+    )
+
+    first = service.generate_for_book(sample_book)
+    assert first.output_path is not None
+    key_path = render_key_path_for(first.output_path)
+    key_path.unlink()
+
+    second = service.generate_for_book(sample_book)
+    assert second.status == BarcodeStatus.GENERATED
+    assert key_path.is_file()
+
+
+def test_optimized_png_dimensions(tmp_path: Path) -> None:
+    """Print-optimized geometry should produce a wide high-DPI EAN-13 PNG."""
+    from PIL import Image
+
+    from classroom_library_label_maker.constants import (
+        DEFAULT_BARCODE_DPI,
+        DEFAULT_BARCODE_MODULE_HEIGHT,
+        DEFAULT_BARCODE_MODULE_WIDTH,
+        DEFAULT_BARCODE_QUIET_ZONE,
+    )
+
+    output = tmp_path / "dims.png"
+    PythonBarcodeRenderer().render_to_file("9780394839127", output)
+    image = Image.open(output)
+    width, height = image.size
+    assert image.mode == "RGB"
+    # Wide aspect for Avery width fill; exact px from ImageWriter mm→px.
+    assert width > height
+    assert width >= 1400
+    assert height >= 400
+    assert DEFAULT_BARCODE_DPI == 600
+    assert DEFAULT_BARCODE_MODULE_WIDTH == 0.55
+    assert DEFAULT_BARCODE_MODULE_HEIGHT == 14.0
+    assert DEFAULT_BARCODE_QUIET_ZONE == 6.05
 
 
 def test_empty_existing_barcode_is_regenerated(
@@ -250,6 +322,7 @@ def test_default_renderer_uses_application_settings(
     assert options["module_height"] == app_settings.barcode_module_height
     assert options["quiet_zone"] == app_settings.barcode_quiet_zone
     assert options["font_size"] == app_settings.barcode_font_size
+    assert options["text_distance"] == app_settings.barcode_text_distance
     assert options["dpi"] == app_settings.barcode_dpi
 
 

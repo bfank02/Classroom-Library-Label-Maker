@@ -39,6 +39,31 @@ from classroom_library_label_maker.utils.file_utils import (
 
 _logger = get_logger("barcode_generation_service")
 
+# Sidecar written next to each PNG so stale images are regenerated when
+# rendering geometry changes (module width/height, quiet zone, font, DPI, …).
+_RENDER_KEY_SUFFIX = ".renderkey"
+
+
+def barcode_render_cache_key(settings: ApplicationSettings) -> str:
+    """Return a stable fingerprint of barcode rendering settings.
+
+    Existing PNGs are reused only when their sidecar matches this key.
+    """
+    return (
+        f"ean13|"
+        f"mw={settings.barcode_module_width:.4f}|"
+        f"mh={settings.barcode_module_height:.4f}|"
+        f"qz={settings.barcode_quiet_zone:.4f}|"
+        f"fs={settings.barcode_font_size}|"
+        f"td={settings.barcode_text_distance:.4f}|"
+        f"dpi={settings.barcode_dpi}"
+    )
+
+
+def render_key_path_for(png_path: Path) -> Path:
+    """Return the sidecar path that stores the render cache key for ``png_path``."""
+    return Path(f"{png_path}{_RENDER_KEY_SUFFIX}")
+
 
 class BarcodeGenerationService:
     """Generate EAN-13 barcode PNG files for validated books.
@@ -46,7 +71,7 @@ class BarcodeGenerationService:
     Responsibilities are limited to:
 
     * Resolving output paths from :class:`ApplicationSettings`
-    * Skipping existing files (``ALREADY_EXISTS``)
+    * Skipping existing files when their render profile still matches
     * Delegating image encoding to a :class:`BarcodeRenderer`
     * Logging and mapping unexpected failures to the application exception hierarchy
     """
@@ -72,6 +97,7 @@ class BarcodeGenerationService:
         )
         self._extension = filename_extension
         self._normalizer = IsbnValidator()
+        self._render_key = barcode_render_cache_key(settings)
 
     def generate_for_book(self, book: Book) -> BarcodeGenerationResult:
         """Generate a barcode PNG for a single validated book.
@@ -109,6 +135,7 @@ class BarcodeGenerationService:
                 output_path,
                 symbology=BarcodeSymbology.EAN13,
             )
+            self._write_render_key(Path(written))
         except OSError as exc:
             _logger.error(
                 "Filesystem failure during barcode generation for %s: %s",
@@ -179,16 +206,43 @@ class BarcodeGenerationService:
                 cause=exc,
             ) from exc
 
-    @staticmethod
-    def _usable_existing_barcode(output_path: Path) -> bool:
-        """Return True when ``output_path`` is a non-empty barcode image.
+    def _usable_existing_barcode(self, output_path: Path) -> bool:
+        """Return True when ``output_path`` is a non-empty PNG for this profile.
 
-        Zero-byte leftovers from a failed render must not be treated as
-        ``ALREADY_EXISTS``; those runs should regenerate the PNG.
+        Zero-byte leftovers and PNGs rendered with different geometry must not
+        be treated as ``ALREADY_EXISTS``; those runs regenerate the image.
         """
         if not file_exists(output_path):
             return False
         try:
-            return output_path.stat().st_size > 0
+            if output_path.stat().st_size <= 0:
+                return False
         except OSError:
             return False
+        return self._render_key_matches(output_path)
+
+    def _render_key_matches(self, output_path: Path) -> bool:
+        """Return True when the sidecar render key matches current settings."""
+        key_path = render_key_path_for(output_path)
+        try:
+            if not key_path.is_file():
+                _logger.info(
+                    "Regenerating barcode without render key: %s",
+                    output_path,
+                )
+                return False
+            stored = key_path.read_text(encoding="utf-8").strip()
+        except OSError:
+            return False
+        if stored != self._render_key:
+            _logger.info(
+                "Regenerating barcode; render profile changed: %s",
+                output_path,
+            )
+            return False
+        return True
+
+    def _write_render_key(self, output_path: Path) -> None:
+        """Persist the current render profile next to the PNG."""
+        key_path = render_key_path_for(output_path)
+        key_path.write_text(self._render_key + "\n", encoding="utf-8")
