@@ -17,6 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Real application icons (`logo.png`, `app.ico`, `app.icns`)
 - GUI rotating file logging to the platform log directory when packaged
 
+### Fixed
+
+- Packaged builds now collect `python-barcode` font data so EAN-13 PNG
+  rendering no longer fails with ``cannot open resource`` / empty barcodes
+- Zero-byte barcode leftovers are regenerated instead of skipped as existing
+- Label layout now expands ``Book.copies`` into multiple physical labels
+- Barcode images are constrained to the barcode cell and centered so they no
+  longer cover title/author/ISBN on labels below
+
 ### Changed
 
 - Packaged apps resolve assets via PyInstaller `_MEIPASS` instead of the

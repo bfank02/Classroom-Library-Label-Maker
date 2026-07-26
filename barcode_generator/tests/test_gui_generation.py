@@ -257,7 +257,7 @@ def test_gui_generation_matches_direct_service_path(
         p.name for p in barcodes_direct.glob("*.png")
     )
     assert "done" in window.status_label.text().lower()
-    assert "2 labels" in window.status_label.text().lower()
+    assert "3 labels" in window.status_label.text().lower()
     window.close()
 
 

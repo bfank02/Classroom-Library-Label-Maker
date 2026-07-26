@@ -155,18 +155,49 @@ class OpenPyxlLabelSheetTarget:
     ) -> None:
         try:
             from openpyxl.drawing.image import Image as XLImage
+            from openpyxl.drawing.spreadsheet_drawing import (
+                AnchorMarker,
+                OneCellAnchor,
+            )
+            from openpyxl.drawing.xdr import XDRPositiveSize2D
+            from openpyxl.utils.units import pixels_to_EMU
         except ImportError:  # pragma: no cover
             _logger.warning("openpyxl.drawing.image unavailable; skipping barcode image")
             return
 
         image = XLImage(str(path))
-        # Scale roughly to label width (pixels at ~96 DPI heuristic).
-        max_width_px = int(template.label_width * 96 * 0.9)
-        if image.width and image.width > max_width_px:
-            ratio = max_width_px / float(image.width)
-            image.width = max_width_px
-            image.height = int(image.height * ratio)
-        image.anchor = f"{self._column_letter(anchor_col)}{anchor_row}"
+        if not image.width or not image.height:
+            _logger.warning("Barcode image has no dimensions; skipping %s", path)
+            return
+
+        # EMUs: constrain the image to the barcode cell so it cannot cover
+        # title/author/ISBN rows of labels below (a common Excel display bug).
+        emu_per_inch = 914_400
+        cell_width_emu = int(template.label_width * emu_per_inch)
+        cell_height_emu = int((template.label_height / 4.0) * emu_per_inch)
+        max_width_emu = int(cell_width_emu * 0.90)
+        max_height_emu = int(cell_height_emu * 0.90)
+
+        width_emu = pixels_to_EMU(int(image.width))
+        height_emu = pixels_to_EMU(int(image.height))
+        scale = min(max_width_emu / width_emu, max_height_emu / height_emu, 1.0)
+        width_emu = max(1, int(width_emu * scale))
+        height_emu = max(1, int(height_emu * scale))
+        image.width = max(1, int(image.width * scale))
+        image.height = max(1, int(image.height * scale))
+
+        # Center within the barcode cell (openpyxl anchors are top-left by default).
+        col_off = max(0, (cell_width_emu - width_emu) // 2)
+        row_off = max(0, (cell_height_emu - height_emu) // 2)
+        image.anchor = OneCellAnchor(
+            _from=AnchorMarker(
+                col=anchor_col - 1,
+                colOff=col_off,
+                row=anchor_row - 1,
+                rowOff=row_off,
+            ),
+            ext=XDRPositiveSize2D(width_emu, height_emu),
+        )
         sheet.add_image(image)
 
     @staticmethod

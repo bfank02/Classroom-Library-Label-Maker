@@ -90,7 +90,7 @@ class BarcodeGenerationService:
         isbn = self._normalized_isbn(book)
         output_path = self.output_path_for(isbn)
 
-        if file_exists(output_path):
+        if self._usable_existing_barcode(output_path):
             _logger.info("Skipped existing barcode file: %s", output_path)
             return BarcodeGenerationResult(
                 isbn=isbn,
@@ -178,3 +178,17 @@ class BarcodeGenerationService:
                 f"Failed to create barcode output directory: {directory}",
                 cause=exc,
             ) from exc
+
+    @staticmethod
+    def _usable_existing_barcode(output_path: Path) -> bool:
+        """Return True when ``output_path`` is a non-empty barcode image.
+
+        Zero-byte leftovers from a failed render must not be treated as
+        ``ALREADY_EXISTS``; those runs should regenerate the PNG.
+        """
+        if not file_exists(output_path):
+            return False
+        try:
+            return output_path.stat().st_size > 0
+        except OSError:
+            return False

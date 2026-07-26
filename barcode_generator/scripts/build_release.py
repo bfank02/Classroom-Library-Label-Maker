@@ -141,6 +141,10 @@ def build(*, clean: bool = True) -> int:
         "classroom_library_label_maker.services",
         "--hidden-import",
         "classroom_library_label_maker.utils",
+        # python-barcode ImageWriter needs DejaVuSansMono.ttf from package data.
+        # Without this, packaged builds create empty PNGs ("cannot open resource").
+        "--collect-data",
+        "barcode",
         *_data_args(),
         *_icon_args(),
     ]

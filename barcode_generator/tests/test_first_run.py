@@ -74,6 +74,14 @@ def test_sample_inventory_generates_without_warnings(tmp_path: Path) -> None:
     sample = resolve_sample_inventory_workbook()
     assert sample is not None
 
+    workbook = load_workbook(sample, read_only=True, data_only=True)
+    try:
+        sheet = workbook[DEFAULT_WORKBOOK_SHEET_NAME]
+        rows = list(sheet.iter_rows(min_row=2, values_only=True))
+        expected_labels = sum(int(row[3]) for row in rows if row and row[0])
+    finally:
+        workbook.close()
+
     barcodes = tmp_path / "barcodes"
     barcodes.mkdir()
     output = tmp_path / "labels.xlsx"
@@ -84,7 +92,8 @@ def test_sample_inventory_generates_without_warnings(tmp_path: Path) -> None:
     result = WorkbookGenerationService(settings).generate(output_path=output)
 
     assert output.is_file()
-    assert result.labels_created >= 15
+    assert result.labels_created == expected_labels
+    assert result.labels_created > result.books_imported
     assert result.warning_count == 0
     assert result.completion_state is GenerationCompletionState.SUCCESS
     assert not result.requires_review

@@ -94,7 +94,7 @@ def test_successful_generation_end_to_end(
     assert isinstance(result, WorkbookGenerationResult)
     assert result.books_imported == 2
     assert result.books_processed == 2
-    assert result.labels_created == 2
+    assert result.labels_created == 3
     assert result.pages_created == 1
     assert result.barcodes_generated == 2
     assert result.barcodes_reused == 0
@@ -258,7 +258,7 @@ def test_existing_barcode_reuse(
 
     assert second.barcodes_generated == 0
     assert second.barcodes_reused == 2
-    assert second.labels_created == 2
+    assert second.labels_created == 3
 
 
 def test_generated_barcodes_counted(
@@ -290,7 +290,7 @@ def test_result_statistics(
     summary = result.to_dict()["summary"]
     assert summary["books_imported"] == 2
     assert summary["books_processed"] == 2
-    assert summary["labels_created"] == 2
+    assert summary["labels_created"] == 3
     assert summary["pages_created"] == 1
     assert summary["barcodes_generated"] == 2
     assert summary["output_path"] is not None
