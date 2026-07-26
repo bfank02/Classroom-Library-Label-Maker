@@ -4,7 +4,8 @@ Python component of **Classroom Library Label Maker**.
 
 Validates ISBN-13 values, imports books from Excel, generates EAN-13 barcode
 PNG images, orchestrates batches, lays out labels, and **saves** a printable
-label workbook. Packaged for Windows via PyInstaller.
+label workbook. Packaged for **Windows** and **macOS** via PyInstaller from the
+same shared codebase.
 
 **Canonical pipeline:**
 `WorkbookGenerationService` (also the CLI `generate` runtime) =
@@ -29,7 +30,9 @@ single source of truth and avoid hardcoding branding strings elsewhere.
 ## Requirements
 
 - Python 3.13+
-- Windows recommended for EXE packaging (`build.bat`)
+- PyInstaller (`pip install -e ".[build]"`) for desktop packaging
+- macOS: `build_macos.sh` produces a Finder-launchable `.app`
+- Windows: `build.bat` produces a windowed one-file EXE
 
 ## Folder layout
 
@@ -42,6 +45,10 @@ barcode_generator/
 ├── .pre-commit-config.yaml
 ├── requirements.txt            # Runtime only (python-barcode + Pillow)
 ├── build.bat
+├── build_macos.sh
+├── scripts/
+│   ├── build_release.py        # Shared PyInstaller packaging entry point
+│   └── generate_app_icons.py   # logo.png / app.ico / app.icns
 ├── README.md
 │
 ├── src/
@@ -52,6 +59,7 @@ barcode_generator/
 │       ├── metadata.py             # Product identity (single source of truth)
 │       ├── constants.py
 │       ├── config.py               # ApplicationSettings + ProjectPaths
+│       ├── runtime_paths.py        # Frozen + OS user log/data directories
 │       ├── logger.py               # Rotating + console logging
 │       ├── models.py               # Domain dataclasses / enums
 │       ├── exceptions.py           # ApplicationError hierarchy
@@ -358,8 +366,8 @@ disabled. The status line shows engine stage updates, then a clean success,
 success-with-warnings (review before printing), or friendly error message.
 Press **Esc** to close the window.
 
-Icon loading uses `assets/icons/app.ico` (then `logo.png`) when non-empty
-placeholder files are replaced with real artwork.
+Icon loading prefers the platform-native icon (`app.icns` on macOS, `app.ico`
+on Windows), then `logo.png`.
 
 ### Package layout
 
@@ -435,13 +443,28 @@ pixel-perfect or byte-identical checks. Missing goldens skip. See
 
 ## Build process
 
+Shared packaging lives in `scripts/build_release.py`. Platform wrappers:
+
+```bash
+# macOS — native .app bundle (no Python required at runtime)
+./build_macos.sh
+open "dist/Classroom Library Label Maker.app"
+```
+
 ```powershell
+# Windows — windowed one-file EXE
 .\build.bat
 ```
 
-Produces a one-file EXE under `dist/` (gitignored). Assets are bundled via
-`--add-data`. A real `assets/icons/app.ico` is used as the EXE icon when the
-file is non-empty.
+Both builds:
+
+- package the **GUI** entry point (not the CLI)
+- bundle `assets/` (templates, sample workbook, icons, staged Quick Start)
+- bundle `VERSION`
+- embed product metadata from `metadata.py`
+
+The Quick Start guide is staged at build time from `docs/Quick Start.md` into
+`assets/resources/` (not duplicated as a second source file in git).
 
 ## Testing
 

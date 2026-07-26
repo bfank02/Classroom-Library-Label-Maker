@@ -123,7 +123,9 @@ class PythonBarcodeRenderer:
 
         barcode_cls = get_barcode_class("ean13")
         try:
-            barcode = barcode_cls(data, writer=ImageWriter())
+            writer = ImageWriter()
+            self._ensure_writer_font(writer)
+            barcode = barcode_cls(data, writer=writer)
         except Exception as exc:
             raise ValueError(f"Cannot encode EAN-13 barcode for data={data!r}") from exc
 
@@ -132,15 +134,51 @@ class PythonBarcodeRenderer:
             with output_path.open("wb") as handle:
                 barcode.write(handle, options=self._writer_options())
         except OSError:
+            self._remove_incomplete_output(output_path)
             raise
         except Exception as exc:
+            self._remove_incomplete_output(output_path)
             raise ValueError(
                 f"Failed writing EAN-13 barcode image to {output_path}"
             ) from exc
 
         if not output_path.is_file() or output_path.stat().st_size <= 0:
+            self._remove_incomplete_output(output_path)
             raise OSError(f"Barcode render produced an empty file: {output_path}")
 
         size = output_path.stat().st_size
         _logger.debug("Rendered barcode to %s (%s bytes)", output_path, size)
         return output_path
+
+    @staticmethod
+    def _ensure_writer_font(writer: object) -> None:
+        """Point ImageWriter at a loadable TTF when the default path is missing.
+
+        Packaged builds must ship ``barcode/fonts/DejaVuSansMono.ttf``. If the
+        default path is broken, try the font next to the installed ``barcode``
+        package before Pillow raises ``cannot open resource``.
+        """
+        font_path = Path(getattr(writer, "font_path", ""))
+        if font_path.is_file():
+            return
+        try:
+            import barcode as barcode_package
+        except ImportError:  # pragma: no cover - dependency is required
+            return
+        candidate = (
+            Path(barcode_package.__file__).resolve().parent
+            / "fonts"
+            / "DejaVuSansMono.ttf"
+        )
+        if candidate.is_file():
+            writer.font_path = str(candidate)  # type: ignore[attr-defined]
+            _logger.debug("Using barcode font at %s", candidate)
+
+    @staticmethod
+    def _remove_incomplete_output(output_path: Path) -> None:
+        """Delete a partial/empty PNG so retries are not skipped as existing."""
+        try:
+            if output_path.is_file():
+                output_path.unlink()
+        except OSError:
+            _logger.debug("Could not remove incomplete barcode file %s", output_path)

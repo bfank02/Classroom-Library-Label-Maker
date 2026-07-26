@@ -65,8 +65,24 @@ def run(argv: list[str] | None = None) -> int:
     Returns:
         Exit code from ``QApplication.exec()``.
     """
-    setup_logging()
+    from classroom_library_label_maker.config import ProjectPaths
+    from classroom_library_label_maker.logger import get_logger
+    from classroom_library_label_maker.metadata import APP_COMPONENT_NAME
+
+    paths = ProjectPaths()
+    setup_logging(log_file=paths.default_log_file)
+    logger = get_logger()
+    logger.info(
+        "%s — %s v%s starting (gui)",
+        APP_NAME,
+        APP_COMPONENT_NAME,
+        APP_VERSION,
+    )
+    logger.info("Log file: %s", paths.default_log_file)
+
     app = create_application(argv)
     window = create_main_window()
     window.show()
-    return int(app.exec())
+    exit_code = int(app.exec())
+    logger.info("GUI exiting with code %s", exit_code)
+    return exit_code

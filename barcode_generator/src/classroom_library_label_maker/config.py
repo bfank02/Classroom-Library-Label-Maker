@@ -7,6 +7,7 @@ from pathlib import Path
 
 from classroom_library_label_maker.constants import (
     APP_ICON_FILE_NAME,
+    APP_ICNS_FILE_NAME,
     DEFAULT_BARCODE_DPI,
     DEFAULT_BARCODE_FONT_SIZE,
     DEFAULT_BARCODE_MODULE_HEIGHT,
@@ -33,29 +34,42 @@ from classroom_library_label_maker.constants import (
     DIR_TEMP,
     DIR_TEMPLATES,
     LOGO_FILE_NAME,
+    QUICK_START_FILE_NAME,
     SAMPLE_BOOKS_FILE_NAME,
     SAMPLE_INVENTORY_FILE_NAME,
     VERSION_FILE_NAME,
 )
 from classroom_library_label_maker.metadata import APP_VERSION
 from classroom_library_label_maker.models import ApplicationSettings
+from classroom_library_label_maker.runtime_paths import (
+    bundled_resource_root,
+    is_frozen_application,
+    user_data_directory,
+    user_log_directory,
+)
 
 
 def find_project_root(start: Path | None = None) -> Path:
-    """Locate the ``barcode_generator`` project root.
+    """Locate the application resource root.
 
-    Walks upward from ``start`` (or this file) until a directory containing
-    both ``pyproject.toml`` and ``VERSION`` is found.
+    In a frozen (PyInstaller) build, returns the bundled resource directory
+    (``sys._MEIPASS``). During development, walks upward from ``start`` (or
+    this file) until a directory containing both ``pyproject.toml`` and
+    ``VERSION`` is found.
 
     Args:
-        start: Optional starting path for the search.
+        start: Optional starting path for the development-tree search.
+            Ignored when the application is frozen.
 
     Returns:
-        Absolute path to the project root.
+        Absolute path to the resource root.
 
     Raises:
-        FileNotFoundError: If no project root can be located.
+        FileNotFoundError: If no project root can be located in development.
     """
+    if is_frozen_application():
+        return bundled_resource_root()
+
     current = (start or Path(__file__)).resolve()
     if current.is_file():
         current = current.parent
@@ -96,17 +110,33 @@ def read_version(project_root: Path | None = None) -> str:
 class ProjectPaths:
     """Resolved filesystem locations for assets and runtime directories.
 
-    All paths are derived from the project root to avoid hardcoded absolute
-    locations in business logic.
+    Bundled assets always resolve under the resource root (project tree or
+    frozen ``_MEIPASS``). Writable runtime folders (logs, output, temp) use
+    the project tree during development and per-user OS locations when frozen,
+    because the bundle directory is not a reliable place for teacher-writable
+    files.
     """
 
     def __init__(self, project_root: Path | None = None) -> None:
         """Initialize path helpers.
 
         Args:
-            project_root: Optional explicit project root.
+            project_root: Optional explicit resource root. When provided,
+                writable directories also resolve under this root (test-friendly
+                and matches historical development behavior).
         """
-        self.root = (project_root or find_project_root()).resolve()
+        if project_root is not None:
+            self.root = project_root.resolve()
+            self._writable_root = self.root
+            self._frozen = False
+        elif is_frozen_application():
+            self.root = find_project_root()
+            self._writable_root = user_data_directory()
+            self._frozen = True
+        else:
+            self.root = find_project_root()
+            self._writable_root = self.root
+            self._frozen = False
 
     @property
     def assets_dir(self) -> Path:
@@ -136,7 +166,7 @@ class ProjectPaths:
     @property
     def output_dir(self) -> Path:
         """Return the top-level output directory."""
-        return self.root / DIR_OUTPUT
+        return self._writable_root / DIR_OUTPUT
 
     @property
     def barcodes_dir(self) -> Path:
@@ -146,7 +176,9 @@ class ProjectPaths:
     @property
     def logs_dir(self) -> Path:
         """Return the logs directory."""
-        return self.root / DIR_LOGS
+        if self._frozen:
+            return user_log_directory()
+        return self._writable_root / DIR_LOGS
 
     @property
     def log_archive_dir(self) -> Path:
@@ -156,7 +188,7 @@ class ProjectPaths:
     @property
     def temp_dir(self) -> Path:
         """Return the temporary scratch directory."""
-        return self.root / DIR_TEMP
+        return self._writable_root / DIR_TEMP
 
     @property
     def version_file(self) -> Path:
@@ -175,13 +207,23 @@ class ProjectPaths:
 
     @property
     def app_icon_file(self) -> Path:
-        """Return the path to the application icon."""
+        """Return the path to the Windows ``.ico`` application icon."""
         return self.icons_dir / APP_ICON_FILE_NAME
+
+    @property
+    def app_icns_file(self) -> Path:
+        """Return the path to the macOS ``.icns`` application icon."""
+        return self.icons_dir / APP_ICNS_FILE_NAME
 
     @property
     def logo_file(self) -> Path:
         """Return the path to the logo image."""
         return self.icons_dir / LOGO_FILE_NAME
+
+    @property
+    def quick_start_file(self) -> Path:
+        """Return the path to the bundled Quick Start guide."""
+        return self.resources_dir / QUICK_START_FILE_NAME
 
     @property
     def default_log_file(self) -> Path:

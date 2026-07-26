@@ -7,12 +7,14 @@ from classroom_library_label_maker.cli.parser import build_parser
 from classroom_library_label_maker.constants import APP_LOGGER_NAME
 from classroom_library_label_maker.metadata import (
     APP_AUTHOR,
+    APP_BUNDLE_IDENTIFIER,
     APP_CLI_NAME,
     APP_COMPANY,
     APP_COMPONENT_NAME,
     APP_COPYRIGHT,
     APP_DESCRIPTION,
     APP_DISTRIBUTION_NAME,
+    APP_EXECUTABLE_NAME,
     APP_GUI_SCRIPT_NAME,
     APP_LICENSE,
     APP_NAME,
@@ -36,7 +38,12 @@ def test_metadata_constants_are_non_empty() -> None:
     assert APP_DISTRIBUTION_NAME
     assert APP_CLI_NAME
     assert APP_GUI_SCRIPT_NAME
+    assert APP_EXECUTABLE_NAME
+    assert APP_BUNDLE_IDENTIFIER
     assert APP_COMPONENT_NAME
+    assert APP_EXECUTABLE_NAME == APP_NAME
+    assert "barcode-generator" not in APP_NAME.lower()
+    assert "Excel" in APP_DESCRIPTION or "inventory" in APP_DESCRIPTION.lower()
 
 
 def test_logger_name_matches_package_name() -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from PySide6.QtGui import QIcon
@@ -15,12 +16,19 @@ def resolve_application_icon_path(
 ) -> Path | None:
     """Return a usable application icon path, or ``None`` if none is ready.
 
-    Looks for ``assets/icons/app.ico`` then ``assets/icons/logo.png``. Empty
-    placeholder files (0 bytes) are treated as missing so packaging can add
-    real artwork later without code changes.
+    Prefers the platform-native icon format when present, then falls back to
+    ``logo.png`` and finally the alternate packaged icon. Empty placeholder
+    files (0 bytes) are treated as missing.
     """
     paths = ProjectPaths(project_root)
-    for candidate in (paths.app_icon_file, paths.logo_file):
+    if sys.platform == "darwin":
+        candidates = (paths.app_icns_file, paths.logo_file, paths.app_icon_file)
+    elif sys.platform == "win32":
+        candidates = (paths.app_icon_file, paths.logo_file, paths.app_icns_file)
+    else:
+        candidates = (paths.logo_file, paths.app_icon_file, paths.app_icns_file)
+
+    for candidate in candidates:
         try:
             if candidate.is_file() and candidate.stat().st_size > 0:
                 return candidate

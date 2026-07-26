@@ -122,6 +122,23 @@ def test_existing_barcode_detection(
     renderer.render_to_file.assert_not_called()
 
 
+def test_empty_existing_barcode_is_regenerated(
+    service: BarcodeGenerationService,
+    sample_book: Book,
+) -> None:
+    """Zero-byte leftovers from a failed render should be regenerated."""
+    path = service.output_path_for("9780064400558")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"")
+
+    result = service.generate_for_book(sample_book)
+
+    assert result.status == BarcodeStatus.GENERATED
+    assert result.output_path is not None
+    assert result.output_path.stat().st_size > 0
+    assert result.output_path.read_bytes().startswith(b"\x89PNG")
+
+
 def test_renderer_interaction(
     app_settings: ApplicationSettings,
     sample_book: Book,

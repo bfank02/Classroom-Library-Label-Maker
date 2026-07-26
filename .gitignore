@@ -58,3 +58,6 @@ barcode_generator/temp/*
 barcode_generator/dist/
 barcode_generator/build/
 barcode_generator/*.spec
+
+# Staged at packaging time from docs/Quick Start.md (avoid duplicate source)
+barcode_generator/assets/resources/Quick Start.md

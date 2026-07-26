@@ -32,8 +32,9 @@ from classroom_library_label_maker.workbooks.openpyxl_workbook_writer import (
 WORKBOOKS = Path(__file__).resolve().parent.parent / "assets" / "workbooks"
 INVENTORY = WORKBOOKS / "integration_inventory.xlsx"
 
-# Canonical dataset: 31 books → Avery 5160 (30/page) → 2 label pages.
+# Canonical dataset: 31 books (32 label copies) → Avery 5160 (30/page) → 2 pages.
 EXPECTED_BOOKS = 31
+EXPECTED_LABELS = 32
 EXPECTED_PAGES = 2
 PREEXISTING_ISBN = "9780064400558"
 
@@ -95,7 +96,7 @@ def test_workbook_generation_end_to_end_real_adapters(
     # --- Result statistics ---
     assert result.books_imported == EXPECTED_BOOKS
     assert result.books_processed == EXPECTED_BOOKS
-    assert result.labels_created == EXPECTED_BOOKS
+    assert result.labels_created == EXPECTED_LABELS
     assert result.pages_created == EXPECTED_PAGES
     assert result.barcodes_reused == 1
     assert result.barcodes_generated == EXPECTED_BOOKS - 1

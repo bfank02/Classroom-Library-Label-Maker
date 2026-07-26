@@ -38,8 +38,9 @@ _logger = get_logger("label_layout_service")
 class LabelLayoutService:
     """Arrange :class:`Book` instances onto label sheets via a template.
 
-    Responsibilities are limited to pagination and placement. Barcode PNGs are
-    optional inputs; missing images become placeholders with warnings.
+    Responsibilities are limited to pagination and placement. Each book is
+    expanded to ``Book.copies`` physical labels. Barcode PNGs are optional
+    inputs; missing images become placeholders with warnings.
     """
 
     def __init__(
@@ -66,6 +67,8 @@ class LabelLayoutService:
         barcode_paths: Mapping[str, Path | str] | None = None,
     ) -> LabelLayoutResult:
         """Place ``books`` onto ``target`` using the selected label template.
+
+        Each book contributes ``Book.copies`` physical labels (minimum 1).
 
         Args:
             books: Books to place (already imported; not validated here).
@@ -102,12 +105,18 @@ class LabelLayoutService:
             )
 
         warnings: list[LabelLayoutWarning] = []
+        warned_isbns: set[str] = set()
         labels_placed = 0
         pages_created = 0
         current_page = 0
+        # One physical label per inventory copy (Book.copies), not one per row.
+        slots: list[Book] = []
+        for book in books:
+            copies = max(1, int(book.copies))
+            slots.extend([book] * copies)
 
         try:
-            for index, book in enumerate(books):
+            for index, book in enumerate(slots):
                 page_number = (index // capacity) + 1
                 slot = index % capacity
                 row = slot // resolved.columns
@@ -124,7 +133,8 @@ class LabelLayoutService:
                     paths,
                     page_number=page_number,
                 )
-                if warning is not None:
+                if warning is not None and book.isbn not in warned_isbns:
+                    warned_isbns.add(book.isbn)
                     warnings.append(warning)
                     _logger.warning("%s", warning.message)
 
@@ -221,6 +231,25 @@ class LabelLayoutService:
                     isbn=book.isbn,
                     page_number=page_number,
                     code="barcode_file_missing",
+                ),
+            )
+
+        try:
+            empty = path.stat().st_size <= 0
+        except OSError:
+            empty = True
+        if empty:
+            return (
+                None,
+                True,
+                LabelLayoutWarning(
+                    message=(
+                        f"Barcode image for ISBN {book.isbn!r} at {path} "
+                        "is empty; using placeholder"
+                    ),
+                    isbn=book.isbn,
+                    page_number=page_number,
+                    code="barcode_file_empty",
                 ),
             )
 

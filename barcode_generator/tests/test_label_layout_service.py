@@ -99,6 +99,27 @@ def test_empty_collection(layout_service: LabelLayoutService) -> None:
     assert target.placements == []
 
 
+def test_copies_expand_to_multiple_labels(layout_service: LabelLayoutService) -> None:
+    """Book.copies should produce that many physical labels for the same book."""
+    target = InMemoryLabelSheetTarget()
+    books = [
+        Book(isbn="9780064400558", title="Charlotte's Web", author="E. B. White", copies=3),
+        Book(isbn="9780140328721", title="Matilda", author="Roald Dahl", copies=2),
+    ]
+    result = layout_service.layout_books(books, target)
+
+    assert result.labels_placed == 5
+    assert result.pages_created == 1
+    assert result.empty_labels_remaining_on_last_page == 25
+    assert [p.isbn for p in target.placements] == [
+        "9780064400558",
+        "9780064400558",
+        "9780064400558",
+        "9780140328721",
+        "9780140328721",
+    ]
+
+
 def test_different_template_lookup(app_settings: ApplicationSettings) -> None:
     """Explicit alternate templates should drive capacity and placement."""
     tiny = LabelTemplateSpec(

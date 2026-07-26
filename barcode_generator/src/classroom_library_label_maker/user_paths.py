@@ -9,7 +9,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from classroom_library_label_maker.config import ProjectPaths
-from classroom_library_label_maker.constants import SAMPLE_INVENTORY_FILE_NAME
+from classroom_library_label_maker.constants import (
+    QUICK_START_FILE_NAME,
+    SAMPLE_INVENTORY_FILE_NAME,
+)
 
 
 def user_documents_directory() -> Path:
@@ -43,6 +46,35 @@ def resolve_sample_inventory_workbook(
     candidates = [
         paths.sample_inventory_file,
         paths.root.parent / "samples" / SAMPLE_INVENTORY_FILE_NAME,
+    ]
+    for candidate in candidates:
+        try:
+            if candidate.is_file() and candidate.stat().st_size > 0:
+                return candidate.resolve()
+        except OSError:
+            continue
+    return None
+
+
+def resolve_quick_start_guide(
+    *,
+    project_root: Path | None = None,
+) -> Path | None:
+    """Return the Quick Start guide path when a non-empty file exists.
+
+    Search order:
+
+    1. Bundled ``assets/resources/Quick Start.md`` (packaged releases)
+    2. Repo ``docs/Quick Start.md`` (development checkout)
+    """
+    try:
+        paths = ProjectPaths(project_root)
+    except FileNotFoundError:
+        return None
+
+    candidates = [
+        paths.quick_start_file,
+        paths.root.parent / "docs" / QUICK_START_FILE_NAME,
     ]
     for candidate in candidates:
         try:
