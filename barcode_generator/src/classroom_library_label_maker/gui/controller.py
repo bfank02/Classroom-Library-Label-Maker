@@ -42,6 +42,7 @@ from classroom_library_label_maker.generation_summary import gui_completion_stat
 from classroom_library_label_maker.logger import get_logger
 from classroom_library_label_maker.models import (
     ApplicationSettings,
+    LabelContentOptions,
     WorkbookGenerationResult,
 )
 from classroom_library_label_maker.progress import GenerationProgress
@@ -152,6 +153,24 @@ class GuiController(QObject):
         self._state = self._state.with_label_template_id(cleaned or None)
         self._refresh_ui()
 
+    def set_label_content(self, content: LabelContentOptions) -> None:
+        """Update which fields appear on labels and refresh the UI."""
+        self._state = self._state.with_label_content(content)
+        self._refresh_ui()
+
+    def on_label_content_changed(self) -> None:
+        """Handle Show on labels checkbox changes."""
+        if self._is_generating:
+            return
+        window = self._window
+        content = LabelContentOptions(
+            show_title=window.show_title_checkbox.isChecked(),
+            show_author=window.show_author_checkbox.isChecked(),
+            show_isbn=window.show_isbn_checkbox.isChecked(),
+            show_barcode=window.show_barcode_checkbox.isChecked(),
+        )
+        self.set_label_content(content)
+
     def browse_inventory_workbook(self) -> None:
         """Open a native file dialog for the inventory workbook."""
         if self._is_generating:
@@ -210,6 +229,7 @@ class GuiController(QObject):
             workbook_path=inventory,
             barcode_output_directory=barcodes,
             label_template_id=template_id,
+            label_content=self._state.label_content,
             overwrite=False,
         )
 
@@ -334,6 +354,10 @@ class GuiController(QObject):
         window.barcode_browse_button.setEnabled(enabled)
         window.output_browse_button.setEnabled(enabled)
         window.label_template_combo.setEnabled(enabled)
+        window.show_title_checkbox.setEnabled(enabled)
+        window.show_author_checkbox.setEnabled(enabled)
+        window.show_isbn_checkbox.setEnabled(enabled)
+        window.show_barcode_checkbox.setEnabled(enabled)
         if enabled:
             window.generate_button.setEnabled(self._state.is_valid)
         else:
@@ -357,6 +381,10 @@ class GuiController(QObject):
         window.barcode_browse_button.clicked.connect(self.browse_barcode_folder)
         window.output_browse_button.clicked.connect(self.browse_output_workbook)
         window.label_template_combo.currentIndexChanged.connect(self.on_template_changed)
+        window.show_title_checkbox.toggled.connect(self.on_label_content_changed)
+        window.show_author_checkbox.toggled.connect(self.on_label_content_changed)
+        window.show_isbn_checkbox.toggled.connect(self.on_label_content_changed)
+        window.show_barcode_checkbox.toggled.connect(self.on_label_content_changed)
         window.generate_button.clicked.connect(self.on_generate_labels)
 
     def _refresh_ui(self) -> None:
@@ -376,6 +404,7 @@ class GuiController(QObject):
             empty="No file selected",
         )
         self._sync_template_combo()
+        self._sync_content_checkboxes()
 
         if self._is_generating:
             self._set_inputs_enabled(False)
@@ -387,6 +416,20 @@ class GuiController(QObject):
             self._set_status(messages[0], level="error")
         else:
             self._set_status("Ready to generate labels.", level="ok")
+
+    def _sync_content_checkboxes(self) -> None:
+        content = self._state.label_content
+        window = self._window
+        for checkbox, checked in (
+            (window.show_title_checkbox, content.show_title),
+            (window.show_author_checkbox, content.show_author),
+            (window.show_isbn_checkbox, content.show_isbn),
+            (window.show_barcode_checkbox, content.show_barcode),
+        ):
+            if checkbox.isChecked() != checked:
+                checkbox.blockSignals(True)
+                checkbox.setChecked(checked)
+                checkbox.blockSignals(False)
 
     def _sync_template_combo(self) -> None:
         combo = self._window.label_template_combo

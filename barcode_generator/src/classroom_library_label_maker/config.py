@@ -40,7 +40,7 @@ from classroom_library_label_maker.constants import (
     VERSION_FILE_NAME,
 )
 from classroom_library_label_maker.metadata import APP_VERSION
-from classroom_library_label_maker.models import ApplicationSettings
+from classroom_library_label_maker.models import ApplicationSettings, LabelContentOptions
 from classroom_library_label_maker.runtime_paths import (
     bundled_resource_root,
     is_frozen_application,
@@ -244,6 +244,7 @@ def load_application_settings(
     label_template_id: str = DEFAULT_LABEL_TEMPLATE_ID,
     workbook_path: Path | str | None = None,
     workbook_sheet_name: str = DEFAULT_WORKBOOK_SHEET_NAME,
+    label_content: LabelContentOptions | None = None,
 ) -> ApplicationSettings:
     """Build :class:`ApplicationSettings` from the project tree and overrides.
 
@@ -261,6 +262,7 @@ def load_application_settings(
             ``avery-5160``).
         workbook_path: Optional Excel workbook path for import.
         workbook_sheet_name: Worksheet name used by Excel import.
+        label_content: Optional label field visibility options.
 
     Returns:
         Populated :class:`ApplicationSettings`.
@@ -301,6 +303,7 @@ def load_application_settings(
         workbook_column_copies=DEFAULT_WORKBOOK_COLUMN_COPIES,
         workbook_header_row=DEFAULT_WORKBOOK_HEADER_ROW,
         label_template_id=label_template_id,
+        label_content=label_content or LabelContentOptions(),
     )
 
 

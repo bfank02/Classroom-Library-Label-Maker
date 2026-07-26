@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from classroom_library_label_maker.models import LabelContentOptions
+
 
 @dataclass(frozen=True, slots=True)
 class GenerationFormState:
@@ -18,6 +20,7 @@ class GenerationFormState:
     barcode_folder: Path | None = None
     output_workbook: Path | None = None
     label_template_id: str | None = None
+    label_content: LabelContentOptions = LabelContentOptions()
 
     def with_inventory_workbook(self, path: Path | None) -> GenerationFormState:
         """Return a copy with ``inventory_workbook`` updated."""
@@ -34,6 +37,10 @@ class GenerationFormState:
     def with_label_template_id(self, template_id: str | None) -> GenerationFormState:
         """Return a copy with ``label_template_id`` updated."""
         return replace(self, label_template_id=template_id)
+
+    def with_label_content(self, content: LabelContentOptions) -> GenerationFormState:
+        """Return a copy with ``label_content`` updated."""
+        return replace(self, label_content=content)
 
     def validation_messages(self) -> tuple[str, ...]:
         """Return concise, actionable messages for each invalid required field."""
@@ -62,6 +69,9 @@ class GenerationFormState:
 
         if not self.label_template_id or not self.label_template_id.strip():
             messages.append("Choose a label template.")
+
+        if not self.label_content.is_valid:
+            messages.append("Choose at least one field to show on labels.")
 
         return tuple(messages)
 

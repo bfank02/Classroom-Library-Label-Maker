@@ -9,6 +9,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QFormLayout,
     QHBoxLayout,
@@ -29,8 +30,8 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle(APP_NAME)
-        self.setMinimumSize(560, 380)
-        self.resize(720, 440)
+        self.setMinimumSize(560, 440)
+        self.resize(720, 520)
         self.setAccessibleName(APP_NAME)
 
         central = QWidget(self)
@@ -114,6 +115,51 @@ class MainWindow(QMainWindow):
         )
         self.template_label.setBuddy(self.label_template_combo)
         form.addRow(self.template_label, self.label_template_combo)
+
+        self.content_label = QLabel("Show on &labels:")
+        self.content_label.setObjectName("labelContentLabel")
+        content_field = QWidget()
+        content_layout = QHBoxLayout(content_field)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(16)
+
+        self.show_title_checkbox = QCheckBox("Title")
+        self.show_title_checkbox.setObjectName("showTitleCheckBox")
+        self.show_title_checkbox.setChecked(True)
+        self.show_title_checkbox.setToolTip("Print the book title on each label.")
+        self.show_title_checkbox.setAccessibleName("Show title on labels")
+
+        self.show_author_checkbox = QCheckBox("Author")
+        self.show_author_checkbox.setObjectName("showAuthorCheckBox")
+        self.show_author_checkbox.setChecked(True)
+        self.show_author_checkbox.setToolTip("Print the author on each label.")
+        self.show_author_checkbox.setAccessibleName("Show author on labels")
+
+        self.show_isbn_checkbox = QCheckBox("ISBN")
+        self.show_isbn_checkbox.setObjectName("showIsbnCheckBox")
+        self.show_isbn_checkbox.setChecked(True)
+        self.show_isbn_checkbox.setToolTip("Print the ISBN on each label.")
+        self.show_isbn_checkbox.setAccessibleName("Show ISBN on labels")
+
+        self.show_barcode_checkbox = QCheckBox("Barcode")
+        self.show_barcode_checkbox.setObjectName("showBarcodeCheckBox")
+        self.show_barcode_checkbox.setChecked(True)
+        self.show_barcode_checkbox.setToolTip(
+            "Print the barcode image on each label."
+        )
+        self.show_barcode_checkbox.setAccessibleName("Show barcode on labels")
+
+        for checkbox in (
+            self.show_title_checkbox,
+            self.show_author_checkbox,
+            self.show_isbn_checkbox,
+            self.show_barcode_checkbox,
+        ):
+            content_layout.addWidget(checkbox)
+        content_layout.addStretch(1)
+
+        self.content_label.setBuddy(self.show_title_checkbox)
+        form.addRow(self.content_label, content_field)
 
         root.addLayout(form)
 
@@ -220,4 +266,8 @@ class MainWindow(QMainWindow):
         QWidget.setTabOrder(self.inventory_browse_button, self.barcode_browse_button)
         QWidget.setTabOrder(self.barcode_browse_button, self.output_browse_button)
         QWidget.setTabOrder(self.output_browse_button, self.label_template_combo)
-        QWidget.setTabOrder(self.label_template_combo, self.generate_button)
+        QWidget.setTabOrder(self.label_template_combo, self.show_title_checkbox)
+        QWidget.setTabOrder(self.show_title_checkbox, self.show_author_checkbox)
+        QWidget.setTabOrder(self.show_author_checkbox, self.show_isbn_checkbox)
+        QWidget.setTabOrder(self.show_isbn_checkbox, self.show_barcode_checkbox)
+        QWidget.setTabOrder(self.show_barcode_checkbox, self.generate_button)
