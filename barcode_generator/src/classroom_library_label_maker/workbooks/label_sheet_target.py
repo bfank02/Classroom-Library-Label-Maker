@@ -7,11 +7,12 @@ targets convert to implementation-specific units.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
 from classroom_library_label_maker.label_templates.label_template import LabelTemplate
+from classroom_library_label_maker.models import LabelContentOptions
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +28,7 @@ class LabelPlacement:
         isbn: Book ISBN (as provided; not re-validated).
         barcode_image_path: Path to a PNG when available.
         used_placeholder_barcode: True when no usable barcode image was supplied.
+        content: Which fields should appear on this label.
     """
 
     page_number: int
@@ -37,6 +39,7 @@ class LabelPlacement:
     isbn: str
     barcode_image_path: Path | None = None
     used_placeholder_barcode: bool = False
+    content: LabelContentOptions = field(default_factory=LabelContentOptions)
 
 
 class LabelSheetTarget(Protocol):

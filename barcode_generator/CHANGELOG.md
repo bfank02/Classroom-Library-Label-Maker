@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `runtime_paths.py` for frozen resource roots and OS log/data directories
 - Real application icons (`logo.png`, `app.ico`, `app.icns`)
 - GUI rotating file logging to the platform log directory when packaged
+- Label content checkboxes in the GUI (Title, Author, ISBN, Barcode) so
+  teachers can choose what appears on each printed label
+- ``LabelContentOptions`` shared by settings, layout, and Excel placement
+
+### Changed
+
+- Print barcodes render at 600 DPI with taller bars and fill more of the
+  label; barcode row allocation grows when fewer text fields are shown
 
 ### Fixed
 

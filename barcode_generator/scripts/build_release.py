@@ -29,6 +29,50 @@ DIST = ROOT / "dist"
 BUILD = ROOT / "build"
 
 
+def _remove_tree(path: Path) -> None:
+    """Remove a directory tree, tolerating macOS Finder ``.DS_Store`` races.
+
+    Finder often recreates ``.DS_Store`` while ``shutil.rmtree`` is deleting an
+    ``.app`` bundle, which surfaces as ``OSError: [Errno 66] Directory not empty``.
+    """
+    if not path.exists():
+        return
+
+    import subprocess
+    import time
+
+    last_error: OSError | None = None
+    for _ in range(10):
+        if not path.exists():
+            return
+        try:
+            shutil.rmtree(path)
+            return
+        except OSError as exc:
+            last_error = exc
+            ds_store = path / ".DS_Store"
+            if ds_store.exists():
+                try:
+                    ds_store.unlink()
+                except OSError:
+                    pass
+            time.sleep(0.15)
+
+    # Last resort: Unix rm handles stubborn Finder metadata better than rmtree.
+    result = subprocess.run(
+        ["rm", "-rf", str(path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if path.exists():
+        detail = (result.stderr or result.stdout or str(last_error)).strip()
+        raise OSError(
+            f"Could not remove {path}. Quit Classroom Library Label Maker and "
+            f"close any Finder windows on dist/, then retry. ({detail})"
+        )
+
+
 def _ensure_import_path() -> None:
     sys.path.insert(0, str(SRC))
 
@@ -121,8 +165,7 @@ def build(*, clean: bool = True) -> int:
 
     if clean:
         for path in (DIST, BUILD):
-            if path.exists():
-                shutil.rmtree(path)
+            _remove_tree(path)
 
     entry = SRC / "classroom_library_label_maker" / "gui" / "__main__.py"
     args: list[str] = [
@@ -192,7 +235,7 @@ def main(argv: list[str] | None = None) -> int:
     if ns.clean_only:
         for path in (DIST, BUILD):
             if path.exists():
-                shutil.rmtree(path)
+                _remove_tree(path)
                 print(f"Removed {path}")
         return 0
 

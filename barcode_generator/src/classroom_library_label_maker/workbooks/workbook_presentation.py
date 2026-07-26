@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from classroom_library_label_maker.constants import LABEL_WORKSHEET_ROWS_PER_LABEL
 from classroom_library_label_maker.label_templates.label_template import (
     LabelTemplate,
     PageOrientation,
@@ -103,7 +104,7 @@ def apply_worksheet_presentation(sheet: Any, template: LabelTemplate) -> None:
     sheet.page_margins.footer = 0.0
 
     last_col = _column_letter(template.columns)
-    last_row = template.rows * 4  # 4 worksheet rows per label slot
+    last_row = template.rows * LABEL_WORKSHEET_ROWS_PER_LABEL
     sheet.print_area = f"A1:{last_col}{last_row}"
 
     sheet.print_options.horizontalCentered = True

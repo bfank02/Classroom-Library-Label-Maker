@@ -109,6 +109,7 @@ class LabelLayoutService:
         labels_placed = 0
         pages_created = 0
         current_page = 0
+        content = self._settings.label_content
         # One physical label per inventory copy (Book.copies), not one per row.
         slots: list[Book] = []
         for book in books:
@@ -128,15 +129,19 @@ class LabelLayoutService:
                     current_page = page_number
                     _logger.info("Page created: %s", page_number)
 
-                barcode_path, used_placeholder, warning = self._resolve_barcode(
-                    book,
-                    paths,
-                    page_number=page_number,
-                )
-                if warning is not None and book.isbn not in warned_isbns:
-                    warned_isbns.add(book.isbn)
-                    warnings.append(warning)
-                    _logger.warning("%s", warning.message)
+                if content.show_barcode:
+                    barcode_path, used_placeholder, warning = self._resolve_barcode(
+                        book,
+                        paths,
+                        page_number=page_number,
+                    )
+                    if warning is not None and book.isbn not in warned_isbns:
+                        warned_isbns.add(book.isbn)
+                        warnings.append(warning)
+                        _logger.warning("%s", warning.message)
+                else:
+                    barcode_path = None
+                    used_placeholder = False
 
                 placement = LabelPlacement(
                     page_number=page_number,
@@ -147,6 +152,7 @@ class LabelLayoutService:
                     isbn=book.isbn,
                     barcode_image_path=barcode_path,
                     used_placeholder_barcode=used_placeholder,
+                    content=content,
                 )
                 target.place_label(placement)
                 labels_placed += 1

@@ -23,6 +23,38 @@ from classroom_library_label_maker.constants import (
 )
 
 
+@dataclass(frozen=True, slots=True)
+class LabelContentOptions:
+    """Which fields appear on each printed label alongside the sheet grid.
+
+    Defaults: title, author, and barcode. ISBN digits are rendered inside the
+    barcode image, so they are not a separate label field.
+    At least one field must be enabled before generation.
+    """
+
+    show_title: bool = True
+    show_author: bool = True
+    show_barcode: bool = True
+
+    @property
+    def is_valid(self) -> bool:
+        """True when at least one content field is enabled."""
+        return bool(self.show_title or self.show_author or self.show_barcode)
+
+    @property
+    def enabled_count(self) -> int:
+        """Return how many content slots are enabled."""
+        return sum((self.show_title, self.show_author, self.show_barcode))
+
+    def to_dict(self) -> dict[str, bool]:
+        """Serialize content flags for summaries and tests."""
+        return {
+            "show_title": self.show_title,
+            "show_author": self.show_author,
+            "show_barcode": self.show_barcode,
+        }
+
+
 class BarcodeStatus(StrEnum):
     """Outcome status for a single barcode generation attempt."""
 
@@ -760,6 +792,7 @@ class ApplicationSettings:
         workbook_header_row: 1-based header row index.
         label_template_id: Single source of truth for the registered label
             template id (e.g. ``avery-5160``). Used by LabelLayoutService.
+        label_content: Which title/author/barcode fields appear on labels.
     """
 
     barcode_output_directory: Path
@@ -786,6 +819,7 @@ class ApplicationSettings:
     workbook_column_copies: str = DEFAULT_WORKBOOK_COLUMN_COPIES
     workbook_header_row: int = DEFAULT_WORKBOOK_HEADER_ROW
     label_template_id: str = DEFAULT_LABEL_TEMPLATE_ID
+    label_content: LabelContentOptions = field(default_factory=LabelContentOptions)
 
     def __post_init__(self) -> None:
         """Normalize path fields to :class:`~pathlib.Path` instances."""
@@ -807,6 +841,8 @@ class ApplicationSettings:
             raise ValueError("default_label_type must not be empty")
         if not self.label_template_id.strip():
             raise ValueError("label_template_id must not be empty")
+        if not self.label_content.is_valid:
+            raise ValueError("At least one label content field must be enabled")
         if self.barcode_module_width <= 0:
             raise ValueError("barcode_module_width must be positive")
         if self.barcode_module_height <= 0:

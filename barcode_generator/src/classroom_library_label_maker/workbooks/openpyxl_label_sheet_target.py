@@ -8,8 +8,9 @@ handled by :class:`OpenPyxlWorkbookWriter` / :class:`WorkbookWriter`.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
+from classroom_library_label_maker.constants import LABEL_WORKSHEET_ROWS_PER_LABEL
 from classroom_library_label_maker.label_templates.label_template import LabelTemplate
 from classroom_library_label_maker.logger import get_logger
 from classroom_library_label_maker.workbooks.label_sheet_target import LabelPlacement
@@ -26,9 +27,15 @@ _logger = get_logger("workbooks.openpyxl_label_sheet")
 # Approximate Excel character-width units per inch (implementation detail).
 _COL_WIDTH_PER_INCH = 12.0
 _ROW_HEIGHT_POINTS_PER_INCH = 72.0
+_EMU_PER_INCH = 914_400
+
+# Fill most of the barcode slot; leave a thin quiet margin inside the cell.
+_BARCODE_SLOT_FILL = 0.96
 
 # Consistent sheet title prefix (page number appended).
 LABEL_SHEET_PREFIX = "Labels "
+
+_SlotKind = Literal["title", "author", "barcode"]
 
 
 class OpenPyxlLabelSheetTarget:
@@ -75,7 +82,7 @@ class OpenPyxlLabelSheetTarget:
         _logger.debug("Created worksheet %r for page %s", title, page_number)
 
     def place_label(self, placement: LabelPlacement) -> None:
-        """Write centered title/author/ISBN (and optional barcode) into a cell block."""
+        """Write selected title/author/barcode fields into a cell block."""
         if self._template is None:
             raise RuntimeError("begin_page must be called before place_label")
         sheet = self._sheets.get(placement.page_number)
@@ -85,62 +92,82 @@ class OpenPyxlLabelSheetTarget:
             )
 
         template = self._template
-        # Each logical label maps to a 4-row x 1-col block of worksheet cells.
-        block_rows = 4
+        block_rows = LABEL_WORKSHEET_ROWS_PER_LABEL
         start_row = placement.row * block_rows + 1
         start_col = placement.column + 1
+        content = placement.content
 
-        title_cell = sheet.cell(
-            row=start_row, column=start_col, value=placement.title
-        )
-        title_cell.alignment = label_title_alignment()
-        title_cell.font = label_title_font()
+        slots: list[tuple[_SlotKind, str | None]] = []
+        if content.show_title:
+            slots.append(("title", placement.title))
+        if content.show_author:
+            slots.append(("author", placement.author))
+        if content.show_barcode:
+            slots.append(("barcode", None))
 
-        author_cell = sheet.cell(
-            row=start_row + 1, column=start_col, value=placement.author
-        )
-        author_cell.alignment = label_body_alignment()
-        author_cell.font = label_body_font()
+        kinds = [kind for kind, _ in slots]
+        spans = _distribute_row_spans(kinds, block_rows)
+        for (kind, value), (row_offset, row_span) in zip(slots, spans, strict=True):
+            cell_row = start_row + row_offset
+            end_row = cell_row + row_span - 1
+            if row_span > 1:
+                sheet.merge_cells(
+                    start_row=cell_row,
+                    start_column=start_col,
+                    end_row=end_row,
+                    end_column=start_col,
+                )
 
-        isbn_cell = sheet.cell(
-            row=start_row + 2, column=start_col, value=placement.isbn
-        )
-        isbn_cell.alignment = label_body_alignment()
-        isbn_cell.font = label_body_font()
+            if kind == "title":
+                cell = sheet.cell(row=cell_row, column=start_col, value=value)
+                cell.alignment = label_title_alignment()
+                cell.font = label_title_font()
+            elif kind == "author":
+                cell = sheet.cell(row=cell_row, column=start_col, value=value)
+                cell.alignment = label_body_alignment()
+                cell.font = label_body_font()
+            else:
+                show_placeholder = (
+                    placement.used_placeholder_barcode
+                    or placement.barcode_image_path is None
+                )
+                if show_placeholder:
+                    cell = sheet.cell(
+                        row=cell_row,
+                        column=start_col,
+                        value="[barcode placeholder]",
+                    )
+                    cell.alignment = label_body_alignment()
+                    cell.font = label_body_font()
+                else:
+                    sheet.cell(row=cell_row, column=start_col, value="")
 
-        if placement.used_placeholder_barcode or placement.barcode_image_path is None:
-            barcode_cell = sheet.cell(
-                row=start_row + 3,
-                column=start_col,
-                value="[barcode placeholder]",
-            )
-            barcode_cell.alignment = label_body_alignment()
-            barcode_cell.font = label_body_font()
-        else:
-            sheet.cell(row=start_row + 3, column=start_col, value="")
-
-        if (
-            placement.barcode_image_path is not None
-            and not placement.used_placeholder_barcode
-            and Path(placement.barcode_image_path).is_file()
-        ):
-            self._add_barcode_image(
-                sheet,
-                path=Path(placement.barcode_image_path),
-                anchor_row=start_row + 3,
-                anchor_col=start_col,
-                template=template,
-            )
+                if (
+                    placement.barcode_image_path is not None
+                    and not placement.used_placeholder_barcode
+                    and Path(placement.barcode_image_path).is_file()
+                ):
+                    self._add_barcode_image(
+                        sheet,
+                        path=Path(placement.barcode_image_path),
+                        anchor_row=cell_row,
+                        anchor_col=start_col,
+                        template=template,
+                        row_span=row_span,
+                        block_rows=block_rows,
+                    )
 
     def _apply_page_geometry(self, sheet: Any, template: LabelTemplate) -> None:
+        block_rows = LABEL_WORKSHEET_ROWS_PER_LABEL
         for col_index in range(1, template.columns + 1):
             letter = self._column_letter(col_index)
             sheet.column_dimensions[letter].width = (
                 template.label_width * _COL_WIDTH_PER_INCH
             )
-        # 4 worksheet rows per label slot for text + barcode line.
-        total_ws_rows = template.rows * 4
-        row_height = (template.label_height / 4.0) * _ROW_HEIGHT_POINTS_PER_INCH
+        total_ws_rows = template.rows * block_rows
+        row_height = (template.label_height / float(block_rows)) * (
+            _ROW_HEIGHT_POINTS_PER_INCH
+        )
         for row_index in range(1, total_ws_rows + 1):
             sheet.row_dimensions[row_index].height = row_height
 
@@ -152,6 +179,8 @@ class OpenPyxlLabelSheetTarget:
         anchor_row: int,
         anchor_col: int,
         template: LabelTemplate,
+        row_span: int = 1,
+        block_rows: int = LABEL_WORKSHEET_ROWS_PER_LABEL,
     ) -> None:
         try:
             from openpyxl.drawing.image import Image as XLImage
@@ -160,7 +189,6 @@ class OpenPyxlLabelSheetTarget:
                 OneCellAnchor,
             )
             from openpyxl.drawing.xdr import XDRPositiveSize2D
-            from openpyxl.utils.units import pixels_to_EMU
         except ImportError:  # pragma: no cover
             _logger.warning("openpyxl.drawing.image unavailable; skipping barcode image")
             return
@@ -170,23 +198,27 @@ class OpenPyxlLabelSheetTarget:
             _logger.warning("Barcode image has no dimensions; skipping %s", path)
             return
 
-        # EMUs: constrain the image to the barcode cell so it cannot cover
-        # title/author/ISBN rows of labels below (a common Excel display bug).
-        emu_per_inch = 914_400
-        cell_width_emu = int(template.label_width * emu_per_inch)
-        cell_height_emu = int((template.label_height / 4.0) * emu_per_inch)
-        max_width_emu = int(cell_width_emu * 0.90)
-        max_height_emu = int(cell_height_emu * 0.90)
+        cell_width_emu = int(template.label_width * _EMU_PER_INCH)
+        cell_height_emu = int(
+            (template.label_height * (row_span / float(block_rows))) * _EMU_PER_INCH
+        )
+        max_width_emu = int(cell_width_emu * _BARCODE_SLOT_FILL)
+        max_height_emu = int(cell_height_emu * _BARCODE_SLOT_FILL)
 
-        width_emu = pixels_to_EMU(int(image.width))
-        height_emu = pixels_to_EMU(int(image.height))
-        scale = min(max_width_emu / width_emu, max_height_emu / height_emu, 1.0)
-        width_emu = max(1, int(width_emu * scale))
-        height_emu = max(1, int(height_emu * scale))
-        image.width = max(1, int(image.width * scale))
-        image.height = max(1, int(image.height * scale))
+        # Size by physical slot + source aspect ratio (not 96-DPI pixel EMUs).
+        # This fills the barcode region responsively while keeping bars sharp
+        # when the PNG was rendered at print DPI.
+        aspect = float(image.width) / float(image.height)
+        if max_width_emu / max_height_emu > aspect:
+            height_emu = max(1, max_height_emu)
+            width_emu = max(1, int(height_emu * aspect))
+        else:
+            width_emu = max(1, max_width_emu)
+            height_emu = max(1, int(width_emu / aspect))
 
-        # Center within the barcode cell (openpyxl anchors are top-left by default).
+        image.width = max(1, int(image.width))
+        image.height = max(1, int(image.height))
+
         col_off = max(0, (cell_width_emu - width_emu) // 2)
         row_off = max(0, (cell_height_emu - height_emu) // 2)
         image.anchor = OneCellAnchor(
@@ -205,3 +237,44 @@ class OpenPyxlLabelSheetTarget:
         from openpyxl.utils import get_column_letter
 
         return get_column_letter(index)
+
+
+def _distribute_row_spans(
+    slot_kinds: list[_SlotKind],
+    block_rows: int,
+) -> list[tuple[int, int]]:
+    """Return ``(row_offset, row_span)`` pairs that fill ``block_rows``.
+
+    When a barcode slot is present last, each text field keeps one row and the
+    barcode receives the remaining height so scan targets stay large. Without a
+    barcode, extra rows prefer earlier text slots (titles).
+    """
+    slot_count = len(slot_kinds)
+    if slot_count <= 0:
+        return []
+    if slot_count > block_rows:
+        raise ValueError(
+            f"Cannot place {slot_count} content slots in {block_rows} rows"
+        )
+
+    if slot_kinds[-1] == "barcode" and slot_count > 1:
+        text_count = slot_count - 1
+        barcode_rows = block_rows - text_count
+        if barcode_rows >= 1:
+            spans: list[tuple[int, int]] = []
+            offset = 0
+            for _ in range(text_count):
+                spans.append((offset, 1))
+                offset += 1
+            spans.append((offset, barcode_rows))
+            return spans
+
+    base = block_rows // slot_count
+    remainder = block_rows % slot_count
+    spans = []
+    offset = 0
+    for index in range(slot_count):
+        span = base + (1 if index < remainder else 0)
+        spans.append((offset, span))
+        offset += span
+    return spans

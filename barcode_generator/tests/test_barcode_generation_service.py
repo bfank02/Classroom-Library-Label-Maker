@@ -253,19 +253,78 @@ def test_default_renderer_uses_application_settings(
     assert options["dpi"] == app_settings.barcode_dpi
 
 
-def test_renderer_defaults_match_library_effective_output(tmp_path: Path) -> None:
-    """Configured defaults must preserve prior python-barcode EAN-13 PNG output."""
+def test_renderer_defaults_are_applied_to_image_writer(tmp_path: Path) -> None:
+    """Configured print defaults must be passed through to python-barcode."""
     from barcode import get_barcode_class
     from barcode.writer import ImageWriter
+
+    from classroom_library_label_maker.constants import (
+        DEFAULT_BARCODE_DPI,
+        DEFAULT_BARCODE_FONT_SIZE,
+        DEFAULT_BARCODE_MODULE_HEIGHT,
+        DEFAULT_BARCODE_MODULE_WIDTH,
+        DEFAULT_BARCODE_QUIET_ZONE,
+        DEFAULT_BARCODE_TEXT_DISTANCE,
+    )
 
     isbn = "9780064400558"
     baseline = tmp_path / "baseline.png"
     configured = tmp_path / "configured.png"
 
     barcode_cls = get_barcode_class("ean13")
+    options = {
+        "module_width": DEFAULT_BARCODE_MODULE_WIDTH,
+        "module_height": DEFAULT_BARCODE_MODULE_HEIGHT,
+        "quiet_zone": DEFAULT_BARCODE_QUIET_ZONE,
+        "font_size": DEFAULT_BARCODE_FONT_SIZE,
+        "text_distance": DEFAULT_BARCODE_TEXT_DISTANCE,
+        "dpi": DEFAULT_BARCODE_DPI,
+    }
     with baseline.open("wb") as handle:
-        barcode_cls(isbn, writer=ImageWriter()).write(handle)
+        barcode_cls(isbn, writer=ImageWriter()).write(handle, options=options)
 
     PythonBarcodeRenderer().render_to_file(isbn, configured)
 
     assert configured.read_bytes() == baseline.read_bytes()
+    assert configured.stat().st_size > 0
+
+
+def test_human_readable_text_does_not_overlap_bars(tmp_path: Path) -> None:
+    """ISBN digits must sit below the bars, not superimposed on them.
+
+    python-barcode's ImageWriter anchors text at the bottom of the glyph box, so
+    ``text_distance`` must exceed the font height in mm or bars and digits collide.
+    """
+    from PIL import Image
+
+    from classroom_library_label_maker.constants import (
+        DEFAULT_BARCODE_DPI,
+        DEFAULT_BARCODE_MODULE_HEIGHT,
+        DEFAULT_BARCODE_TEXT_DISTANCE,
+    )
+
+    output = tmp_path / "overlap-check.png"
+    PythonBarcodeRenderer().render_to_file("9780394839127", output)
+    image = Image.open(output).convert("RGB")
+    width, height = image.size
+    pixels = image.load()
+
+    margin_top_mm = 1.0
+    bar_end_px = int(
+        (margin_top_mm + DEFAULT_BARCODE_MODULE_HEIGHT) * DEFAULT_BARCODE_DPI / 25.4
+    )
+    # Sample a band just below the bars; it must be nearly white (gap before digits).
+    gap_start = min(height - 1, bar_end_px + 1)
+    gap_end = min(height, gap_start + max(2, int(0.5 * DEFAULT_BARCODE_DPI / 25.4)))
+    assert gap_end > gap_start
+    black_in_gap = 0
+    samples = 0
+    for y in range(gap_start, gap_end):
+        for x in range(width):
+            samples += 1
+            if pixels[x, y][0] < 40:
+                black_in_gap += 1
+    assert black_in_gap / samples < 0.01, (
+        f"Expected quiet gap below bars; black density={black_in_gap / samples:.3f} "
+        f"(text_distance={DEFAULT_BARCODE_TEXT_DISTANCE})"
+    )

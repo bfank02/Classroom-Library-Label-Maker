@@ -24,14 +24,22 @@ DEFAULT_LABEL_TYPE = "avery_5160"
 # Barcode image files
 DEFAULT_BARCODE_EXTENSION = ".png"
 
-# EAN-13 PNG rendering defaults (python-barcode ImageWriter / EAN SC2).
-# These values match the library's effective defaults so centralizing them
-# in ApplicationSettings does not change rendered output.
+# EAN-13 PNG rendering defaults (python-barcode ImageWriter).
+# Tuned for classroom label printing: taller bars + higher DPI so Excel can
+# place a sharp image that fills the barcode region without looking soft.
 DEFAULT_BARCODE_MODULE_WIDTH = 0.33  # mm (EAN-13 SC2)
-DEFAULT_BARCODE_MODULE_HEIGHT = 15.0  # mm
-DEFAULT_BARCODE_QUIET_ZONE = 6.5  # mm
+DEFAULT_BARCODE_MODULE_HEIGHT = 20.0  # mm
+DEFAULT_BARCODE_QUIET_ZONE = 4.0  # mm (still above EAN minimum quiet zone)
 DEFAULT_BARCODE_FONT_SIZE = 10
-DEFAULT_BARCODE_DPI = 300
+# python-barcode ImageWriter draws human-readable text with Pillow anchor "md"
+# (bottom of glyphs at bars_end + text_distance). Values below ~pt2mm(font_size)
+# (~3.5 mm at 10 pt) overlap the bars. Library default is 5 mm.
+DEFAULT_BARCODE_TEXT_DISTANCE = 5.0  # mm between bars and human-readable text
+DEFAULT_BARCODE_DPI = 600
+
+# Worksheet rows used to subdivide each physical label (title/author/barcode).
+# Higher granularity lets the barcode claim more height when text fields are few.
+LABEL_WORKSHEET_ROWS_PER_LABEL = 6
 
 # Excel workbook import defaults
 DEFAULT_WORKBOOK_SHEET_NAME = "Books"
