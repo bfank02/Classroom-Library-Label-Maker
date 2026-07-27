@@ -139,8 +139,8 @@ def _draw_label(
         band_h = label_h * (row_span / block)
         if kind in {"title", "author"} and value:
             font = font_title if kind == "title" else font_body
-            _draw_centered_text(
-                draw,
+            _draw_clipped_label_text(
+                page,  # type: ignore[arg-type]
                 text=str(value),
                 left=left,
                 top=band_top,
@@ -149,6 +149,7 @@ def _draw_label(
                 font=font,
                 dpi=dpi,
                 fill_ratio=_TITLE_FILL,
+                prefer_bold=(kind == "title"),
             )
         elif kind == "barcode":
             _paste_barcode(
@@ -201,8 +202,8 @@ def _paste_barcode(
     page.paste(resized, (x, y))  # type: ignore[attr-defined]
 
 
-def _draw_centered_text(
-    draw: object,
+def _draw_clipped_label_text(
+    page: object,
     *,
     text: str,
     left: float,
@@ -212,19 +213,159 @@ def _draw_centered_text(
     font: object,
     dpi: int,
     fill_ratio: float,
+    prefer_bold: bool,
 ) -> None:
-    del fill_ratio  # reserved for future padding tweaks
-    draw.multiline_text(  # type: ignore[attr-defined]
-        (
-            _inches_to_px(left + width / 2.0, dpi),
-            _inches_to_px(top + height / 2.0, dpi),
-        ),
-        text,
+    """Draw wrapped, centered text that cannot spill into neighboring labels."""
+    from PIL import Image, ImageDraw
+
+    pad = max(0.0, (1.0 - fill_ratio) / 2.0)
+    band_w = max(1, _inches_to_px(width * (1.0 - 2.0 * pad), dpi))
+    band_h = max(1, _inches_to_px(height * (1.0 - 2.0 * pad), dpi))
+    band = Image.new("RGB", (band_w, band_h), (255, 255, 255))
+    band_draw = ImageDraw.Draw(band)
+
+    fitted_font, wrapped = _fit_wrapped_text(
+        band_draw,
+        text=text,
         font=font,
+        max_width=max(1, band_w - 4),
+        max_height=max(1, band_h - 2),
+        prefer_bold=prefer_bold,
+        dpi=dpi,
+    )
+    band_draw.multiline_text(
+        (band_w // 2, band_h // 2),
+        wrapped,
+        font=fitted_font,
         fill=(0, 0, 0),
         anchor="mm",
         align="center",
+        spacing=2,
     )
+
+    x = _inches_to_px(left + width * pad, dpi)
+    y = _inches_to_px(top + height * pad, dpi)
+    page.paste(band, (x, y))  # type: ignore[attr-defined]
+
+
+def _fit_wrapped_text(
+    draw: object,
+    *,
+    text: str,
+    font: object,
+    max_width: int,
+    max_height: int,
+    prefer_bold: bool,
+    dpi: int,
+) -> tuple[object, str]:
+    """Wrap ``text`` to ``max_width`` and shrink the font until it fits height."""
+    cleaned = " ".join(text.split())
+    if not cleaned:
+        return font, ""
+
+    # Try the provided font first, then step down a few point sizes.
+    base_size = max(8, int(getattr(font, "size", 18)))
+    size_pt_guess = base_size * 72.0 / float(dpi)
+    candidates_pt = [
+        size_pt_guess,
+        size_pt_guess - 1,
+        size_pt_guess - 2,
+        max(6.0, size_pt_guess - 3),
+    ]
+
+    chosen_font = font
+    chosen_text = cleaned
+    for size_pt in candidates_pt:
+        trial_font = _load_font(bold=prefer_bold, size_pt=size_pt, dpi=dpi)
+        wrapped = _wrap_text(draw, cleaned, trial_font, max_width)
+        bbox = draw.multiline_textbbox(  # type: ignore[attr-defined]
+            (0, 0),
+            wrapped,
+            font=trial_font,
+            spacing=2,
+            align="center",
+        )
+        text_h = bbox[3] - bbox[1]
+        text_w = bbox[2] - bbox[0]
+        chosen_font = trial_font
+        chosen_text = wrapped
+        if text_h <= max_height and text_w <= max_width:
+            return trial_font, wrapped
+
+    # Still too tall: keep as many lines as fit and ellipsize the last line.
+    lines = chosen_text.split("\n")
+    kept: list[str] = []
+    for index, line in enumerate(lines):
+        trial = "\n".join([*kept, line])
+        bbox = draw.multiline_textbbox(  # type: ignore[attr-defined]
+            (0, 0),
+            trial,
+            font=chosen_font,
+            spacing=2,
+            align="center",
+        )
+        if bbox[3] - bbox[1] <= max_height:
+            kept.append(line)
+            continue
+        if not kept:
+            kept.append(_ellipsize_line(draw, line, chosen_font, max_width))
+        else:
+            kept[-1] = _ellipsize_line(draw, kept[-1], chosen_font, max_width)
+        break
+    return chosen_font, "\n".join(kept) if kept else _ellipsize_line(
+        draw, cleaned, chosen_font, max_width
+    )
+
+
+def _wrap_text(draw: object, text: str, font: object, max_width: int) -> str:
+    """Word-wrap ``text`` so each line fits ``max_width`` pixels."""
+    words = text.split(" ")
+    if not words:
+        return ""
+
+    lines: list[str] = []
+    current = words[0]
+    for word in words[1:]:
+        trial = f"{current} {word}"
+        bbox = draw.textbbox((0, 0), trial, font=font)  # type: ignore[attr-defined]
+        if bbox[2] - bbox[0] <= max_width:
+            current = trial
+            continue
+        lines.append(current)
+        current = word
+        # Hard-break an oversized single token.
+        while True:
+            bbox = draw.textbbox((0, 0), current, font=font)  # type: ignore[attr-defined]
+            if bbox[2] - bbox[0] <= max_width or len(current) <= 1:
+                break
+            # Leave room for a hyphen when splitting long words.
+            split_at = max(1, len(current) // 2)
+            for end in range(len(current) - 1, 0, -1):
+                piece = current[:end] + "-"
+                piece_box = draw.textbbox((0, 0), piece, font=font)  # type: ignore[attr-defined]
+                if piece_box[2] - piece_box[0] <= max_width:
+                    split_at = end
+                    break
+            lines.append(current[:split_at] + "-")
+            current = current[split_at:]
+    lines.append(current)
+    return "\n".join(lines)
+
+
+def _ellipsize_line(draw: object, text: str, font: object, max_width: int) -> str:
+    """Truncate ``text`` with an ellipsis so it fits ``max_width``."""
+    if not text:
+        return ""
+    bbox = draw.textbbox((0, 0), text, font=font)  # type: ignore[attr-defined]
+    if bbox[2] - bbox[0] <= max_width:
+        return text
+    ellipsis = "…"
+    for end in range(len(text), 0, -1):
+        candidate = text[:end].rstrip() + ellipsis
+        box = draw.textbbox((0, 0), candidate, font=font)  # type: ignore[attr-defined]
+        if box[2] - box[0] <= max_width:
+            return candidate
+    return ellipsis
 
 
 def _load_font(*, bold: bool, size_pt: float, dpi: int) -> object:
