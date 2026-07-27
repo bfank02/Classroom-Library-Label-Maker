@@ -200,8 +200,9 @@ def test_title_barcode_layout_maximizes_print_footprint(tmp_path: Path) -> None:
     width_in = image.anchor.ext.cx / 914_400
     height_in = image.anchor.ext.cy / 914_400
     assert LABEL_WORKSHEET_ROWS_PER_LABEL == 8
-    # Nearly full Avery 5160 width (2.625"); title uses 2/8, barcode 6/8.
-    assert width_in >= 2.2
+    # Standard SC2 barcodes are narrower than the label; height still fills the slot.
+    assert width_in >= 1.0
+    assert width_in <= AVERY_5160.label_width
     assert height_in >= 0.70
 
 

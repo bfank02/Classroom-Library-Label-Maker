@@ -25,21 +25,19 @@ DEFAULT_LABEL_TYPE = "avery_5160"
 DEFAULT_BARCODE_EXTENSION = ".png"
 
 # EAN-13 PNG rendering defaults (python-barcode ImageWriter).
-# Tuned for consumer laser printers on Avery 5160: thicker modules (≈SC6),
-# integer-friendly width at 600 DPI, and a wide aspect so Title+Barcode
-# placement can fill nearly the full label width without stretching.
-DEFAULT_BARCODE_MODULE_WIDTH = 0.55  # mm (~26 px at 1200 DPI; SC2 was 0.33)
-DEFAULT_BARCODE_MODULE_HEIGHT = 14.0  # mm (bars); kept below prior 20 mm to widen aspect
-DEFAULT_BARCODE_QUIET_ZONE = 6.05  # mm (= 11 modules; EAN-13 left quiet-zone minimum)
-DEFAULT_BARCODE_FONT_SIZE = 7  # smaller human-readable digits → more room for bars
+# Standard EAN-13 SC2 module width — narrower bars scan more reliably with
+# typical classroom handheld scanners than the prior wide (≈SC6) setting.
+DEFAULT_BARCODE_MODULE_WIDTH = 0.33  # mm (EAN-13 SC2; ~16 px at 1200 DPI)
+DEFAULT_BARCODE_MODULE_HEIGHT = 20.0  # mm
+DEFAULT_BARCODE_QUIET_ZONE = 4.0  # mm (above EAN minimum quiet zone at SC2)
+DEFAULT_BARCODE_FONT_SIZE = 10
 # python-barcode ImageWriter draws human-readable text with Pillow anchor "md"
 # (bottom of glyphs at bars_end + text_distance). Values below ~pt2mm(font_size)
-# overlap the bars.
-DEFAULT_BARCODE_TEXT_DISTANCE = 4.0  # mm between bars and human-readable text
-# Source PNG DPI. Embed path nearest-neighbor resamples to the exact on-label
-# pixel grid at EXCEL_BARCODE_PRINT_DPI so Excel does not bilinear-scale bars.
+# overlap the bars. Library default is 5 mm.
+DEFAULT_BARCODE_TEXT_DISTANCE = 5.0  # mm between bars and human-readable text
+# High-DPI source PNGs for the print-ready PDF raster.
 DEFAULT_BARCODE_DPI = 1200
-# Target bitmap DPI for the PNG bytes placed into Excel (1:1 with EMU size).
+# Worksheet / PDF page raster DPI used when composing print output.
 EXCEL_BARCODE_PRINT_DPI = 600
 
 # Worksheet rows used to subdivide each physical label (title/author/barcode).

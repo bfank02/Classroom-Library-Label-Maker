@@ -185,12 +185,13 @@ def test_optimized_png_dimensions(tmp_path: Path) -> None:
     width, height = image.size
     assert image.mode == "RGB"
     assert width > height
-    assert width >= 2800  # ~2x prior 600-DPI width at 1200 DPI
-    assert height >= 800
+    # SC2 geometry at 1200 DPI is narrower than the prior wide (0.55 mm) build.
+    assert width >= 1800
+    assert height >= 1200
     assert DEFAULT_BARCODE_DPI == 1200
-    assert DEFAULT_BARCODE_MODULE_WIDTH == 0.55
-    assert DEFAULT_BARCODE_MODULE_HEIGHT == 14.0
-    assert DEFAULT_BARCODE_QUIET_ZONE == 6.05
+    assert DEFAULT_BARCODE_MODULE_WIDTH == 0.33
+    assert DEFAULT_BARCODE_MODULE_HEIGHT == 20.0
+    assert DEFAULT_BARCODE_QUIET_ZONE == 4.0
 
 
 def test_empty_existing_barcode_is_regenerated(
