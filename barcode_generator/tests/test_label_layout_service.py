@@ -246,12 +246,9 @@ def test_openpyxl_target_places_without_saving(
     from classroom_library_label_maker.workbooks import OpenPyxlLabelSheetTarget
 
     barcode = tmp_path / "9780064400558.png"
-    # Minimal valid-enough PNG header; openpyxl may still load via Pillow.
-    barcode.write_bytes(
-        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
-        b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f"
-        b"\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
-    )
+    from PIL import Image as PILImage
+
+    PILImage.new("RGB", (800, 200), color=(0, 0, 0)).save(barcode)
     target = OpenPyxlLabelSheetTarget()
     result = layout_service.layout_books(
         [_book("9780064400558", title="Demo", author="Author")],

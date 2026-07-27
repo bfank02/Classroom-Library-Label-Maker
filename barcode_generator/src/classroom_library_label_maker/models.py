@@ -696,6 +696,7 @@ class WorkbookGenerationResult:
         barcodes_generated: Newly generated barcode PNG files.
         barcodes_reused: Existing barcode PNG files reused.
         output_path: Path to the saved label workbook.
+        pdf_output_path: Path to the print-ready label PDF (preferred for scanning).
         elapsed_seconds: Wall-clock duration of the full run.
         warnings: Recoverable issues from import, batch, or layout.
     """
@@ -707,6 +708,7 @@ class WorkbookGenerationResult:
     barcodes_generated: int = 0
     barcodes_reused: int = 0
     output_path: Path | None = None
+    pdf_output_path: Path | None = None
     elapsed_seconds: float = 0.0
     warnings: tuple[WorkbookGenerationWarning, ...] = ()
 
@@ -743,6 +745,9 @@ class WorkbookGenerationResult:
                 "barcodes_generated": self.barcodes_generated,
                 "barcodes_reused": self.barcodes_reused,
                 "output_path": str(self.output_path) if self.output_path else None,
+                "pdf_output_path": (
+                    str(self.pdf_output_path) if self.pdf_output_path else None
+                ),
                 "elapsed_seconds": self.elapsed_seconds,
                 "warning_count": self.warning_count,
                 "requires_review": self.requires_review,

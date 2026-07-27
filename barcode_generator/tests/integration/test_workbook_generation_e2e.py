@@ -136,3 +136,8 @@ def test_workbook_generation_end_to_end_real_adapters(
     pngs = sorted(barcode_dir.glob("*.png"))
     assert len(pngs) == EXPECTED_BOOKS
     assert (barcode_dir / f"{PREEXISTING_ISBN}.png").is_file()
+
+    pdf_path = output_path.with_suffix(".pdf")
+    assert pdf_path.is_file()
+    assert pdf_path.read_bytes()[:4] == b"%PDF"
+    assert result.pdf_output_path == pdf_path.resolve()

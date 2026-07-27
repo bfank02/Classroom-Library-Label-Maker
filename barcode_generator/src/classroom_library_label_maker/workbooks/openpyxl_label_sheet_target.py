@@ -196,6 +196,10 @@ class OpenPyxlLabelSheetTarget:
         block_rows: int = LABEL_WORKSHEET_ROWS_PER_LABEL,
         slot_fill: float = _BARCODE_SLOT_FILL,
     ) -> None:
+        """Embed the source PNG; Excel print/PDF may still resample pictures.
+
+        Prefer the companion print-ready PDF from generation for scanning.
+        """
         try:
             from openpyxl.drawing.image import Image as XLImage
             from openpyxl.drawing.spreadsheet_drawing import (
@@ -220,9 +224,6 @@ class OpenPyxlLabelSheetTarget:
         max_width_emu = int(cell_width_emu * fill)
         max_height_emu = int(cell_height_emu * fill)
 
-        # Size by physical slot + source aspect ratio (not 96-DPI pixel EMUs).
-        # This fills the barcode region responsively while keeping bars sharp
-        # when the PNG was rendered at print DPI.
         aspect = float(image.width) / float(image.height)
         if max_width_emu / max_height_emu > aspect:
             height_emu = max(1, max_height_emu)
@@ -230,9 +231,6 @@ class OpenPyxlLabelSheetTarget:
         else:
             width_emu = max(1, max_width_emu)
             height_emu = max(1, int(width_emu / aspect))
-
-        image.width = max(1, int(image.width))
-        image.height = max(1, int(image.height))
 
         col_off = max(0, (cell_width_emu - width_emu) // 2)
         row_off = max(0, (cell_height_emu - height_emu) // 2)
@@ -312,8 +310,6 @@ def _text_row_counts_with_barcode(
         else:
             counts.append(1)
 
-    # Fall back to one row each when the preferred title height would leave
-    # no room for the barcode (or would exceed the block).
     if sum(counts) >= block_rows:
         counts = [1] * len(text_kinds)
     if sum(counts) >= block_rows:

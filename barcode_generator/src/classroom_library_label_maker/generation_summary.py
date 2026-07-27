@@ -23,14 +23,23 @@ def gui_completion_status(result: WorkbookGenerationResult) -> str:
     """
     counts = _label_page_phrase(result)
     output = result.output_path if result.output_path is not None else "(unknown)"
+    pdf = result.pdf_output_path
 
     if result.completion_state is GenerationCompletionState.SUCCESS_WITH_WARNINGS:
         warning_word = "warning" if result.warning_count == 1 else "warnings"
-        return (
+        base = (
             f"Saved with {result.warning_count} {warning_word} — "
-            f"review before printing. {counts}. Saved to {output}."
+            f"review before printing. {counts}. Workbook: {output}."
         )
+        if pdf is not None:
+            return f"{base} Print from PDF: {pdf}."
+        return base
 
+    if pdf is not None:
+        return (
+            f"Done — {counts}. Print the PDF for sharp barcodes: {pdf}. "
+            f"Workbook also saved: {output}."
+        )
     return f"Done — {counts}. Saved to {output}. Ready to print."
 
 
@@ -56,6 +65,9 @@ def cli_completion_lines(result: WorkbookGenerationResult) -> tuple[str, ...]:
     lines.append(f"Barcodes reused: {result.barcodes_reused}")
     lines.append("")
     lines.append(f"Label workbook: {result.output_path}")
+    if result.pdf_output_path is not None:
+        lines.append(f"Print-ready PDF: {result.pdf_output_path}")
+        lines.append("Print the PDF (not Excel) for scannable barcodes.")
     lines.append("")
     lines.append(f"Elapsed time: {result.elapsed_seconds:.3f}s")
 

@@ -184,11 +184,10 @@ def test_optimized_png_dimensions(tmp_path: Path) -> None:
     image = Image.open(output)
     width, height = image.size
     assert image.mode == "RGB"
-    # Wide aspect for Avery width fill; exact px from ImageWriter mm→px.
     assert width > height
-    assert width >= 1400
-    assert height >= 400
-    assert DEFAULT_BARCODE_DPI == 600
+    assert width >= 2800  # ~2x prior 600-DPI width at 1200 DPI
+    assert height >= 800
+    assert DEFAULT_BARCODE_DPI == 1200
     assert DEFAULT_BARCODE_MODULE_WIDTH == 0.55
     assert DEFAULT_BARCODE_MODULE_HEIGHT == 14.0
     assert DEFAULT_BARCODE_QUIET_ZONE == 6.05
@@ -330,6 +329,7 @@ def test_renderer_defaults_are_applied_to_image_writer(tmp_path: Path) -> None:
     """Configured print defaults must be passed through to python-barcode."""
     from barcode import get_barcode_class
     from barcode.writer import ImageWriter
+    from PIL import Image
 
     from classroom_library_label_maker.constants import (
         DEFAULT_BARCODE_DPI,
@@ -355,11 +355,20 @@ def test_renderer_defaults_are_applied_to_image_writer(tmp_path: Path) -> None:
     }
     with baseline.open("wb") as handle:
         barcode_cls(isbn, writer=ImageWriter()).write(handle, options=options)
+    # Match the post-write DPI stamp applied by PythonBarcodeRenderer.
+    with Image.open(baseline) as image:
+        image.load()
+        image.save(baseline, format="PNG", dpi=(DEFAULT_BARCODE_DPI, DEFAULT_BARCODE_DPI))
 
     PythonBarcodeRenderer().render_to_file(isbn, configured)
 
     assert configured.read_bytes() == baseline.read_bytes()
     assert configured.stat().st_size > 0
+    with Image.open(configured) as image:
+        dpi_info = image.info.get("dpi")
+        assert dpi_info is not None
+        assert abs(dpi_info[0] - DEFAULT_BARCODE_DPI) < 0.01
+        assert abs(dpi_info[1] - DEFAULT_BARCODE_DPI) < 0.01
 
 
 def test_human_readable_text_does_not_overlap_bars(tmp_path: Path) -> None:

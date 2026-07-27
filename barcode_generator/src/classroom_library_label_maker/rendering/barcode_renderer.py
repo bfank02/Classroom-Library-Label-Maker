@@ -139,6 +139,7 @@ class PythonBarcodeRenderer:
         try:
             with output_path.open("wb") as handle:
                 barcode.write(handle, options=self._writer_options())
+            self._stamp_png_dpi(output_path, self._dpi)
         except OSError:
             self._remove_incomplete_output(output_path)
             raise
@@ -155,6 +156,23 @@ class PythonBarcodeRenderer:
         size = output_path.stat().st_size
         _logger.debug("Rendered barcode to %s (%s bytes)", output_path, size)
         return output_path
+
+    @staticmethod
+    def _stamp_png_dpi(output_path: Path, dpi: int) -> None:
+        """Embed print DPI in the PNG so Excel does not treat it as 96-DPI screen art.
+
+        python-barcode's ImageWriter often omits pHYs metadata. Without it, Excel
+        may assume 96 DPI and resample the bitmap on print.
+        """
+        if dpi <= 0:
+            return
+        try:
+            from PIL import Image
+        except ImportError:  # pragma: no cover - Pillow is required at runtime
+            return
+        with Image.open(output_path) as image:
+            image.load()
+            image.save(output_path, format="PNG", dpi=(dpi, dpi))
 
     @staticmethod
     def _ensure_writer_font(writer: object) -> None:

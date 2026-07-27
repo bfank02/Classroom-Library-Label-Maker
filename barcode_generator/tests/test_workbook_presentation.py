@@ -44,9 +44,10 @@ def test_worksheet_presentation_and_page_setup() -> None:
     assert sheet.sheet_view.zoomScale == 100
     assert sheet.page_setup.orientation == "portrait"
     assert sheet.page_setup.paperSize == _PAPERSIZE_LETTER
-    assert sheet.page_setup.fitToPage is True
-    assert sheet.page_setup.fitToWidth == 1
-    assert sheet.page_setup.fitToHeight == 1
+    assert sheet.page_setup.fitToPage is False
+    assert sheet.page_setup.scale == 100
+    assert sheet.page_setup.horizontalDpi == 600
+    assert sheet.page_setup.verticalDpi == 600
 
     assert sheet.page_margins.left == AVERY_5160.left_margin
     assert sheet.page_margins.top == AVERY_5160.top_margin

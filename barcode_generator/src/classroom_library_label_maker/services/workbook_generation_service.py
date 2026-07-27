@@ -41,6 +41,13 @@ from classroom_library_label_maker.services.label_layout_service import (
 from classroom_library_label_maker.workbooks.openpyxl_workbook_writer import (
     OpenPyxlWorkbookWriter,
 )
+from classroom_library_label_maker.workbooks.in_memory_label_sheet_target import (
+    InMemoryLabelSheetTarget,
+)
+from classroom_library_label_maker.workbooks.pdf_label_renderer import write_labels_pdf
+from classroom_library_label_maker.workbooks.tee_label_sheet_target import (
+    TeeLabelSheetTarget,
+)
 from classroom_library_label_maker.workbooks.workbook_writer import WorkbookWriter
 from classroom_library_label_maker.progress import (
     GenerationProgress,
@@ -154,11 +161,15 @@ class WorkbookGenerationService:
             books_for_layout = list(imported.books)
 
             self._writer.create_workbook()
+            memory_target = InMemoryLabelSheetTarget()
             try:
                 self._report(reporter, GenerationStage.CREATING_LABELS)
                 layout = self._layout.layout_books(
                     books_for_layout,
-                    self._writer.get_label_sheet_target(),
+                    TeeLabelSheetTarget(
+                        self._writer.get_label_sheet_target(),
+                        memory_target,
+                    ),
                     barcode_paths=barcode_paths,
                 )
                 _logger.info(
@@ -178,6 +189,24 @@ class WorkbookGenerationService:
                         cause=exc,
                     ) from exc
                 _logger.info("Workbook saved: %s", saved)
+
+                pdf_saved: Path | None = None
+                if memory_target.placements:
+                    pdf_path = Path(saved).with_suffix(".pdf")
+                    try:
+                        template = next(iter(memory_target.templates_by_page.values()))
+                        pdf_saved = write_labels_pdf(
+                            memory_target.placements,
+                            template,
+                            pdf_path,
+                        )
+                        _logger.info("Print-ready PDF saved: %s", pdf_saved)
+                    except Exception as exc:
+                        _logger.exception("Failed writing print-ready PDF")
+                        raise FileSystemError(
+                            f"Failed to save print-ready PDF to {pdf_path}: {exc}",
+                            cause=exc,
+                        ) from exc
             finally:
                 self._writer.close()
 
@@ -206,6 +235,7 @@ class WorkbookGenerationService:
             barcodes_generated=batch.successful_generations,
             barcodes_reused=batch.existing_barcodes_skipped,
             output_path=Path(saved),
+            pdf_output_path=Path(pdf_saved) if pdf_saved is not None else None,
             elapsed_seconds=elapsed,
             warnings=tuple(warnings),
         )

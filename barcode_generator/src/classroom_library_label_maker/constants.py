@@ -28,7 +28,7 @@ DEFAULT_BARCODE_EXTENSION = ".png"
 # Tuned for consumer laser printers on Avery 5160: thicker modules (≈SC6),
 # integer-friendly width at 600 DPI, and a wide aspect so Title+Barcode
 # placement can fill nearly the full label width without stretching.
-DEFAULT_BARCODE_MODULE_WIDTH = 0.55  # mm (~13 px at 600 DPI; SC2 was 0.33)
+DEFAULT_BARCODE_MODULE_WIDTH = 0.55  # mm (~26 px at 1200 DPI; SC2 was 0.33)
 DEFAULT_BARCODE_MODULE_HEIGHT = 14.0  # mm (bars); kept below prior 20 mm to widen aspect
 DEFAULT_BARCODE_QUIET_ZONE = 6.05  # mm (= 11 modules; EAN-13 left quiet-zone minimum)
 DEFAULT_BARCODE_FONT_SIZE = 7  # smaller human-readable digits → more room for bars
@@ -36,7 +36,11 @@ DEFAULT_BARCODE_FONT_SIZE = 7  # smaller human-readable digits → more room for
 # (bottom of glyphs at bars_end + text_distance). Values below ~pt2mm(font_size)
 # overlap the bars.
 DEFAULT_BARCODE_TEXT_DISTANCE = 4.0  # mm between bars and human-readable text
-DEFAULT_BARCODE_DPI = 600
+# Source PNG DPI. Embed path nearest-neighbor resamples to the exact on-label
+# pixel grid at EXCEL_BARCODE_PRINT_DPI so Excel does not bilinear-scale bars.
+DEFAULT_BARCODE_DPI = 1200
+# Target bitmap DPI for the PNG bytes placed into Excel (1:1 with EMU size).
+EXCEL_BARCODE_PRINT_DPI = 600
 
 # Worksheet rows used to subdivide each physical label (title/author/barcode).
 # Higher granularity lets Title+Barcode give nearly all height to the scan target.

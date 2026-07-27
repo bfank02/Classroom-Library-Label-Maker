@@ -56,7 +56,8 @@ def barcode_render_cache_key(settings: ApplicationSettings) -> str:
         f"qz={settings.barcode_quiet_zone:.4f}|"
         f"fs={settings.barcode_font_size}|"
         f"td={settings.barcode_text_distance:.4f}|"
-        f"dpi={settings.barcode_dpi}"
+        f"dpi={settings.barcode_dpi}|"
+        f"pngdpi=1"
     )
 
 
