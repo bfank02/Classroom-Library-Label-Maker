@@ -115,10 +115,11 @@ def test_workbook_generation_end_to_end_real_adapters(
         page1 = workbook["Labels 1"]
         page2 = workbook["Labels 2"]
 
-        # At least one label written (title / author / ISBN block).
+        # At least one label written (title spans 2 rows; author; barcode).
         assert page1.cell(1, 1).value == "Charlotte's Web"
-        assert page1.cell(2, 1).value == "E. B. White"
-        assert page1.cell(3, 1).value == PREEXISTING_ISBN
+        assert page1.cell(3, 1).value == "E. B. White"
+        # ISBN lives in the barcode image, not a separate text cell.
+        assert page1.cell(4, 1).value in (None, "")
 
         # Second page starts a new label (book index 30 → first cell block).
         assert page2.cell(1, 1).value is not None
@@ -135,3 +136,8 @@ def test_workbook_generation_end_to_end_real_adapters(
     pngs = sorted(barcode_dir.glob("*.png"))
     assert len(pngs) == EXPECTED_BOOKS
     assert (barcode_dir / f"{PREEXISTING_ISBN}.png").is_file()
+
+    pdf_path = output_path.with_suffix(".pdf")
+    assert pdf_path.is_file()
+    assert pdf_path.read_bytes()[:4] == b"%PDF"
+    assert result.pdf_output_path == pdf_path.resolve()

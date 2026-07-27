@@ -44,9 +44,10 @@ def test_worksheet_presentation_and_page_setup() -> None:
     assert sheet.sheet_view.zoomScale == 100
     assert sheet.page_setup.orientation == "portrait"
     assert sheet.page_setup.paperSize == _PAPERSIZE_LETTER
-    assert sheet.page_setup.fitToPage is True
-    assert sheet.page_setup.fitToWidth == 1
-    assert sheet.page_setup.fitToHeight == 1
+    assert sheet.page_setup.fitToPage is False
+    assert sheet.page_setup.scale == 100
+    assert sheet.page_setup.horizontalDpi == 600
+    assert sheet.page_setup.verticalDpi == 600
 
     assert sheet.page_margins.left == AVERY_5160.left_margin
     assert sheet.page_margins.top == AVERY_5160.top_margin
@@ -61,7 +62,7 @@ def test_worksheet_presentation_and_page_setup() -> None:
 
     assert sheet.print_area is not None
     assert "A1" in sheet.print_area.replace("$", "")
-    assert "C60" in sheet.print_area.replace("$", "")
+    assert "C80" in sheet.print_area.replace("$", "")
     assert sheet.print_options.horizontalCentered is True
 
 
@@ -125,8 +126,10 @@ def test_label_formatting_wraps_long_titles() -> None:
     assert title_cell.alignment.wrap_text is True
     assert title_cell.alignment.horizontal == "center"
     assert title_cell.font.bold is True
-    assert sheet.cell(2, 1).alignment.wrap_text is True
-    assert sheet.cell(3, 1).value == "9780064400558"
+    # Title spans two worksheet rows; author is the next text slot.
+    assert sheet.cell(3, 1).value == "Author Name"
+    assert sheet.cell(3, 1).alignment.wrap_text is True
+    assert sheet.cell(4, 1).value == "[barcode placeholder]"
 
 
 def test_barcode_image_is_sized_and_centered(tmp_path: Path) -> None:
@@ -177,13 +180,13 @@ def test_barcode_image_is_sized_and_centered(tmp_path: Path) -> None:
     assert anchor._from.colOff >= 0
     assert anchor._from.rowOff >= 0
 
-    # With all four fields on a 6-row label, barcode owns 3 rows → ~0.5".
+    # Default Title+Author+Barcode: title 2 + author 1 + barcode 5 → ~0.625".
     emu_per_inch = 914_400
     height_inches = anchor.ext.cy / emu_per_inch
     width_inches = anchor.ext.cx / emu_per_inch
-    assert 0.35 <= height_inches <= 0.55
+    assert 0.55 <= height_inches <= 0.70
     assert width_inches <= AVERY_5160.label_width
-    assert width_inches >= 1.0
+    assert width_inches >= 1.5
 
 
 def test_apply_presentation_helpers_are_idempotent() -> None:
@@ -194,4 +197,4 @@ def test_apply_presentation_helpers_are_idempotent() -> None:
     apply_worksheet_presentation(sheet, AVERY_5160)
     apply_workbook_properties(target.workbook, template=AVERY_5160)
     assert sheet.print_area is not None
-    assert "C60" in sheet.print_area.replace("$", "")
+    assert "C80" in sheet.print_area.replace("$", "")

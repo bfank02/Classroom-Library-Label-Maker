@@ -16,6 +16,7 @@ from classroom_library_label_maker.constants import (
     DEFAULT_BARCODE_MODULE_HEIGHT,
     DEFAULT_BARCODE_MODULE_WIDTH,
     DEFAULT_BARCODE_QUIET_ZONE,
+    DEFAULT_BARCODE_TEXT_DISTANCE,
     DEFAULT_LABEL_TEMPLATE_ID,
     DEFAULT_LABEL_TYPE,
 )
@@ -46,6 +47,7 @@ def test_load_application_settings_reads_version(tmp_path: Path) -> None:
     assert settings.barcode_module_height == DEFAULT_BARCODE_MODULE_HEIGHT
     assert settings.barcode_quiet_zone == DEFAULT_BARCODE_QUIET_ZONE
     assert settings.barcode_font_size == DEFAULT_BARCODE_FONT_SIZE
+    assert settings.barcode_text_distance == DEFAULT_BARCODE_TEXT_DISTANCE
     assert settings.barcode_dpi == DEFAULT_BARCODE_DPI
 
 

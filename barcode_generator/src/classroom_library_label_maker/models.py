@@ -13,6 +13,7 @@ from classroom_library_label_maker.constants import (
     DEFAULT_BARCODE_MODULE_HEIGHT,
     DEFAULT_BARCODE_MODULE_WIDTH,
     DEFAULT_BARCODE_QUIET_ZONE,
+    DEFAULT_BARCODE_TEXT_DISTANCE,
     DEFAULT_LABEL_TEMPLATE_ID,
     DEFAULT_WORKBOOK_COLUMN_AUTHOR,
     DEFAULT_WORKBOOK_COLUMN_COPIES,
@@ -695,6 +696,7 @@ class WorkbookGenerationResult:
         barcodes_generated: Newly generated barcode PNG files.
         barcodes_reused: Existing barcode PNG files reused.
         output_path: Path to the saved label workbook.
+        pdf_output_path: Path to the print-ready label PDF (preferred for scanning).
         elapsed_seconds: Wall-clock duration of the full run.
         warnings: Recoverable issues from import, batch, or layout.
     """
@@ -706,6 +708,7 @@ class WorkbookGenerationResult:
     barcodes_generated: int = 0
     barcodes_reused: int = 0
     output_path: Path | None = None
+    pdf_output_path: Path | None = None
     elapsed_seconds: float = 0.0
     warnings: tuple[WorkbookGenerationWarning, ...] = ()
 
@@ -742,6 +745,9 @@ class WorkbookGenerationResult:
                 "barcodes_generated": self.barcodes_generated,
                 "barcodes_reused": self.barcodes_reused,
                 "output_path": str(self.output_path) if self.output_path else None,
+                "pdf_output_path": (
+                    str(self.pdf_output_path) if self.pdf_output_path else None
+                ),
                 "elapsed_seconds": self.elapsed_seconds,
                 "warning_count": self.warning_count,
                 "requires_review": self.requires_review,
@@ -782,6 +788,7 @@ class ApplicationSettings:
         barcode_module_height: Barcode bar module height in millimeters.
         barcode_quiet_zone: Quiet-zone margin in millimeters.
         barcode_font_size: Human-readable text font size (points).
+        barcode_text_distance: Space between bars and human-readable text (mm).
         barcode_dpi: Output image resolution in dots per inch.
         workbook_path: Optional Excel workbook path for import.
         workbook_sheet_name: Worksheet name to import.
@@ -810,6 +817,7 @@ class ApplicationSettings:
     barcode_module_height: float = DEFAULT_BARCODE_MODULE_HEIGHT
     barcode_quiet_zone: float = DEFAULT_BARCODE_QUIET_ZONE
     barcode_font_size: int = DEFAULT_BARCODE_FONT_SIZE
+    barcode_text_distance: float = DEFAULT_BARCODE_TEXT_DISTANCE
     barcode_dpi: int = DEFAULT_BARCODE_DPI
     workbook_path: Path | None = None
     workbook_sheet_name: str = DEFAULT_WORKBOOK_SHEET_NAME
@@ -851,6 +859,8 @@ class ApplicationSettings:
             raise ValueError("barcode_quiet_zone must be non-negative")
         if self.barcode_font_size <= 0:
             raise ValueError("barcode_font_size must be positive")
+        if self.barcode_text_distance < 0:
+            raise ValueError("barcode_text_distance must be non-negative")
         if self.barcode_dpi <= 0:
             raise ValueError("barcode_dpi must be positive")
         if not self.workbook_sheet_name.strip():

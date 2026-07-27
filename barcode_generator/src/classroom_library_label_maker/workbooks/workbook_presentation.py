@@ -11,7 +11,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from classroom_library_label_maker.constants import LABEL_WORKSHEET_ROWS_PER_LABEL
+from classroom_library_label_maker.constants import (
+    EXCEL_BARCODE_PRINT_DPI,
+    LABEL_WORKSHEET_ROWS_PER_LABEL,
+)
 from classroom_library_label_maker.label_templates.label_template import (
     LabelTemplate,
     PageOrientation,
@@ -84,9 +87,15 @@ def apply_worksheet_presentation(sheet: Any, template: LabelTemplate) -> None:
     )
     sheet.page_setup.orientation = orientation
     sheet.page_setup.paperSize = _paper_size_code(template.page_size)
-    sheet.page_setup.fitToPage = True
-    sheet.page_setup.fitToWidth = 1
-    sheet.page_setup.fitToHeight = 1
+    # Print at 100% scale. Fit-to-page resamples embedded PNGs (barcodes go
+    # soft) while Excel fonts stay sharp — exactly the failure mode we avoid.
+    sheet.page_setup.fitToPage = False
+    sheet.page_setup.fitToWidth = False
+    sheet.page_setup.fitToHeight = False
+    sheet.page_setup.scale = 100
+    # Hint high-quality rasterization when Excel honors these fields.
+    sheet.page_setup.horizontalDpi = EXCEL_BARCODE_PRINT_DPI
+    sheet.page_setup.verticalDpi = EXCEL_BARCODE_PRINT_DPI
 
     right_margin = max(
         0.0,

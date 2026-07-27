@@ -94,14 +94,17 @@ def test_form_state_requires_at_least_one_content_field(
 
 
 def test_distribute_row_spans_prefers_barcode_height() -> None:
-    assert _distribute_row_spans(["title", "author", "barcode"], 6) == [
-        (0, 1),
-        (1, 1),
-        (2, 4),
+    # Title gets 2 rows so 9 pt bold is not clipped on the 8-row label grid.
+    assert _distribute_row_spans(["title", "author", "barcode"], 8) == [
+        (0, 2),
+        (2, 1),
+        (3, 5),
     ]
-    assert _distribute_row_spans(["title", "barcode"], 6) == [(0, 1), (1, 5)]
-    assert _distribute_row_spans(["barcode"], 6) == [(0, 6)]
-    assert _distribute_row_spans(["title", "author"], 6) == [(0, 3), (3, 3)]
+    assert _distribute_row_spans(["title", "barcode"], 8) == [(0, 2), (2, 6)]
+    assert _distribute_row_spans(["barcode"], 8) == [(0, 8)]
+    assert _distribute_row_spans(["title", "author"], 8) == [(0, 4), (4, 4)]
+    # Tight grids fall back to one row per text field.
+    assert _distribute_row_spans(["title", "barcode"], 3) == [(0, 1), (1, 2)]
 
 
 def test_layout_skips_barcode_resolution_when_barcode_hidden(
@@ -151,13 +154,56 @@ def test_openpyxl_omits_hidden_fields(tmp_path: Path) -> None:
     # Title gets the first row; barcode uses the remaining rows of the block.
     assert sheet.cell(1, 1).value == "Charlotte's Web"
     assert "E. B. White" not in {
-        sheet.cell(r, 1).value for r in range(1, 7)
+        sheet.cell(r, 1).value for r in range(1, 9)
     }
     # ISBN is only in the barcode image, not a separate text cell.
     assert "9780064400558" not in {
-        sheet.cell(r, 1).value for r in range(1, 7)
+        sheet.cell(r, 1).value for r in range(1, 9)
     }
     assert len(sheet._images) == 1
+
+
+def test_title_barcode_layout_maximizes_print_footprint(tmp_path: Path) -> None:
+    """Title+Barcode should place a nearly full-width Avery barcode image."""
+    from classroom_library_label_maker.constants import LABEL_WORKSHEET_ROWS_PER_LABEL
+    from classroom_library_label_maker.rendering.barcode_renderer import (
+        PythonBarcodeRenderer,
+    )
+
+    png = tmp_path / "9780064400558.png"
+    PythonBarcodeRenderer().render_to_file("9780064400558", png)
+
+    target = OpenPyxlLabelSheetTarget()
+    target.begin_page(1, template=AVERY_5160)
+    target.place_label(
+        LabelPlacement(
+            page_number=1,
+            row=0,
+            column=0,
+            title="Charlotte's Web",
+            author="E. B. White",
+            isbn="9780064400558",
+            barcode_image_path=png,
+            used_placeholder_barcode=False,
+            content=LabelContentOptions(
+                show_title=True,
+                show_author=False,
+                show_barcode=True,
+            ),
+        )
+    )
+    sheet = target.workbook[f"{LABEL_SHEET_PREFIX}1"]
+    assert sheet.cell(1, 1).value == "Charlotte's Web"
+    assert len(sheet._images) == 1
+    image = sheet._images[0]
+    # OneCellAnchor.ext is in EMUs (914400 per inch).
+    width_in = image.anchor.ext.cx / 914_400
+    height_in = image.anchor.ext.cy / 914_400
+    assert LABEL_WORKSHEET_ROWS_PER_LABEL == 8
+    # Standard SC2 barcodes are narrower than the label; height still fills the slot.
+    assert width_in >= 1.0
+    assert width_in <= AVERY_5160.label_width
+    assert height_in >= 0.70
 
 
 def test_generation_respects_title_only_content(

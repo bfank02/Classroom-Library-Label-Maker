@@ -139,7 +139,8 @@ class MainWindow(QMainWindow):
         self.show_barcode_checkbox.setObjectName("showBarcodeCheckBox")
         self.show_barcode_checkbox.setChecked(True)
         self.show_barcode_checkbox.setToolTip(
-            "Print the barcode image on each label (includes the ISBN digits)."
+            "Print the barcode image on each label (includes the ISBN digits). "
+            "For best scanner results on laser printers, use Title + Barcode only."
         )
         self.show_barcode_checkbox.setAccessibleName("Show barcode on labels")
 
