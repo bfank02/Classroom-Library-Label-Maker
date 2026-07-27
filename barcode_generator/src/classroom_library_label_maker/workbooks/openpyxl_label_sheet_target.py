@@ -34,6 +34,11 @@ _EMU_PER_INCH = 914_400
 _BARCODE_SLOT_FILL = 0.96
 _BARCODE_SLOT_FILL_TITLE_BARCODE = 0.98
 
+# With LABEL_WORKSHEET_ROWS_PER_LABEL=8, one row is only 9 pt tall — too short for
+# 9 pt bold titles when printing. Prefer two rows for the title when a barcode
+# is present so Excel does not clip the top of the text.
+_TITLE_ROWS_WITH_BARCODE = 2
+
 # Consistent sheet title prefix (page number appended).
 LABEL_SHEET_PREFIX = "Labels "
 
@@ -255,9 +260,11 @@ def _distribute_row_spans(
 ) -> list[tuple[int, int]]:
     """Return ``(row_offset, row_span)`` pairs that fill ``block_rows``.
 
-    When a barcode slot is present last, each text field keeps one row and the
-    barcode receives the remaining height so scan targets stay large. Without a
-    barcode, extra rows prefer earlier text slots (titles).
+    When a barcode slot is present last, text fields keep compact row counts and
+    the barcode receives the remaining height so scan targets stay large. The
+    title prefers two rows (print-safe for 9 pt bold on an 8-row label grid);
+    other text fields keep one row. Without a barcode, extra rows prefer
+    earlier text slots (titles).
     """
     slot_count = len(slot_kinds)
     if slot_count <= 0:
@@ -268,15 +275,15 @@ def _distribute_row_spans(
         )
 
     if slot_kinds[-1] == "barcode" and slot_count > 1:
-        text_count = slot_count - 1
-        barcode_rows = block_rows - text_count
-        if barcode_rows >= 1:
+        text_kinds = slot_kinds[:-1]
+        text_rows = _text_row_counts_with_barcode(text_kinds, block_rows)
+        if text_rows is not None:
             spans: list[tuple[int, int]] = []
             offset = 0
-            for _ in range(text_count):
-                spans.append((offset, 1))
-                offset += 1
-            spans.append((offset, barcode_rows))
+            for span in text_rows:
+                spans.append((offset, span))
+                offset += span
+            spans.append((offset, block_rows - offset))
             return spans
 
     base = block_rows // slot_count
@@ -288,3 +295,27 @@ def _distribute_row_spans(
         spans.append((offset, span))
         offset += span
     return spans
+
+
+def _text_row_counts_with_barcode(
+    text_kinds: list[_SlotKind],
+    block_rows: int,
+) -> list[int] | None:
+    """Return per-text-field row counts, or ``None`` if barcode cannot fit."""
+    # Two title rows only on the production 8-row grid (1 row ≈ 9 pt, too short
+    # for 9 pt bold). Smaller test/custom grids keep one row per text field.
+    title_rows = _TITLE_ROWS_WITH_BARCODE if block_rows >= 8 else 1
+    counts: list[int] = []
+    for kind in text_kinds:
+        if kind == "title":
+            counts.append(title_rows)
+        else:
+            counts.append(1)
+
+    # Fall back to one row each when the preferred title height would leave
+    # no room for the barcode (or would exceed the block).
+    if sum(counts) >= block_rows:
+        counts = [1] * len(text_kinds)
+    if sum(counts) >= block_rows:
+        return None
+    return counts

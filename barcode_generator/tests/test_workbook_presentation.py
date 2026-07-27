@@ -125,9 +125,10 @@ def test_label_formatting_wraps_long_titles() -> None:
     assert title_cell.alignment.wrap_text is True
     assert title_cell.alignment.horizontal == "center"
     assert title_cell.font.bold is True
-    assert sheet.cell(2, 1).alignment.wrap_text is True
-    # ISBN is only in the barcode image; third slot is the barcode placeholder.
-    assert sheet.cell(3, 1).value == "[barcode placeholder]"
+    # Title spans two worksheet rows; author is the next text slot.
+    assert sheet.cell(3, 1).value == "Author Name"
+    assert sheet.cell(3, 1).alignment.wrap_text is True
+    assert sheet.cell(4, 1).value == "[barcode placeholder]"
 
 
 def test_barcode_image_is_sized_and_centered(tmp_path: Path) -> None:
@@ -178,11 +179,11 @@ def test_barcode_image_is_sized_and_centered(tmp_path: Path) -> None:
     assert anchor._from.colOff >= 0
     assert anchor._from.rowOff >= 0
 
-    # Default Title+Author+Barcode on an 8-row label: barcode owns 6 rows → 0.75".
+    # Default Title+Author+Barcode: title 2 + author 1 + barcode 5 → ~0.625".
     emu_per_inch = 914_400
     height_inches = anchor.ext.cy / emu_per_inch
     width_inches = anchor.ext.cx / emu_per_inch
-    assert 0.65 <= height_inches <= 0.80
+    assert 0.55 <= height_inches <= 0.70
     assert width_inches <= AVERY_5160.label_width
     assert width_inches >= 1.5
 

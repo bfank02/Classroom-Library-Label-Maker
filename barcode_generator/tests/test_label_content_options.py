@@ -94,14 +94,17 @@ def test_form_state_requires_at_least_one_content_field(
 
 
 def test_distribute_row_spans_prefers_barcode_height() -> None:
+    # Title gets 2 rows so 9 pt bold is not clipped on the 8-row label grid.
     assert _distribute_row_spans(["title", "author", "barcode"], 8) == [
-        (0, 1),
-        (1, 1),
-        (2, 6),
+        (0, 2),
+        (2, 1),
+        (3, 5),
     ]
-    assert _distribute_row_spans(["title", "barcode"], 8) == [(0, 1), (1, 7)]
+    assert _distribute_row_spans(["title", "barcode"], 8) == [(0, 2), (2, 6)]
     assert _distribute_row_spans(["barcode"], 8) == [(0, 8)]
     assert _distribute_row_spans(["title", "author"], 8) == [(0, 4), (4, 4)]
+    # Tight grids fall back to one row per text field.
+    assert _distribute_row_spans(["title", "barcode"], 3) == [(0, 1), (1, 2)]
 
 
 def test_layout_skips_barcode_resolution_when_barcode_hidden(
@@ -197,9 +200,9 @@ def test_title_barcode_layout_maximizes_print_footprint(tmp_path: Path) -> None:
     width_in = image.anchor.ext.cx / 914_400
     height_in = image.anchor.ext.cy / 914_400
     assert LABEL_WORKSHEET_ROWS_PER_LABEL == 8
-    # Nearly full Avery 5160 width (2.625") and most of the remaining label height.
-    assert width_in >= 2.4
-    assert height_in >= 0.75
+    # Nearly full Avery 5160 width (2.625"); title uses 2/8, barcode 6/8.
+    assert width_in >= 2.2
+    assert height_in >= 0.70
 
 
 def test_generation_respects_title_only_content(
