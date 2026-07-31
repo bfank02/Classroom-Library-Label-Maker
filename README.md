@@ -9,7 +9,8 @@ Start here: [`docs/Quick Start.md`](docs/Quick%20Start.md)
 1. Prepare an **inventory workbook** (Excel sheet named `Books` with columns
    `ISBN`, `Title`, `Author`, `Copies`) — or open `samples/Sample Books.xlsx`.
 2. Run the app, choose your inventory workbook, a barcode folder, and where to
-   save the **label workbook**.
+   save the **label workbook** (barcode and label paths are remembered after
+   the first selection).
 3. Click **Generate Labels**, then open the label workbook in Excel and print
    on Avery 5160 sheets.
 

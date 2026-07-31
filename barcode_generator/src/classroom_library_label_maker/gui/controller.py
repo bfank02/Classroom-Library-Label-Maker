@@ -33,6 +33,14 @@ from classroom_library_label_maker.gui.generation_worker import (
     WorkbookGenerator,
     _default_generation_service,
 )
+from classroom_library_label_maker.gui_preferences import (
+    GuiPreferences,
+    default_gui_preferences_path,
+    load_gui_preferences,
+    save_gui_preferences,
+    usable_barcode_folder,
+    usable_output_workbook,
+)
 from classroom_library_label_maker.label_templates import (
     LabelTemplate,
     TemplateRegistry,
@@ -94,6 +102,7 @@ class GuiController(QObject):
         open_barcode_folder_dialog: OpenDirDialog | None = None,
         save_output_dialog: SaveFileDialog | None = None,
         generation_service_factory: GenerationServiceFactory | None = None,
+        preferences_path: Path | None = None,
     ) -> None:
         super().__init__(window)
         self._window = window
@@ -107,12 +116,14 @@ class GuiController(QObject):
         self._generation_service_factory = (
             generation_service_factory or _default_generation_service
         )
+        self._preferences_path = preferences_path
         self._state = GenerationFormState()
         self._is_generating = False
         self._active_thread: QThread | None = None
         self._active_worker: GenerationWorker | None = None
 
         self._populate_templates()
+        self._restore_preferences()
         self._connect_signals()
         self._refresh_ui()
 
@@ -134,17 +145,19 @@ class GuiController(QObject):
         self._refresh_ui()
 
     def set_barcode_folder(self, path: Path | None) -> None:
-        """Update the barcode folder selection and refresh the UI."""
+        """Update the barcode folder selection, remember it, and refresh the UI."""
         self._state = self._state.with_barcode_folder(
             path.resolve() if path is not None else None
         )
+        self._persist_preferences()
         self._refresh_ui()
 
     def set_output_workbook(self, path: Path | None) -> None:
-        """Update the output workbook path and refresh the UI."""
+        """Update the output workbook path, remember it, and refresh the UI."""
         self._state = self._state.with_output_workbook(
             path.resolve() if path is not None else None
         )
+        self._persist_preferences()
         self._refresh_ui()
 
     def set_label_template_id(self, template_id: str | None) -> None:
@@ -473,6 +486,34 @@ class GuiController(QObject):
         color = colors.get(level, colors["ok"])
         self._window.status_label.setStyleSheet(f"color: {color};")
 
+    def _preferences_file(self) -> Path:
+        if self._preferences_path is not None:
+            return self._preferences_path
+        return default_gui_preferences_path()
+
+    def _restore_preferences(self) -> None:
+        """Seed barcode folder and label workbook from remembered paths."""
+        preferences = load_gui_preferences(path=self._preferences_file())
+        barcode = usable_barcode_folder(preferences.barcode_folder)
+        output = usable_output_workbook(preferences.output_workbook)
+        if barcode is not None:
+            self._state = self._state.with_barcode_folder(barcode)
+        if output is not None:
+            self._state = self._state.with_output_workbook(output)
+
+    def _persist_preferences(self) -> None:
+        """Write current barcode / label paths for the next launch."""
+        try:
+            save_gui_preferences(
+                GuiPreferences(
+                    barcode_folder=self._state.barcode_folder,
+                    output_workbook=self._state.output_workbook,
+                ),
+                path=self._preferences_file(),
+            )
+        except OSError as exc:
+            self._logger.warning("Could not save path preferences: %s", exc)
+
     def _default_open_inventory(self) -> Path | None:
         path, _filter = QFileDialog.getOpenFileName(
             self._window,
@@ -486,12 +527,16 @@ class GuiController(QObject):
         path = QFileDialog.getExistingDirectory(
             self._window,
             "Choose Barcode Folder",
-            barcode_folder_dialog_start_directory(),
+            barcode_folder_dialog_start_directory(
+                last_barcode_folder=self._state.barcode_folder,
+            ),
         )
         return Path(path) if path else None
 
     def _default_save_output(self) -> Path | None:
-        start_dir, suggested_name = label_workbook_save_dialog_defaults()
+        start_dir, suggested_name = label_workbook_save_dialog_defaults(
+            last_output_workbook=self._state.output_workbook,
+        )
         path, selected_filter = QFileDialog.getSaveFileName(
             self._window,
             "Save Label Workbook",
