@@ -125,6 +125,21 @@ def test_barcode_and_save_dialogs_prefer_documents() -> None:
     assert name == "library_labels.xlsx"
 
 
+def test_barcode_and_save_dialogs_prefer_last_used(tmp_path: Path) -> None:
+    barcodes = tmp_path / "barcodes"
+    barcodes.mkdir()
+    output = tmp_path / "out" / "my_labels.xlsx"
+    output.parent.mkdir()
+    assert barcode_folder_dialog_start_directory(
+        last_barcode_folder=barcodes
+    ) == str(barcodes.resolve())
+    start_dir, name = label_workbook_save_dialog_defaults(
+        last_output_workbook=output
+    )
+    assert start_dir == str(output.parent.resolve())
+    assert name == "my_labels.xlsx"
+
+
 def test_gui_uses_inventory_and_label_workbook_labels(qapp) -> None:
     window = MainWindow()
     inventory_text = window.inventory_label.text().replace("&", "")

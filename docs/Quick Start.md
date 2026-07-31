@@ -29,6 +29,9 @@ Launch Classroom Library Label Maker, then choose:
 4. **Label template** — leave **Avery 5160** selected unless you use a
    different sheet.
 
+After the first successful selection, the **barcode folder** and **label
+workbook** path are remembered for next time. Change them anytime with Browse.
+
 ## 3. Generate labels
 
 Click **Generate Labels**.

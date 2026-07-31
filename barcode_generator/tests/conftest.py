@@ -10,6 +10,23 @@ from classroom_library_label_maker.config import load_application_settings
 from classroom_library_label_maker.models import ApplicationSettings, Book
 
 
+@pytest.fixture(autouse=True)
+def isolate_gui_preferences(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    """Keep GUI path preferences out of the real user-data directory."""
+    preferences_path = tmp_path / "gui_preferences.json"
+    monkeypatch.setattr(
+        "classroom_library_label_maker.gui_preferences.default_gui_preferences_path",
+        lambda: preferences_path,
+    )
+    monkeypatch.setattr(
+        "classroom_library_label_maker.gui.controller.default_gui_preferences_path",
+        lambda: preferences_path,
+    )
+    return preferences_path
+
+
 @pytest.fixture
 def sample_book() -> Book:
     """Return a sample book with a well-known ISBN-13 shape."""
