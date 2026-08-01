@@ -60,6 +60,7 @@ Phase 3 is printing only.
       generation yet; behavior unchanged from Version 1.0
 - [x] Google Books enrichment provider (`GoogleBooksEnrichmentProvider`) —
       optional inject; not used during generation
+- [x] In-memory enrichment cache on `BookEnrichmentService` (title/author key)
 - [ ] Additional catalog providers (Open Library, …)
 - [ ] Wire enrichment into the generation pipeline when enabled
 - [ ] Cover image downloads (`services/covers/`)

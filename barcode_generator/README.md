@@ -265,6 +265,8 @@ python -c "from classroom_library_label_maker.models import Book; from classroom
 ```
 
 - Default path (null provider) leaves generation behavior unchanged
+- In-memory cache on the service (normalized title+author; all statuses;
+  discarded with the instance) — not in providers
 - Matching strategy and HTTP error handling:
   [`docs/Architecture.md`](../docs/Architecture.md)
 - Public surface: [`docs/PublicAPI.md`](../docs/PublicAPI.md)

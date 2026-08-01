@@ -204,3 +204,154 @@ def test_future_provider_can_return_any_status(
 
     result = BookEnrichmentService(provider=_StatusProvider()).enrich(_sample_book())
     assert result.status is status
+
+
+# --- In-memory enrichment cache ----------------------------------------------
+
+
+class _CountingProvider:
+    """Provider that records call count and returns a fixed status."""
+
+    def __init__(
+        self,
+        status: BookEnrichmentStatus = BookEnrichmentStatus.FOUND,
+        *,
+        message: str = "counted",
+    ) -> None:
+        self.calls = 0
+        self.status = status
+        self.message = message
+        self.books: list[Book] = []
+
+    def enrich(self, book: Book) -> BookEnrichmentResult:
+        self.calls += 1
+        self.books.append(book)
+        return BookEnrichmentResult(
+            isbn=book.isbn,
+            status=self.status,
+            title=book.title,
+            author=book.author,
+            message=self.message,
+        )
+
+
+def test_repeated_identical_books_invoke_provider_once() -> None:
+    """Same title/author should hit the provider only on the first enrich."""
+    provider = _CountingProvider()
+    service = BookEnrichmentService(provider=provider)
+    book = _sample_book()
+
+    first = service.enrich(book)
+    second = service.enrich(book)
+
+    assert provider.calls == 1
+    assert first is second
+    assert service.cache_hits == 1
+    assert service.cache_misses == 1
+    assert service.cache_size == 1
+
+
+def test_different_books_bypass_the_cache() -> None:
+    """Distinct title/author pairs each miss the cache."""
+    provider = _CountingProvider()
+    service = BookEnrichmentService(provider=provider)
+
+    service.enrich(Book(isbn="1", title="Alpha", author="One"))
+    service.enrich(Book(isbn="2", title="Beta", author="Two"))
+
+    assert provider.calls == 2
+    assert service.cache_hits == 0
+    assert service.cache_misses == 2
+    assert service.cache_size == 2
+
+
+def test_normalization_shares_cache_across_equivalent_titles() -> None:
+    """Punctuation/case variants of the same work share one cache entry."""
+    provider = _CountingProvider()
+    service = BookEnrichmentService(provider=provider)
+
+    service.enrich(
+        Book(isbn="1", title="Charlotte's Web", author="E. B. White")
+    )
+    service.enrich(
+        Book(isbn="2", title="  CHARLOTTES WEB! ", author="e b white")
+    )
+
+    assert provider.calls == 1
+    assert service.cache_hits == 1
+    assert service.cache_misses == 1
+
+
+def test_cache_ignores_isbn_differences() -> None:
+    """ISBN is not part of the cache key (missing-ISBN rows still share)."""
+    provider = _CountingProvider()
+    service = BookEnrichmentService(provider=provider)
+
+    service.enrich(
+        Book(isbn="pending", title="Same Title", author="Same Author")
+    )
+    service.enrich(
+        Book(isbn="9780064400558", title="Same Title", author="Same Author")
+    )
+
+    assert provider.calls == 1
+    assert service.cache_hits == 1
+
+
+def test_cache_hit_does_not_mutate_book() -> None:
+    """Returning a cached result must leave the caller's Book untouched."""
+    provider = _CountingProvider()
+    service = BookEnrichmentService(provider=provider)
+    book = _sample_book()
+    original = book.to_dict()
+
+    service.enrich(book)
+    service.enrich(book)
+
+    assert book.to_dict() == original
+    assert provider.calls == 1
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        BookEnrichmentStatus.FOUND,
+        BookEnrichmentStatus.NOT_FOUND,
+        BookEnrichmentStatus.AMBIGUOUS,
+        BookEnrichmentStatus.ERROR,
+        BookEnrichmentStatus.SKIPPED,
+    ],
+)
+def test_all_result_statuses_are_cached(status: BookEnrichmentStatus) -> None:
+    """FOUND / NOT_FOUND / AMBIGUOUS / ERROR / SKIPPED are all cached."""
+    provider = _CountingProvider(status=status, message=status.value)
+    service = BookEnrichmentService(provider=provider)
+    book = _sample_book()
+
+    first = service.enrich(book)
+    second = service.enrich(book)
+
+    assert first.status is status
+    assert second.status is status
+    assert provider.calls == 1
+    assert service.cache_hits == 1
+    assert service.cache_misses == 1
+
+
+def test_enrich_many_uses_cache_across_duplicates() -> None:
+    """Batch enrichment should reuse cache entries within the same run."""
+    provider = _CountingProvider(status=BookEnrichmentStatus.NOT_FOUND)
+    service = BookEnrichmentService(provider=provider)
+    books = [
+        Book(isbn="1", title="Dup", author="Author"),
+        Book(isbn="2", title="Other", author="Author"),
+        Book(isbn="3", title="Dup", author="Author"),
+    ]
+
+    results = service.enrich_many(books)
+
+    assert provider.calls == 2
+    assert service.cache_hits == 1
+    assert service.cache_misses == 2
+    assert results[0] is results[2]
+    assert results[0].status is BookEnrichmentStatus.NOT_FOUND

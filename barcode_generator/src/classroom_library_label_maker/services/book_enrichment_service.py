@@ -8,6 +8,10 @@ unchanged and returns ``SKIPPED``. :class:`GoogleBooksEnrichmentProvider`
 is available under ``services.lookups`` for explicit injection; it is not
 the default and is not used by generation.
 
+An in-memory result cache lives on this service (not on providers) so
+duplicate title/author lookups within a single run share one provider call.
+The cache is discarded when the service instance is destroyed.
+
 This service is **not** wired into :class:`WorkbookGenerationService` or the
 GUI in this release — generation behavior remains identical to Version 1.0.
 """
@@ -22,9 +26,24 @@ from classroom_library_label_maker.models import (
     BookEnrichmentResult,
     BookEnrichmentStatus,
 )
+from classroom_library_label_maker.services.enrichment_normalize import (
+    normalize_catalog_text,
+)
 from classroom_library_label_maker.services.protocols import BookEnrichmentProvider
 
 _logger = get_logger("book_enrichment_service")
+
+
+def enrichment_cache_key(book: Book) -> tuple[str, str]:
+    """Return the deterministic in-memory cache key for ``book``.
+
+    Key components are normalized title and author only (ISBN is excluded so
+    inventory rows missing ISBNs still share lookups for the same work).
+    """
+    return (
+        normalize_catalog_text(book.title),
+        normalize_catalog_text(book.author),
+    )
 
 
 class NullBookEnrichmentProvider:
@@ -59,11 +78,13 @@ class BookEnrichmentService:
     Responsibilities are limited to:
 
     * Holding a provider collaborator (defaults to the null provider)
-    * Forwarding single-book and batch enrichment requests
+    * Caching enrichment results in memory for the lifetime of this instance
+    * Forwarding single-book and batch enrichment requests on cache miss
     * Remaining free of HTTP, catalog, or GUI concerns
 
     The service depends only on the provider protocol — concrete backends
-    must not leak into this module.
+    must not leak into this module. Caching belongs here so every provider
+    benefits without duplicating cache logic.
     """
 
     def __init__(
@@ -80,24 +101,59 @@ class BookEnrichmentService:
         self._provider: BookEnrichmentProvider = (
             provider if provider is not None else NullBookEnrichmentProvider()
         )
+        self._cache: dict[tuple[str, str], BookEnrichmentResult] = {}
+        self._cache_hits = 0
+        self._cache_misses = 0
 
     @property
     def provider(self) -> BookEnrichmentProvider:
         """Return the configured enrichment provider."""
         return self._provider
 
+    @property
+    def cache_hits(self) -> int:
+        """Number of enrichments served from the in-memory cache."""
+        return self._cache_hits
+
+    @property
+    def cache_misses(self) -> int:
+        """Number of enrichments that invoked the provider."""
+        return self._cache_misses
+
+    @property
+    def cache_size(self) -> int:
+        """Number of distinct title/author keys currently cached."""
+        return len(self._cache)
+
     def enrich(self, book: Book) -> BookEnrichmentResult:
         """Enrich a single book via the configured provider.
+
+        Returns a cached :class:`BookEnrichmentResult` when a prior call used
+        the same normalized title and author. Does not mutate ``book``.
 
         Args:
             book: Book to enrich.
 
         Returns:
-            Provider-produced :class:`BookEnrichmentResult`.
+            Cached or provider-produced :class:`BookEnrichmentResult`.
         """
+        key = enrichment_cache_key(book)
+        cached = self._cache.get(key)
+        if cached is not None:
+            self._cache_hits += 1
+            _logger.debug(
+                "Enrichment cache hit for title=%r author=%r status=%s",
+                book.title,
+                book.author,
+                cached.status.value,
+            )
+            return cached
+
+        self._cache_misses += 1
         result = self._provider.enrich(book)
+        self._cache[key] = result
         _logger.debug(
-            "Enrichment %s for isbn=%s status=%s",
+            "Enrichment %s for isbn=%s status=%s (cache miss)",
             type(self._provider).__name__,
             book.isbn,
             result.status.value,
@@ -106,6 +162,8 @@ class BookEnrichmentService:
 
     def enrich_many(self, books: Sequence[Book]) -> list[BookEnrichmentResult]:
         """Enrich each book in order, preserving input sequence.
+
+        Uses the same in-memory cache as :meth:`enrich`.
 
         Args:
             books: Books to enrich (may be empty).

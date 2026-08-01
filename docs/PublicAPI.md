@@ -313,12 +313,16 @@ Defaults to `NullBookEnrichmentProvider`. Performs no HTTP. Not used by
 | Method | Inputs | Outputs |
 |--------|--------|---------|
 | `__init__(*, provider=None)` | Optional `BookEnrichmentProvider` | service |
-| `enrich(book)` | `Book` | `BookEnrichmentResult` |
-| `enrich_many(books)` | `Sequence[Book]` | `list[BookEnrichmentResult]` (order preserved) |
+| `enrich(book)` | `Book` | `BookEnrichmentResult` (cached on normalized title+author) |
+| `enrich_many(books)` | `Sequence[Book]` | `list[BookEnrichmentResult]` (order preserved; uses same cache) |
 | `provider` (property) | — | configured provider |
+| `cache_hits` / `cache_misses` / `cache_size` | — | diagnostic counters (testing/logging only) |
 
-**External use:** Yes for library callers experimenting with enrichment; do
-not assume it runs during label generation until a later milestone wires it in.
+**Notes**
+
+- In-memory cache only (no disk). Key = normalized title + author (not ISBN).
+- All result statuses are cached. Providers are not called on cache hit.
+- Not used by `WorkbookGenerationService` / CLI / GUI in this release.
 
 ### `NullBookEnrichmentProvider` — Experimental — External
 

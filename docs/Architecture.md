@@ -353,6 +353,7 @@ protocol and never imports HTTP clients or catalog SDKs.
 ```
 BookEnrichmentService
         │  enrich(book) / enrich_many(books)
+        │  in-memory cache (normalized title + author)
         ▼
 BookEnrichmentProvider   (protocol)
         │
@@ -360,7 +361,7 @@ BookEnrichmentProvider   (protocol)
         └─ GoogleBooksEnrichmentProvider       (services/lookups/ — optional)
 ```
 
-**Phase 1–2 behavior**
+**Phase 1–2.5 behavior**
 
 * Default collaborator is `NullBookEnrichmentProvider`, which returns
   `BookEnrichmentStatus.SKIPPED` and does not mutate the input `Book`.
@@ -373,6 +374,27 @@ BookEnrichmentProvider   (protocol)
 * Result shape is the immutable `BookEnrichmentResult` value object
   (`FOUND` / `NOT_FOUND` / `SKIPPED` / `AMBIGUOUS` / `ERROR`), with a
   `metadata` dict for additive fields without model redesign.
+
+**In-memory enrichment cache**
+
+`BookEnrichmentService` keeps a process-local dict of
+`BookEnrichmentResult` values for the lifetime of the service instance.
+There is no persistent storage; destroying the service discards the cache.
+
+* **Why on the service, not providers:** caching is an orchestration concern.
+  Providers stay focused on lookups. One cache covers every
+  `BookEnrichmentProvider` (null, Google Books, future Open Library, …)
+  without duplicated logic or provider-specific HTTP caches.
+* **Cache key:** `(normalize_catalog_text(title), normalize_catalog_text(author))`
+  via shared `services/enrichment_normalize.py` (same rules as Google Books
+  matching). ISBN is **not** part of the key so rows missing ISBNs still
+  share a lookup for the same work.
+* **Behavior:** on hit, return the cached result immediately (no provider
+  call; `Book` unchanged). On miss, call the provider, store the result,
+  return it. **All** statuses are cached (`FOUND`, `NOT_FOUND`,
+  `AMBIGUOUS`, `ERROR`, `SKIPPED`) to avoid repeat work for failures too.
+* **Diagnostics:** `cache_hits`, `cache_misses`, and `cache_size` are
+  available for tests/logging only — not user-facing.
 
 ### Google Books provider (`services/lookups/google_books.py`)
 

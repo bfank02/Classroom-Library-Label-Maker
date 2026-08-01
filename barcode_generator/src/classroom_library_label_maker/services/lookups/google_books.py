@@ -29,6 +29,9 @@ from classroom_library_label_maker.models import (
     BookEnrichmentResult,
     BookEnrichmentStatus,
 )
+from classroom_library_label_maker.services.enrichment_normalize import (
+    normalize_catalog_text,
+)
 
 _logger = get_logger("google_books")
 
@@ -43,7 +46,6 @@ _AMBIGUOUS_MARGIN = 0.06
 _EDITION_TITLE_THRESHOLD = 0.92
 _EDITION_AUTHOR_THRESHOLD = 0.80
 
-_PUNCTUATION_RE = re.compile(r"[^\w\s]", re.UNICODE)
 _WHITESPACE_RE = re.compile(r"\s+")
 
 JsonFetcher = Callable[[str], Mapping[str, Any]]
@@ -83,18 +85,19 @@ class _ScoredCandidate:
     confidence: float
 
 
-def normalize_catalog_text(value: str) -> str:
-    """Normalize title/author text for comparison.
-
-    Lowercases (casefold), strips punctuation, and collapses whitespace.
-    Apostrophes and other punctuation are removed so ``Charlotte's`` and
-    ``Charlottes`` compare equally.
-    """
-    text = value.casefold().strip()
-    text = _PUNCTUATION_RE.sub("", text)
-    text = text.replace("_", " ")
-    text = _WHITESPACE_RE.sub(" ", text).strip()
-    return text
+# Re-export for callers that historically imported from this module.
+__all__ = [
+    "DEFAULT_MAX_RESULTS",
+    "DEFAULT_TIMEOUT_SECONDS",
+    "GOOGLE_BOOKS_VOLUMES_URL",
+    "GoogleBooksEnrichmentProvider",
+    "GoogleBooksTransportError",
+    "JsonFetcher",
+    "author_similarity",
+    "combined_confidence",
+    "normalize_catalog_text",
+    "title_similarity",
+]
 
 
 def _similarity(left: str, right: str) -> float:
