@@ -9,11 +9,12 @@ Canonical pipeline for new development and the CLI ``generate`` command::
 
 Also stable: :class:`IsbnValidator`, :class:`BarcodeGenerationService`.
 
-Experimental enrichment (not wired into generation yet):
+Experimental enrichment / interactive review:
 
 * :class:`BookEnrichmentService`
 * :class:`NullBookEnrichmentProvider`
 * :class:`GoogleBooksEnrichmentProvider` (``services.lookups``)
+* :class:`ReviewSession` / :class:`BookReviewService` (UI-independent review)
 
 Deprecated / unused by the CLI (kept for transitional imports only):
 
@@ -39,6 +40,10 @@ from classroom_library_label_maker.services.book_enrichment_service import (
     NullBookEnrichmentProvider,
     create_default_enrichment_service,
 )
+from classroom_library_label_maker.services.book_review_service import (
+    BookReviewService,
+    ReviewSession,
+)
 from classroom_library_label_maker.services.excel_import_service import (
     ExcelImportService,
 )
@@ -62,12 +67,14 @@ __all__ = [
     "BatchProcessingService",
     "BatchProcessor",
     "BookEnrichmentService",
+    "BookReviewService",
     "ExcelImportService",
     "GoogleBooksEnrichmentProvider",
     "ISBNValidator",
     "IsbnValidator",
     "LabelLayoutService",
     "NullBookEnrichmentProvider",
+    "ReviewSession",
     "WorkbookGenerationService",
     "create_default_enrichment_service",
 ]

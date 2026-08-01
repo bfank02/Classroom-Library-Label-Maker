@@ -159,6 +159,7 @@ barcode_generator/src/classroom_library_label_maker/
 │   ├── barcode_generation_service.py
 │   ├── batch_processing_service.py
 │   ├── book_enrichment_service.py    # Enrichment orchestration (null provider default)
+│   ├── book_review_service.py        # ReviewSession + BookReviewService
 │   ├── excel_import_service.py
 │   ├── label_layout_service.py
 │   ├── workbook_generation_service.py
@@ -416,7 +417,32 @@ to `Very High` / `High` / `Medium` / `Low` using module thresholds
 Adapters should show `"{confidence_label} Match"` and must not duplicate
 threshold logic in Qt, CLI, or formatting helpers.
 
+**Interactive review workflow (Phase 4.2 — business layer only)**
+
+After enrichment, teachers can resolve ambiguous matches without further
+catalog requests. The workflow is fully UI-independent:
+
+```
+GUI (future)  →  ReviewSession  →  BookReviewService  →  updated Book objects
+```
+
+* `ReviewSession` owns queue state: current item/book, navigation
+  (`next` / `previous`), teacher decisions, remaining/completion, and
+  `finish()` to seal the session. Construct from parallel `Book` +
+  `ReviewItem` pairs (or `ReviewSession.from_pairs`). The GUI must not
+  keep its own indexes.
+* Immutable `ReviewDecision` records exactly one action per queue entry:
+  select a preserved `ReviewCandidate`, or `skipped=True`.
+* `BookReviewService.apply(finished_session)` produces
+  `ReviewSessionResult` (`updated_books`, resolved/skipped/unresolved/
+  total_reviewed). Selecting a candidate creates a **new** `Book` with
+  the chosen ISBN (ISBN-13 preferred) and preserves title, author, and
+  other fields. Skipping leaves the original book unchanged.
+* No workbook writes, no Google Books / provider calls, no Qt types.
+  Generation (`WorkbookGenerationService`) is unchanged in this phase.
+
 **In-memory enrichment cache**
+
 
 `BookEnrichmentService` keeps a process-local dict of
 `BookEnrichmentResult` values for the lifetime of the service instance.

@@ -762,6 +762,69 @@ class ReviewItem:
 
 
 @dataclass(frozen=True, slots=True)
+class ReviewDecision:
+    """One teacher action for a single review queue entry.
+
+    Exactly one of ``skipped`` or a selected ``candidate`` must be set.
+
+    Attributes:
+        book: Original in-memory book that was under review.
+        candidate: Chosen catalog match when the teacher selected an ISBN.
+        skipped: When True, the book is left unchanged.
+    """
+
+    book: Book
+    candidate: ReviewCandidate | None = None
+    skipped: bool = False
+
+    def __post_init__(self) -> None:
+        if self.skipped and self.candidate is not None:
+            raise ValueError("skipped decisions must not include a candidate")
+        if not self.skipped and self.candidate is None:
+            raise ValueError("non-skipped decisions require a candidate")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize this decision to a JSON-compatible dictionary."""
+        return {
+            "book": self.book.to_dict(),
+            "candidate": (
+                None if self.candidate is None else self.candidate.to_dict()
+            ),
+            "skipped": self.skipped,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewSessionResult:
+    """Outcome of applying a completed interactive review session.
+
+    Attributes:
+        updated_books: Books in session order after decisions (new instances
+            when an ISBN was selected; originals when skipped or unresolved).
+        resolved_count: Books updated with a selected candidate ISBN.
+        skipped_count: Books explicitly skipped by the teacher.
+        unresolved_count: Queue entries with no recorded decision.
+        total_reviewed: ``resolved_count + skipped_count``.
+    """
+
+    updated_books: tuple[Book, ...] = ()
+    resolved_count: int = 0
+    skipped_count: int = 0
+    unresolved_count: int = 0
+    total_reviewed: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize this result to a JSON-compatible dictionary."""
+        return {
+            "updated_books": [book.to_dict() for book in self.updated_books],
+            "resolved_count": self.resolved_count,
+            "skipped_count": self.skipped_count,
+            "unresolved_count": self.unresolved_count,
+            "total_reviewed": self.total_reviewed,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class EnrichmentSummary:
     """Aggregate ISBN enrichment outcomes for one generation run.
 

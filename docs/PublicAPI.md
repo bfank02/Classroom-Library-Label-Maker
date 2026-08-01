@@ -187,8 +187,26 @@ for ambiguous matches; empty otherwise).
 
 GUI/CLI show an **ISBN Lookup Summary** (found count, needs-review count, up
 to five titles, then `...and X more.`) when `review_items` is non-empty.
-Candidate data is retained for a future review dialog (not shown in the
-summary text yet).
+Candidate data is retained for interactive review (dialog not built yet).
+
+### `ReviewDecision` — Experimental — External
+
+**Purpose:** One teacher action for a single review queue entry.
+
+**Fields:** `book` (original), `candidate` (optional `ReviewCandidate`),
+`skipped` (bool). Exactly one of skip vs candidate must be set.
+
+Frozen dataclass. Serialized via `to_dict()`.
+
+### `ReviewSessionResult` — Experimental — External
+
+**Purpose:** Outcome of applying a finished `ReviewSession` via
+`BookReviewService`.
+
+**Fields:** `updated_books`, `resolved_count`, `skipped_count`,
+`unresolved_count`, `total_reviewed` (`resolved + skipped`).
+
+Frozen dataclass. Serialized via `to_dict()`.
 
 ### `ApplicationSettings` — Stable — External
 
@@ -356,6 +374,8 @@ Package: `classroom_library_label_maker.services`
 | `BookEnrichmentService` | Experimental | External | Provider-agnostic book enrichment (used by generation when lookup enabled) |
 | `NullBookEnrichmentProvider` | Experimental | External | Default no-op provider (`SKIPPED`; preserves Version 1.0 behavior) |
 | `GoogleBooksEnrichmentProvider` | Experimental | External | Google Books title/author enrichment (optional; not default) |
+| `ReviewSession` | Experimental | External | UI-independent interactive review queue / decisions |
+| `BookReviewService` | Experimental | External | Apply finished review decisions → updated `Book`s |
 | `BatchProcessor` | Internal / Deprecated | Unused by CLI | Legacy JSON stub; do not use |
 | `BarcodeGenerator` | Internal / Deprecated | Unused by CLI | Legacy stub; superseded by `BarcodeGenerationService` |
 
@@ -381,6 +401,39 @@ uses `create_default_enrichment_service()` (Google Books) when
 - In-memory cache only (no disk). Key = normalized title + author (not ISBN).
 - All result statuses are cached. Providers are not called on cache hit.
 - Used by `WorkbookGenerationService` when `lookup_missing_isbns` is enabled.
+
+### `ReviewSession` — Experimental — External
+
+Module: `classroom_library_label_maker.services.book_review_service`
+
+**Purpose:** Own interactive review state (current item, navigation, decisions,
+completion). Construct from parallel `Book` / `ReviewItem` sequences or
+`ReviewSession.from_pairs(...)`. Operates only on preserved candidates — no
+catalog provider calls.
+
+| Method | Role |
+|--------|------|
+| `current_item()` / `current_book()` / `current_index()` | What the UI should show |
+| `item_count()` / `remaining_count()` / `is_complete()` | Progress |
+| `next()` / `previous()` | Navigation (`bool` if moved) |
+| `select_candidate(candidate)` / `skip_current()` | Record one decision per slot |
+| `finish()` / `is_finished()` | Seal against further edits |
+| `decisions()` / `decision_at(i)` / `books()` / `items()` | Inspection |
+
+### `BookReviewService` — Experimental — External
+
+Module: `classroom_library_label_maker.services.book_review_service`
+
+**Purpose:** Apply a **finished** `ReviewSession` to produce updated in-memory
+`Book` objects and a `ReviewSessionResult`. Does not write workbooks or call
+providers.
+
+| Method | Inputs | Outputs |
+|--------|--------|---------|
+| `apply(session)` | Finished `ReviewSession` | `ReviewSessionResult` |
+
+Selecting a candidate → new `Book` with ISBN-13 (else ISBN-10); title/author
+and other fields preserved. Skipping → original book unchanged.
 
 ### `NullBookEnrichmentProvider` — Experimental — External
 
