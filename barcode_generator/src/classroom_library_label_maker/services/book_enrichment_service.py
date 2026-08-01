@@ -21,6 +21,7 @@ the default production provider is Google Books via
 from __future__ import annotations
 
 from collections.abc import Sequence
+import os
 
 from classroom_library_label_maker.constants import MISSING_ISBN_PLACEHOLDER
 from classroom_library_label_maker.logger import get_logger
@@ -62,12 +63,18 @@ def create_default_enrichment_service() -> BookEnrichmentService:
 
     Imported lazily so :class:`WorkbookGenerationService` can depend on
     :class:`BookEnrichmentService` without referencing catalog adapters.
+
+    Reads optional ``GOOGLE_BOOKS_API_KEY`` from the environment for higher
+    Google Books quota when set.
     """
     from classroom_library_label_maker.services.lookups.google_books import (
         GoogleBooksEnrichmentProvider,
     )
 
-    return BookEnrichmentService(provider=GoogleBooksEnrichmentProvider())
+    api_key = os.environ.get("GOOGLE_BOOKS_API_KEY")
+    return BookEnrichmentService(
+        provider=GoogleBooksEnrichmentProvider(api_key=api_key or None),
+    )
 
 
 class NullBookEnrichmentProvider:

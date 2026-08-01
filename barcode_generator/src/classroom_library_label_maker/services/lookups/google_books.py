@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 import json
 import re
+import time
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -41,6 +42,11 @@ _logger = get_logger("google_books")
 GOOGLE_BOOKS_VOLUMES_URL = "https://www.googleapis.com/books/v1/volumes"
 DEFAULT_TIMEOUT_SECONDS = 10.0
 DEFAULT_MAX_RESULTS = 10
+# Stay under the common unauthenticated ~100 queries/minute quota when
+# enriching large inventories (demo workbook, classroom batches).
+DEFAULT_MIN_REQUEST_INTERVAL_SECONDS = 0.75
+DEFAULT_MAX_RETRIES_ON_429 = 5
+DEFAULT_429_INITIAL_BACKOFF_SECONDS = 2.0
 
 # Match selection thresholds (combined confidence score in [0, 1]).
 _FOUND_THRESHOLD = 0.85
@@ -90,7 +96,10 @@ class _ScoredCandidate:
 
 # Re-export for callers that historically imported from this module.
 __all__ = [
+    "DEFAULT_429_INITIAL_BACKOFF_SECONDS",
     "DEFAULT_MAX_RESULTS",
+    "DEFAULT_MAX_RETRIES_ON_429",
+    "DEFAULT_MIN_REQUEST_INTERVAL_SECONDS",
     "DEFAULT_TIMEOUT_SECONDS",
     "GOOGLE_BOOKS_VOLUMES_URL",
     "GoogleBooksEnrichmentProvider",
@@ -167,6 +176,11 @@ def _default_fetch_json(url: str, *, timeout_seconds: float) -> Mapping[str, Any
             kind="timeout",
         ) from exc
     except HTTPError as exc:
+        if exc.code == 429:
+            raise GoogleBooksTransportError(
+                "Google Books HTTP error: 429",
+                kind="rate_limit",
+            ) from exc
         raise GoogleBooksTransportError(
             f"Google Books HTTP error: {exc.code}",
             kind="http",
@@ -505,6 +519,10 @@ class GoogleBooksEnrichmentProvider:
         max_results: int = DEFAULT_MAX_RESULTS,
         api_key: str | None = None,
         fetch_json: JsonFetcher | None = None,
+        min_request_interval_seconds: float = DEFAULT_MIN_REQUEST_INTERVAL_SECONDS,
+        max_retries_on_429: int = DEFAULT_MAX_RETRIES_ON_429,
+        rate_limit_backoff_seconds: float = DEFAULT_429_INITIAL_BACKOFF_SECONDS,
+        sleep: Callable[[float], None] | None = None,
     ) -> None:
         """Initialize the provider.
 
@@ -513,15 +531,33 @@ class GoogleBooksEnrichmentProvider:
             max_results: Google Books ``maxResults`` (1-40).
             api_key: Optional API key for higher quota.
             fetch_json: Injectable JSON GET for tests (receives full URL).
+                When set, throttling / 429 retries are skipped (tests own timing).
+            min_request_interval_seconds: Minimum delay between live HTTP calls
+                (``0`` disables pacing).
+            max_retries_on_429: Extra attempts after HTTP 429 before failing.
+            rate_limit_backoff_seconds: Initial sleep after a 429 (doubles each
+                retry).
+            sleep: Injectable sleeper for tests (defaults to :func:`time.sleep`).
         """
         if timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
         if not 1 <= max_results <= 40:
             raise ValueError("max_results must be between 1 and 40")
+        if min_request_interval_seconds < 0:
+            raise ValueError("min_request_interval_seconds must be >= 0")
+        if max_retries_on_429 < 0:
+            raise ValueError("max_retries_on_429 must be >= 0")
+        if rate_limit_backoff_seconds <= 0:
+            raise ValueError("rate_limit_backoff_seconds must be positive")
         self._timeout_seconds = timeout_seconds
         self._max_results = max_results
         self._api_key = api_key.strip() if api_key else None
         self._fetch_json = fetch_json
+        self._min_request_interval_seconds = min_request_interval_seconds
+        self._max_retries_on_429 = max_retries_on_429
+        self._rate_limit_backoff_seconds = rate_limit_backoff_seconds
+        self._sleep = sleep or time.sleep
+        self._last_request_monotonic: float | None = None
 
     def enrich(self, book: Book) -> BookEnrichmentResult:
         """Search Google Books and return the best enrichment match.
@@ -624,4 +660,44 @@ class GoogleBooksEnrichmentProvider:
                 )
             return payload
 
-        return _default_fetch_json(url, timeout_seconds=self._timeout_seconds)
+        return self._fetch_json_with_rate_limits(url)
+
+    def _fetch_json_with_rate_limits(self, url: str) -> Mapping[str, Any]:
+        """GET with pacing and exponential backoff on HTTP 429."""
+        attempts = self._max_retries_on_429 + 1
+        for attempt in range(attempts):
+            self._wait_for_request_slot()
+            try:
+                return _default_fetch_json(
+                    url,
+                    timeout_seconds=self._timeout_seconds,
+                )
+            except GoogleBooksTransportError as exc:
+                if exc.kind != "rate_limit" or attempt >= attempts - 1:
+                    raise
+                delay = self._rate_limit_backoff_seconds * (2**attempt)
+                _logger.warning(
+                    "Google Books rate limited (429); retry %s/%s after %.1fs",
+                    attempt + 1,
+                    self._max_retries_on_429,
+                    delay,
+                )
+                self._sleep(delay)
+        raise GoogleBooksTransportError(
+            "Google Books HTTP error: 429",
+            kind="rate_limit",
+        )
+
+    def _wait_for_request_slot(self) -> None:
+        """Sleep so consecutive live requests respect the minimum interval."""
+        interval = self._min_request_interval_seconds
+        if interval <= 0:
+            self._last_request_monotonic = time.monotonic()
+            return
+        now = time.monotonic()
+        if self._last_request_monotonic is not None:
+            elapsed = now - self._last_request_monotonic
+            remaining = interval - elapsed
+            if remaining > 0:
+                self._sleep(remaining)
+        self._last_request_monotonic = time.monotonic()

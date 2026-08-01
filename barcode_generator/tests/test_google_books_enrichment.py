@@ -384,3 +384,80 @@ def test_build_queries_never_author_only() -> None:
     assert all("intitle" in q or "Title" in q for q in queries)
     assert not any(q.strip().startswith("inauthor:") for q in queries)
     assert not any(q == 'inauthor:"Author"' for q in queries)
+
+
+def test_live_fetch_retries_on_429(monkeypatch: pytest.MonkeyPatch) -> None:
+    """HTTP 429 should back off and retry before failing."""
+    from classroom_library_label_maker.services.lookups import google_books as gb
+
+    calls = {"n": 0}
+    sleeps: list[float] = []
+
+    def fake_fetch(url: str, *, timeout_seconds: float) -> dict[str, object]:
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise GoogleBooksTransportError(
+                "Google Books HTTP error: 429",
+                kind="rate_limit",
+            )
+        return _payload(
+            _volume(
+                volume_id="v",
+                title="Charlotte's Web",
+                authors=["E. B. White"],
+                isbn13="9780064400558",
+            )
+        )
+
+    monkeypatch.setattr(gb, "_default_fetch_json", fake_fetch)
+    provider = GoogleBooksEnrichmentProvider(
+        min_request_interval_seconds=0,
+        max_retries_on_429=4,
+        rate_limit_backoff_seconds=0.5,
+        sleep=sleeps.append,
+    )
+    result = provider.enrich(_book())
+    assert result.status is BookEnrichmentStatus.FOUND
+    assert calls["n"] == 3
+    assert sleeps == [0.5, 1.0]
+
+
+def test_live_fetch_paces_requests(monkeypatch: pytest.MonkeyPatch) -> None:
+    from classroom_library_label_maker.services.lookups import google_books as gb
+
+    sleeps: list[float] = []
+    clock = {"t": 1000.0}
+
+    def fake_monotonic() -> float:
+        return clock["t"]
+
+    def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        clock["t"] += seconds
+
+    def fake_fetch(url: str, *, timeout_seconds: float) -> dict[str, object]:
+        clock["t"] += 0.01  # tiny elapsed work between requests
+        return _payload()
+
+    monkeypatch.setattr(gb.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gb, "_default_fetch_json", fake_fetch)
+    provider = GoogleBooksEnrichmentProvider(
+        min_request_interval_seconds=0.75,
+        sleep=fake_sleep,
+    )
+    result = provider.enrich(_book())
+    assert result.status is BookEnrichmentStatus.NOT_FOUND
+    assert len(sleeps) >= 2
+    assert all(pause == pytest.approx(0.74, abs=0.02) for pause in sleeps)
+
+
+def test_injected_fetch_json_skips_rate_limiting() -> None:
+    sleeps: list[float] = []
+    fetcher = _ScriptedFetcher([_payload(), _payload(), _payload()])
+    provider = GoogleBooksEnrichmentProvider(
+        fetch_json=fetcher,
+        min_request_interval_seconds=0.75,
+        sleep=sleeps.append,
+    )
+    provider.enrich(_book())
+    assert sleeps == []

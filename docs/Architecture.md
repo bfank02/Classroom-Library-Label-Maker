@@ -567,6 +567,13 @@ Populates `isbn` (ISBN-13 preferred), `title`, `author`, and `metadata`
 scored peers to public `ReviewCandidate` values. Never mutates the input
 `Book`.
 
+**Rate limiting**
+
+Live HTTP calls are paced (~0.75s apart by default) and HTTP **429** responses
+retry with exponential backoff. Optional `GOOGLE_BOOKS_API_KEY` (read by
+`create_default_enrichment_service`) improves quota for large inventories.
+Injectable `fetch_json` bypasses pacing for unit tests.
+
 **Testing**
 
 Inject `fetch_json=` to supply canned payloads; unit tests do not require
