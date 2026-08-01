@@ -393,7 +393,9 @@ review UI can let teachers pick an ISBN **without additional Google Books
 requests**:
 
 * Immutable `ReviewCandidate` holds `isbn13`, `isbn10`, `title`, `author`,
-  `publisher`, `published_date`, and `confidence`.
+  `publisher`, `published_date`, and internal `confidence_score`. Presentation
+  uses derived `confidence_label` (`Very High` / `High` / `Medium` / `Low`)
+  from domain thresholds — GUI/CLI must not reinterpret the numeric score.
 * `BookEnrichmentResult.candidates` is populated for `AMBIGUOUS` (ordered by
   descending confidence). Successful `FOUND` lookups keep `candidates=()`.
 * `ReviewItem.candidates` carries the same tuple through
@@ -403,6 +405,16 @@ requests**:
 
 No review dialog is built in this phase; generation behavior is unchanged
 aside from attaching candidate data on review items.
+
+**Confidence presentation (domain layer)**
+
+Match selection still uses numeric scores inside providers. For teacher-facing
+copy, `ReviewCandidate.confidence_score` is the internal `[0, 1]` value and
+`ReviewCandidate.confidence_label` (via `confidence_label_for_score`) maps it
+to `Very High` / `High` / `Medium` / `Low` using module thresholds
+(`CONFIDENCE_LABEL_VERY_HIGH` ≥ 0.90, `HIGH` ≥ 0.80, `MEDIUM` ≥ 0.70).
+Adapters should show `"{confidence_label} Match"` and must not duplicate
+threshold logic in Qt, CLI, or formatting helpers.
 
 **In-memory enrichment cache**
 

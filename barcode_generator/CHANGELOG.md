@@ -29,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ReviewCandidate` on ambiguous `BookEnrichmentResult` / `ReviewItem`
   (ordered by confidence; successful finds keep an empty candidate list;
   cached results reuse peers without extra Google Books requests)
+- User-facing confidence bands on `ReviewCandidate`: internal
+  `confidence_score` plus derived `confidence_label` (`Very High` /
+  `High` / `Medium` / `Low`) via domain `confidence_label_for_score`
 - Cross-platform packaging: shared `scripts/build_release.py`, macOS
   `build_macos.sh`, updated Windows `build.bat`
 - Native macOS `.app` bundle support (Finder-launchable, bundled runtime)

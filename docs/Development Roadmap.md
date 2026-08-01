@@ -65,6 +65,8 @@ Phase 3 is printing only.
 - [x] Candidate preservation for interactive review (`ReviewCandidate` on
       `BookEnrichmentResult` / `ReviewItem`; ambiguous peers retained; no
       review dialog yet)
+- [x] User-facing confidence labels (`confidence_score` +
+      `confidence_label` / `confidence_label_for_score`; no GUI yet)
 - [ ] Interactive review UI (choose among preserved candidates; no extra API)
 - [ ] Additional catalog providers (Open Library, …)
 - [ ] Cover image downloads (`services/covers/`)

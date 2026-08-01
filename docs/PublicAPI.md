@@ -157,9 +157,24 @@ recoverable diagnostics (e.g. missing barcode images).
 interactive review UI (no extra Google Books requests at review time).
 
 **Fields:** `isbn13`, `isbn10`, `title`, `author`, `publisher`,
-`published_date`, `confidence`.
+`published_date`, `confidence_score` (internal `[0, 1]` match score — not for
+direct UI interpretation).
 
-Frozen dataclass. Serialized via `to_dict()`.
+**Derived:** `confidence_label` → `Very High` / `High` / `Medium` / `Low`
+via `confidence_label_for_score` (single source of truth). Display as
+`"{confidence_label} Match"` in GUI/CLI when the review UI lands.
+
+Frozen dataclass. Serialized via `to_dict()` (includes both
+`confidence_score` and `confidence_label`).
+
+### `confidence_label_for_score` — Experimental — External
+
+**Purpose:** Map a numeric confidence score to a presentation label. Prefer
+`ReviewCandidate.confidence_label`; call this helper only when you have a
+raw score outside a candidate instance.
+
+Thresholds (inclusive lower bounds): ≥0.90 Very High, ≥0.80 High,
+≥0.70 Medium, else Low.
 
 ### `ReviewItem` — Experimental — External
 

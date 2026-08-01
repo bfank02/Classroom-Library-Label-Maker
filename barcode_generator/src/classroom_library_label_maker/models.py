@@ -653,6 +653,35 @@ class GenerationCompletionState(StrEnum):
     SUCCESS_WITH_WARNINGS = "success_with_warnings"
 
 
+# Presentation thresholds for :attr:`ReviewCandidate.confidence_label`.
+# Independent of Google Books match-selection thresholds — do not reuse those
+# in GUI/CLI; call :func:`confidence_label_for_score` (or the property) instead.
+CONFIDENCE_LABEL_VERY_HIGH = 0.90
+CONFIDENCE_LABEL_HIGH = 0.80
+CONFIDENCE_LABEL_MEDIUM = 0.70
+
+_CONFIDENCE_LABEL_VERY_HIGH = "Very High"
+_CONFIDENCE_LABEL_HIGH = "High"
+_CONFIDENCE_LABEL_MEDIUM = "Medium"
+_CONFIDENCE_LABEL_LOW = "Low"
+
+
+def confidence_label_for_score(score: float) -> str:
+    """Map an internal confidence score in ``[0, 1]`` to a presentation label.
+
+    Single source of truth for user-facing confidence wording. Adapters should
+    display ``f"{label} Match"`` (e.g. ``"High Match"``) and must not apply
+    their own thresholds.
+    """
+    if score >= CONFIDENCE_LABEL_VERY_HIGH:
+        return _CONFIDENCE_LABEL_VERY_HIGH
+    if score >= CONFIDENCE_LABEL_HIGH:
+        return _CONFIDENCE_LABEL_HIGH
+    if score >= CONFIDENCE_LABEL_MEDIUM:
+        return _CONFIDENCE_LABEL_MEDIUM
+    return _CONFIDENCE_LABEL_LOW
+
+
 @dataclass(frozen=True, slots=True)
 class ReviewCandidate:
     """One catalog match preserved for interactive ISBN review.
@@ -667,7 +696,8 @@ class ReviewCandidate:
         author: Catalog author(s), typically comma-joined.
         publisher: Publisher name when available.
         published_date: Publication date string when available.
-        confidence: Match confidence in ``[0, 1]`` against the inventory book.
+        confidence_score: Internal match confidence in ``[0, 1]`` against the
+            inventory book. Not for direct UI display.
     """
 
     isbn13: str | None = None
@@ -676,7 +706,14 @@ class ReviewCandidate:
     author: str = ""
     publisher: str | None = None
     published_date: str | None = None
-    confidence: float = 0.0
+    confidence_score: float = 0.0
+
+    @property
+    def confidence_label(self) -> str:
+        """User-facing confidence band (``Very High`` / ``High`` / ``Medium`` /
+        ``Low``). Prefer this over interpreting :attr:`confidence_score`.
+        """
+        return confidence_label_for_score(self.confidence_score)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize this candidate to a JSON-compatible dictionary."""
@@ -687,7 +724,8 @@ class ReviewCandidate:
             "author": self.author,
             "publisher": self.publisher,
             "published_date": self.published_date,
-            "confidence": self.confidence,
+            "confidence_score": self.confidence_score,
+            "confidence_label": self.confidence_label,
         }
 
 

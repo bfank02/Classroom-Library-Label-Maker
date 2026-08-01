@@ -420,7 +420,7 @@ def _to_review_candidate(scored: _ScoredCandidate) -> ReviewCandidate:
         author=_format_authors(candidate.authors) or "",
         publisher=candidate.publisher,
         published_date=candidate.published_date,
-        confidence=round(scored.confidence, 4),
+        confidence_score=round(scored.confidence, 4),
     )
 
 

@@ -51,6 +51,7 @@ from classroom_library_label_maker.models import (
     ValidationResult,
     WorkbookGenerationResult,
     WorkbookGenerationWarning,
+    confidence_label_for_score,
 )
 
 __all__ = [
@@ -90,6 +91,7 @@ __all__ = [
     "WorkbookGenerationResult",
     "WorkbookGenerationWarning",
     "__version__",
+    "confidence_label_for_score",
 ]
 
 try:

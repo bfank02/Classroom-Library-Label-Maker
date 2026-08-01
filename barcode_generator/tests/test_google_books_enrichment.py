@@ -188,7 +188,7 @@ def test_ambiguous_when_two_distinct_confident_matches() -> None:
     assert "multiple" in result.message.lower()
     assert result.metadata.get("isbn13") in {"9781111111111", "9782222222222"}
     assert len(result.candidates) == 2
-    confidences = [c.confidence for c in result.candidates]
+    confidences = [c.confidence_score for c in result.candidates]
     assert confidences == sorted(confidences, reverse=True)
     assert {c.isbn13 for c in result.candidates} == {
         "9781111111111",

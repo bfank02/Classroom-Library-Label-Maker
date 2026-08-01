@@ -79,7 +79,7 @@ def test_review_candidate_is_immutable() -> None:
         isbn13="9781111111111",
         title="Ocean Adventure",
         author="Pat Lee",
-        confidence=0.9,
+        confidence_score=0.9,
     )
     try:
         candidate.title = "Changed"  # type: ignore[misc]
@@ -145,7 +145,7 @@ def test_ambiguous_preserves_ordered_candidates() -> None:
 
     assert result.status is BookEnrichmentStatus.AMBIGUOUS
     assert len(result.candidates) == 2
-    confidences = [c.confidence for c in result.candidates]
+    confidences = [c.confidence_score for c in result.candidates]
     assert confidences == sorted(confidences, reverse=True)
     by_isbn = {c.isbn13: c for c in result.candidates}
     ocean = by_isbn["9781111111111"]
@@ -206,13 +206,13 @@ def test_generation_passes_candidates_onto_ambiguous_review_item(
             isbn13="9781111111111",
             title="Ocean Adventure",
             author="Pat Lee",
-            confidence=0.91,
+            confidence_score=0.91,
         ),
         ReviewCandidate(
             isbn13="9782222222222",
             title="Desert Adventure",
             author="Pat Lee",
-            confidence=0.88,
+            confidence_score=0.88,
         ),
     )
     wb_path = tmp_path / "books.xlsx"
