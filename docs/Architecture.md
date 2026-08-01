@@ -540,13 +540,30 @@ adapter. Callers only see `BookEnrichmentResult`.
 
 **Query strategy (sequential; no author-only searches)**
 
-1. `<title> inauthor:<surname>`
-2. `<title> <author>`
-3. `<title>`
+Most specific first. Quoted `intitle:"…" inauthor:"…"` forms often return
+empty results for classroom titles, so field operators stay unquoted and
+`inauthor` uses the author surname:
 
-Stops early on `FOUND` or `AMBIGUOUS`. Empty results fall through to the next
-query. Transport failures become `ERROR` (timeouts, HTTP errors, malformed
-JSON) — exceptions are not leaked.
+1. `intitle:<title> inauthor:<surname>`
+2. `<title> inauthor:<surname>`
+3. `<title> <author>`
+
+Stops early on `FOUND` or `AMBIGUOUS` **only when the chosen match (or at
+least one ambiguous peer) has a usable ISBN-13/ISBN-10**. A confident
+metadata match without an ISBN does **not** terminate the search — later
+strategies still run. Empty / below-threshold results also fall through.
+`NOT_FOUND` is returned only after every configured strategy has been
+attempted. Transport failures become `ERROR` (timeouts, HTTP errors,
+malformed JSON) — exceptions are not leaked.
+
+**DEBUG diagnostics**
+
+When the `google_books` logger is at DEBUG, each lookup emits structured
+per-query diagnostics: book title/author, query number and text, result
+count, top candidate titles/confidence/ISBN presence, whether the
+provider continued to the next strategy, and the final decision
+(`FOUND` / `AMBIGUOUS` / `NOT_FOUND` / `ERROR`). Diagnostics never include
+API keys or full request URLs.
 
 **Normalization**
 
@@ -564,6 +581,9 @@ Each candidate is scored with weighted title/author similarity
   stored on `candidates` (descending confidence) for later review
 * `NOT_FOUND` — no candidate above the confidence floor
 * `ERROR` — network / parse failures
+
+Confidence thresholds and ambiguity rules are unchanged; incorrect ISBNs
+are treated as worse than missing ISBNs.
 
 **Result mapping**
 

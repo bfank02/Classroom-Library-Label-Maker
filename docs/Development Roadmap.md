@@ -74,6 +74,8 @@ Phase 3 is printing only.
       copy after review (`InventoryUpdateService`; original never overwritten)
 - [x] Google Books API key integration (config-only env read, startup
       validation, authenticated pacing, anonymous fallback on 401/403)
+- [x] Improved Google Books search strategy (most-specific-first queries;
+      continue past metadata matches without ISBN; DEBUG diagnostics)
 - [ ] Additional catalog providers (Open Library, …)
 - [ ] Cover image downloads (`services/covers/`)
 - [ ] Inventory / checkout / reading-level workflows

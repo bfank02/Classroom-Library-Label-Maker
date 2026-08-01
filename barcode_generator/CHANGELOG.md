@@ -62,6 +62,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Google Books search strategy: most-specific-first queries
+  (`intitle:… inauthor:surname` → surname form → free text); continue past
+  confident metadata matches that lack a usable ISBN; DEBUG per-query
+  diagnostics (no API keys). Confidence thresholds unchanged.
 - Print barcodes render at 600 DPI with taller bars and fill more of the
   label; barcode row allocation grows when fewer text fields are shown
 

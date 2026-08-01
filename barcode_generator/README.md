@@ -302,6 +302,16 @@ When some books still need attention, the completion message includes an
 - Matching strategy: [`docs/Architecture.md`](../docs/Architecture.md)
 - Public surface: [`docs/PublicAPI.md`](../docs/PublicAPI.md)
 
+**Google Books search flow (developer notes)**
+
+Queries run most-specific-first (`intitle:… inauthor:surname` →
+`title inauthor:surname` → free-text `title author`). A confident catalog
+match **without** a usable ISBN does not stop the search; later strategies
+still run. Confidence thresholds and ambiguity detection are unchanged.
+Enable DEBUG logging on the `google_books` logger to see per-query
+diagnostics (query text, result counts, top candidates, continuation, final
+decision). Diagnostics never include API keys.
+
 ### Excel import
 
 `ExcelImportService` maps workbook rows to `Book` objects via `WorkbookReader`:
