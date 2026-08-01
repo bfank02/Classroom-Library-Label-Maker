@@ -250,7 +250,8 @@ requiring a model redesign when new providers land.
 
 **Fields:** `isbn`, `status`, optional `title` / `author`, `message`,
 `metadata`, `candidates` (`tuple[ReviewCandidate, ...]`; set for
-`AMBIGUOUS`, empty for successful `FOUND`).
+`AMBIGUOUS`, empty for successful `FOUND`), optional `provider_name`
+(catalog attribution for logs/benchmarks — not shown in the teacher UI).
 
 | Method | Outputs |
 |--------|---------|
@@ -263,6 +264,7 @@ requiring a model redesign when new providers land.
 - Prefer this model over `IsbnLookupResult` for new enrichment pipelines.
 - Candidate lists are produced once during enrichment and reused via the
   enrichment cache / `ReviewItem` for interactive review.
+- Examples of `provider_name`: `"Google Books"`, `"Open Library"`.
 
 ### `IsbnLookupResult` / `CoverImageResult` — Experimental — External
 
@@ -379,7 +381,9 @@ Package: `classroom_library_label_maker.services`
 | `WorkbookGenerationService` | Stable | External | End-to-end import → barcodes → layout → save (canonical runtime for CLI and desktop GUI) |
 | `BookEnrichmentService` | Experimental | External | Provider-agnostic book enrichment (used by generation when lookup enabled) |
 | `NullBookEnrichmentProvider` | Experimental | External | Default no-op provider (`SKIPPED`; preserves Version 1.0 behavior) |
-| `GoogleBooksEnrichmentProvider` | Experimental | External | Google Books title/author enrichment (optional; not default) |
+| `CompositeBookEnrichmentProvider` | Experimental | External | Sequential enrichment provider pipeline |
+| `GoogleBooksEnrichmentProvider` | Experimental | External | Google Books title/author enrichment (primary catalog) |
+| `OpenLibraryEnrichmentProvider` | Experimental | External | Open Library title/author enrichment (fallback catalog) |
 | `ReviewSession` | Experimental | External | UI-independent interactive review queue / decisions |
 | `BookReviewService` | Experimental | External | Apply finished review decisions → updated `Book`s |
 | `InventoryUpdateService` | Experimental | External | Write updated inventory workbook copy after review |
@@ -392,8 +396,8 @@ Module: `classroom_library_label_maker.services.book_enrichment_service`
 
 **Purpose:** Delegate enrichment of a `Book` to a `BookEnrichmentProvider`.
 Defaults to `NullBookEnrichmentProvider` when constructed alone. Generation
-uses `create_default_enrichment_service()` (Google Books) when
-`lookup_missing_isbns` is True.
+uses `create_default_enrichment_service()` (composite pipeline: Google Books
+then Open Library) when `lookup_missing_isbns` is True.
 
 | Method | Inputs | Outputs |
 |--------|--------|---------|
@@ -466,6 +470,38 @@ skipped rows are left alone. OpenPyxl stays in
 existing title/author. Preserves Version 1.0 generation semantics when used
 as the default collaborator.
 
+### `CompositeBookEnrichmentProvider` — Experimental — External
+
+Module: `classroom_library_label_maker.services.lookups.composite`
+(also re-exported from `classroom_library_label_maker.services`)
+
+**Purpose:** Chain multiple `BookEnrichmentProvider` implementations in
+injection order. The rest of the application sees a single provider.
+
+| Method / ctor | Inputs | Outputs |
+|---------------|--------|---------|
+| `__init__(providers)` | Ordered `Sequence[BookEnrichmentProvider]` (non-empty) | composite provider |
+| `enrich(book)` | `Book` | First `FOUND` / `AMBIGUOUS`, else `NOT_FOUND` after all providers |
+| `providers` (property) | — | injected providers in priority order |
+
+**Flow:** `FOUND` / `AMBIGUOUS` return immediately; `NOT_FOUND` / `ERROR` /
+`SKIPPED` continue to the next provider. Sequential only — no parallel
+requests and no reordering. Does not cache (caching stays on
+`BookEnrichmentService`). Depends only on the protocol; never special-cases
+concrete catalog types.
+
+**Notes**
+
+- Production default via `create_default_enrichment_service(api_key=…)` wraps
+  Google Books first, then Open Library, so Google remains preferred and Open
+  Library recovers additional misses without changing generation.
+- Optional `provider_name` on child providers improves DEBUG labels.
+- DEBUG logs provider label, result, and continuation (never credentials).
+- Child results retain `BookEnrichmentResult.provider_name` for diagnostics.
+
+**External use:** Yes when callers explicitly inject it into
+`BookEnrichmentService`.
+
 ### `GoogleBooksEnrichmentProvider` — Experimental — External
 
 Module: `classroom_library_label_maker.services.lookups.google_books`
@@ -473,29 +509,58 @@ Module: `classroom_library_label_maker.services.lookups.google_books`
 
 **Purpose:** Search Google Books for the best title/author match. Implements
 `BookEnrichmentProvider`. HTTP and Google JSON stay inside the adapter.
+Primary catalog in the default composite pipeline.
 
 | Method / ctor | Inputs | Outputs |
 |---------------|--------|---------|
 | `__init__(*, timeout_seconds=10, max_results=10, api_key=None, fetch_json=None, min_request_interval_seconds=None, …)` | Optional timeout, page size, injected API key, injectable JSON GET, pacing/backoff knobs | provider |
 | `enrich(book)` | `Book` | `BookEnrichmentResult` (`FOUND` / `AMBIGUOUS` / `NOT_FOUND` / `ERROR`) |
 
-**Query order:** `title inauthor:surname` → free-text `title author` →
-`title`
-(sequential; no author-only search).
+**Query order:** `intitle:title inauthor:surname` → `title inauthor:surname`
+→ free-text `title author` (sequential; no author-only search). Confident
+matches without a usable ISBN continue to the next strategy.
 
 **Notes**
 
 - Does not mutate `Book`.
 - Does not read environment variables; callers inject `api_key`.
+- Sets `provider_name="Google Books"` on results.
 - Authenticated vs anonymous pacing defaults (~0.40s / ~1.25s).
 - Transport failures map to `ERROR` (no leaked exceptions).
 - HTTP 401/403 with a key falls back to anonymous for the rest of the run.
 - `fetch_json` is for tests / custom transports; production uses urllib.
-- Used by generation when `lookup_missing_isbns` is enabled via
+- Used by generation inside `CompositeBookEnrichmentProvider` via
   `create_default_enrichment_service(api_key=…)`.
 
 **External use:** Yes when callers explicitly inject it into
-`BookEnrichmentService`.
+`BookEnrichmentService` (or into the composite pipeline).
+
+### `OpenLibraryEnrichmentProvider` — Experimental — External
+
+Module: `classroom_library_label_maker.services.lookups.open_library`
+(also re-exported from `classroom_library_label_maker.services`)
+
+**Purpose:** Search Open Library for title/author matches when Google Books
+returns `NOT_FOUND`. Secondary catalog — improves coverage, does not replace
+Google.
+
+| Method / ctor | Inputs | Outputs |
+|---------------|--------|---------|
+| `__init__(*, timeout_seconds=10, max_results=10, fetch_json=None, min_request_interval_seconds=0.25, …)` | Optional timeout, page size, injectable JSON GET, pacing | provider |
+| `enrich(book)` | `Book` | `BookEnrichmentResult` (`FOUND` / `AMBIGUOUS` / `NOT_FOUND` / `ERROR`) |
+
+**Query order:** `title` + `author` field search → `title`-only fallback.
+
+**Notes**
+
+- Prefer ISBN-13; fall back to ISBN-10 when ISBN-13 is absent.
+- Same confidence thresholds / ambiguity philosophy as Google Books.
+- Sets `provider_name="Open Library"` on results.
+- `fetch_json` is for tests; production uses urllib.
+- No API key required.
+
+**External use:** Yes when callers explicitly inject it into
+`BookEnrichmentService` (or into the composite pipeline).
 
 ---
 

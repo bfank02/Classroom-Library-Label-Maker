@@ -133,31 +133,20 @@ def test_exact_match_title_and_author() -> None:
     assert result.metadata["provider"] == "google_books"
     assert result.metadata["normalized_title"] == "charlottes web"
     assert book.title == "Charlotte's Web"  # original unchanged
+    assert _query_from_url(fetcher.urls[0]).startswith("intitle:")
     assert "inauthor:White" in _query_from_url(fetcher.urls[0])
     assert "Charlotte" in _query_from_url(fetcher.urls[0])
 
 
-def test_title_only_match_after_empty_combined_query() -> None:
-    """Fall through to free-text / title-only when surname query is empty."""
-    fetcher = _ScriptedFetcher(
-        [
-            _payload(),  # title inauthor:surname empty
-            _payload(),  # title + author empty
-            _payload(
-                _volume(
-                    volume_id="vol2",
-                    title="Charlotte's Web",
-                    authors=["E. B. White"],
-                    isbn13="9780064400558",
-                )
-            ),
-        ]
+def test_build_queries_without_author_uses_intitle_then_title() -> None:
+    from classroom_library_label_maker.services.lookups.google_books import (
+        _build_queries,
     )
-    result = GoogleBooksEnrichmentProvider(fetch_json=fetcher).enrich(_book())
 
-    assert result.status is BookEnrichmentStatus.FOUND
-    assert len(fetcher.urls) == 3
-    assert _query_from_url(fetcher.urls[2]) == "Charlotte's Web"
+    assert _build_queries("Charlotte's Web", "") == (
+        "intitle:Charlotte's Web",
+        "Charlotte's Web",
+    )
 
 
 def test_ambiguous_when_two_distinct_confident_matches() -> None:
@@ -204,12 +193,12 @@ def test_no_match_across_all_queries() -> None:
     assert result.status is BookEnrichmentStatus.NOT_FOUND
     assert len(fetcher.urls) == 3
     queries = [_query_from_url(url) for url in fetcher.urls]
-    assert queries[0] == "Charlotte's Web inauthor:White"
-    assert queries[1] == "Charlotte's Web E. B. White"
-    assert queries[2] == "Charlotte's Web"
+    assert queries[0] == "intitle:Charlotte's Web inauthor:White"
+    assert queries[1] == "Charlotte's Web inauthor:White"
+    assert queries[2] == "Charlotte's Web E. B. White"
 
 
-def test_build_queries_prefers_surname_inauthor() -> None:
+def test_build_queries_prefers_specific_intitle_then_surname() -> None:
     from classroom_library_label_maker.services.lookups.google_books import (
         _author_surname,
         _build_queries,
@@ -219,9 +208,11 @@ def test_build_queries_prefers_surname_inauthor() -> None:
     assert _author_surname("White, E. B.") == "White"
     assert _author_surname("Dr. Seuss") == "Seuss"
     queries = _build_queries("Charlotte's Web", "E. B. White")
-    assert queries[0] == "Charlotte's Web inauthor:White"
-    assert "Charlotte's Web E. B. White" in queries
-    assert "Charlotte's Web" in queries
+    assert queries == (
+        "intitle:Charlotte's Web inauthor:White",
+        "Charlotte's Web inauthor:White",
+        "Charlotte's Web E. B. White",
+    )
 
 
 def test_weak_results_are_not_found() -> None:
@@ -340,11 +331,12 @@ def test_does_not_mutate_book_on_found() -> None:
     assert book.to_dict() == original
 
 
-def test_free_text_query_used_second() -> None:
-    """Free-text title+author runs after surname query misses."""
+def test_free_text_query_used_after_fielded_misses() -> None:
+    """Free-text title+author runs after both fielded surname queries miss."""
     fetcher = _ScriptedFetcher(
         [
-            _payload(),
+            _payload(),  # intitle + inauthor
+            _payload(),  # title inauthor
             _payload(
                 _volume(
                     volume_id="v",
@@ -357,8 +349,162 @@ def test_free_text_query_used_second() -> None:
     )
     result = GoogleBooksEnrichmentProvider(fetch_json=fetcher).enrich(_book())
     assert result.status is BookEnrichmentStatus.FOUND
+    assert len(fetcher.urls) == 3
+    assert _query_from_url(fetcher.urls[2]) == "Charlotte's Web E. B. White"
+
+
+def test_continues_after_metadata_match_without_isbn() -> None:
+    """Tuck-style: confident match without ISBN must try later strategies."""
+    fetcher = _ScriptedFetcher(
+        [
+            _payload(
+                _volume(
+                    volume_id="meta-only",
+                    title="Tuck Everlasting",
+                    authors=["Natalie Babbitt"],
+                )
+            ),
+            _payload(
+                _volume(
+                    volume_id="with-isbn",
+                    title="Tuck Everlasting",
+                    authors=["Natalie Babbitt"],
+                    isbn13="9780374302030",
+                    isbn10="0374302030",
+                )
+            ),
+        ]
+    )
+    book = Book(
+        isbn="MISSING",
+        title="Tuck Everlasting",
+        author="Natalie Babbitt",
+        copies=1,
+    )
+    result = GoogleBooksEnrichmentProvider(fetch_json=fetcher).enrich(book)
+
+    assert result.status is BookEnrichmentStatus.FOUND
+    assert result.isbn == "9780374302030"
     assert len(fetcher.urls) == 2
-    assert _query_from_url(fetcher.urls[1]) == "Charlotte's Web E. B. White"
+    assert _query_from_url(fetcher.urls[0]).startswith("intitle:")
+    assert "inauthor:Babbitt" in _query_from_url(fetcher.urls[1])
+
+
+def test_stops_immediately_after_usable_isbn_found() -> None:
+    """Do not issue later strategies once a usable ISBN is resolved."""
+    fetcher = _ScriptedFetcher(
+        [
+            _payload(
+                _volume(
+                    volume_id="v",
+                    title="Charlotte's Web",
+                    authors=["E. B. White"],
+                    isbn13="9780064400558",
+                )
+            ),
+            _payload(),  # must not be consumed
+        ]
+    )
+    result = GoogleBooksEnrichmentProvider(fetch_json=fetcher).enrich(_book())
+    assert result.status is BookEnrichmentStatus.FOUND
+    assert len(fetcher.urls) == 1
+    assert fetcher.responses  # second canned response unused
+
+
+def test_hatchet_style_wrong_title_remains_not_found() -> None:
+    """Hatchet-style: author hits for a different title stay NOT_FOUND."""
+    wrong = _payload(
+        _volume(
+            volume_id="winter",
+            title="Brian's Winter",
+            authors=["Gary Paulsen"],
+            isbn13="9780385321983",
+        )
+    )
+    fetcher = _ScriptedFetcher([wrong, wrong, wrong])
+    book = Book(
+        isbn="MISSING",
+        title="Hatchet",
+        author="Gary Paulsen",
+        copies=1,
+    )
+    result = GoogleBooksEnrichmentProvider(fetch_json=fetcher).enrich(book)
+    assert result.status is BookEnrichmentStatus.NOT_FOUND
+    assert len(fetcher.urls) == 3
+
+
+def test_walk_two_moons_style_other_titles_remain_not_found() -> None:
+    """Walk Two Moons-style: other Creech titles are rejected."""
+    other = _payload(
+        _volume(
+            volume_id="castle",
+            title="The Castle Corona",
+            authors=["Sharon Creech"],
+            isbn13="9780060846237",
+        ),
+        _volume(
+            volume_id="hate",
+            title="Hate That Cat",
+            authors=["Sharon Creech"],
+            isbn13="9780061828935",
+        ),
+    )
+    fetcher = _ScriptedFetcher([other, other, _payload()])
+    book = Book(
+        isbn="MISSING",
+        title="Walk Two Moons",
+        author="Sharon Creech",
+        copies=1,
+    )
+    result = GoogleBooksEnrichmentProvider(fetch_json=fetcher).enrich(book)
+    assert result.status is BookEnrichmentStatus.NOT_FOUND
+    assert len(fetcher.urls) == 3
+
+
+def test_debug_diagnostics_emitted_for_continuation(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """DEBUG logs describe continuation after metadata-only matches."""
+    import logging
+
+    fetcher = _ScriptedFetcher(
+        [
+            _payload(
+                _volume(
+                    volume_id="meta-only",
+                    title="Tuck Everlasting",
+                    authors=["Natalie Babbitt"],
+                )
+            ),
+            _payload(
+                _volume(
+                    volume_id="with-isbn",
+                    title="Tuck Everlasting",
+                    authors=["Natalie Babbitt"],
+                    isbn13="9780374302030",
+                )
+            ),
+        ]
+    )
+    book = Book(
+        isbn="MISSING",
+        title="Tuck Everlasting",
+        author="Natalie Babbitt",
+        copies=1,
+    )
+    with caplog.at_level(logging.DEBUG, logger="classroom_library_label_maker.google_books"):
+        result = GoogleBooksEnrichmentProvider(fetch_json=fetcher).enrich(book)
+
+    assert result.status is BookEnrichmentStatus.FOUND
+    joined = "\n".join(record.getMessage() for record in caplog.records)
+    assert "Google Books Lookup" in joined
+    assert "Tuck Everlasting" in joined
+    assert "Natalie Babbitt" in joined
+    assert "Continuing to next strategy" in joined
+    assert "Returning found" in joined
+    assert "final decision: found" in joined
+    # Never leak API-key style query params in diagnostics.
+    assert "key=" not in joined.lower()
 
 
 def test_provider_rejects_invalid_timeout() -> None:

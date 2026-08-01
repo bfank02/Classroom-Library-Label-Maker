@@ -110,23 +110,40 @@ def test_load_application_settings_anonymous_when_unset(tmp_path: Path) -> None:
 
 
 def test_create_default_enrichment_service_injects_api_key() -> None:
+    from classroom_library_label_maker.services.lookups.composite import (
+        CompositeBookEnrichmentProvider,
+    )
+    from classroom_library_label_maker.services.lookups.open_library import (
+        OpenLibraryEnrichmentProvider,
+    )
+
     service = create_default_enrichment_service(api_key="injected-key")
     provider = service.provider
-    assert isinstance(provider, GoogleBooksEnrichmentProvider)
-    assert provider.uses_authentication is True
+    assert isinstance(provider, CompositeBookEnrichmentProvider)
+    assert len(provider.providers) == 2
+    google = provider.providers[0]
+    assert isinstance(google, GoogleBooksEnrichmentProvider)
+    assert isinstance(provider.providers[1], OpenLibraryEnrichmentProvider)
+    assert google.uses_authentication is True
     assert (
-        provider.min_request_interval_seconds
+        google.min_request_interval_seconds
         == DEFAULT_AUTHENTICATED_MIN_REQUEST_INTERVAL_SECONDS
     )
 
 
 def test_create_default_enrichment_service_anonymous() -> None:
+    from classroom_library_label_maker.services.lookups.composite import (
+        CompositeBookEnrichmentProvider,
+    )
+
     service = create_default_enrichment_service(api_key=None)
     provider = service.provider
-    assert isinstance(provider, GoogleBooksEnrichmentProvider)
-    assert provider.uses_authentication is False
+    assert isinstance(provider, CompositeBookEnrichmentProvider)
+    google = provider.providers[0]
+    assert isinstance(google, GoogleBooksEnrichmentProvider)
+    assert google.uses_authentication is False
     assert (
-        provider.min_request_interval_seconds
+        google.min_request_interval_seconds
         == DEFAULT_ANONYMOUS_MIN_REQUEST_INTERVAL_SECONDS
     )
 

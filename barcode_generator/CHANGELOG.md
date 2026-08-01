@@ -59,9 +59,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Label content checkboxes in the GUI (Title, Author, ISBN, Barcode) so
   teachers can choose what appears on each printed label
 - ``LabelContentOptions`` shared by settings, layout, and Excel placement
+- `CompositeBookEnrichmentProvider`: sequential `BookEnrichmentProvider`
+  pipeline (`FOUND`/`AMBIGUOUS` stop; `NOT_FOUND`/`ERROR` continue)
+- `OpenLibraryEnrichmentProvider`: Open Library Search API fallback after
+  Google Books `NOT_FOUND`
+- `BookEnrichmentResult.provider_name` for catalog attribution (diagnostics /
+  benchmarks; not shown in the teacher UI)
 
 ### Changed
 
+- Google Books search strategy: most-specific-first queries
+  (`intitle:… inauthor:surname` → surname form → free text); continue past
+  confident metadata matches that lack a usable ISBN; DEBUG per-query
+  diagnostics (no API keys). Confidence thresholds unchanged.
+- Default enrichment wiring uses `CompositeBookEnrichmentProvider` with
+  Google Books first and Open Library second.
 - Print barcodes render at 600 DPI with taller bars and fill more of the
   label; barcode row allocation grows when fewer text fields are shown
 

@@ -4,9 +4,10 @@ This module defines the orchestration layer for enriching :class:`Book`
 records via pluggable :class:`BookEnrichmentProvider` implementations.
 
 Phase 1 ships :class:`NullBookEnrichmentProvider`, which leaves books
-unchanged and returns ``SKIPPED``. :class:`GoogleBooksEnrichmentProvider`
-is available under ``services.lookups`` for explicit injection; it is not
-the default and is not used by generation.
+unchanged and returns ``SKIPPED``. Production generation injects a
+:class:`~classroom_library_label_maker.services.lookups.composite.CompositeBookEnrichmentProvider`
+(Google Books, then Open Library) via
+:func:`create_default_enrichment_service`.
 
 An in-memory result cache lives on this service (not on providers) so
 duplicate title/author lookups within a single run share one provider call.
@@ -14,7 +15,7 @@ The cache is discarded when the service instance is destroyed.
 
 This service is wired into :class:`WorkbookGenerationService` when
 ``lookup_missing_isbns`` is enabled. Catalog providers remain injectable;
-the default production provider is Google Books via
+the default production provider is the composite pipeline via
 :func:`create_default_enrichment_service`.
 """
 
@@ -61,22 +62,36 @@ def create_default_enrichment_service(
     *,
     api_key: str | None = None,
 ) -> BookEnrichmentService:
-    """Build the production enrichment service (Google Books provider).
+    """Build the production enrichment service (composite provider pipeline).
 
     Imported lazily so :class:`WorkbookGenerationService` can depend on
     :class:`BookEnrichmentService` without referencing catalog adapters.
+
+    The default pipeline is Google Books first, then Open Library as a
+    secondary catalog for titles Google returns as ``NOT_FOUND``.
 
     Args:
         api_key: Optional Google Books API key already resolved by application
             configuration. The provider does not read the environment; pass
             ``None`` for anonymous mode.
     """
+    from classroom_library_label_maker.services.lookups.composite import (
+        CompositeBookEnrichmentProvider,
+    )
     from classroom_library_label_maker.services.lookups.google_books import (
         GoogleBooksEnrichmentProvider,
     )
+    from classroom_library_label_maker.services.lookups.open_library import (
+        OpenLibraryEnrichmentProvider,
+    )
 
     return BookEnrichmentService(
-        provider=GoogleBooksEnrichmentProvider(api_key=api_key),
+        provider=CompositeBookEnrichmentProvider(
+            (
+                GoogleBooksEnrichmentProvider(api_key=api_key),
+                OpenLibraryEnrichmentProvider(),
+            )
+        ),
     )
 
 

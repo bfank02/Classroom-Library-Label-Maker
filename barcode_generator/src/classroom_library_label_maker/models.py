@@ -1200,6 +1200,9 @@ class BookEnrichmentResult:
             read-only.
         candidates: Catalog matches preserved for interactive review. Set for
             ``AMBIGUOUS`` outcomes; empty for successful ``FOUND`` lookups.
+        provider_name: Catalog that produced this result (e.g. ``\"Google Books\"``,
+            ``\"Open Library\"``). For logging, diagnostics, and benchmarks —
+            not shown in the normal teacher workflow.
     """
 
     isbn: str
@@ -1209,6 +1212,7 @@ class BookEnrichmentResult:
     message: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
     candidates: tuple[ReviewCandidate, ...] = ()
+    provider_name: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize this result to a JSON-compatible dictionary."""
@@ -1220,6 +1224,7 @@ class BookEnrichmentResult:
             "message": self.message,
             "metadata": dict(self.metadata),
             "candidates": [candidate.to_dict() for candidate in self.candidates],
+            "provider_name": self.provider_name,
         }
 
     def __repr__(self) -> str:
@@ -1227,6 +1232,7 @@ class BookEnrichmentResult:
         return (
             f"BookEnrichmentResult(isbn={self.isbn!r}, "
             f"status={self.status!r}, title={self.title!r}, "
+            f"provider_name={self.provider_name!r}, "
             f"candidates={len(self.candidates)})"
         )
 

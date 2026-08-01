@@ -18,6 +18,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 import json
+import logging
 import re
 import time
 from typing import Any
@@ -301,10 +302,16 @@ def _author_surname(author: str) -> str | None:
 def _build_queries(title: str, author: str) -> tuple[str, ...]:
     """Return ordered Google Books ``q`` values (no author-only search).
 
-    Prefer ``{title} inauthor:{surname}`` over quoted ``intitle``/``inauthor``
-    pairs. With current Google Books API behavior, quoted field queries often
-    return zero hits for well-known children's titles, while surname forms
-    return usable matches.
+    Most specific first. Quoted ``intitle:"…" inauthor:"…"`` forms often return
+    empty results for classroom titles, so field operators stay unquoted and
+    ``inauthor`` uses the surname token:
+
+    1. ``intitle:<title> inauthor:<surname>``
+    2. ``<title> inauthor:<surname>``
+    3. ``<title> <author>``
+
+    When no usable author is present, fall back to ``intitle:<title>`` then
+    bare ``<title>``. Never issues author-only searches.
     """
     title = title.strip()
     author = author.strip()
@@ -312,16 +319,31 @@ def _build_queries(title: str, author: str) -> tuple[str, ...]:
     surname = _author_surname(author) if author else None
 
     if title and surname:
+        queries.append(f"intitle:{title} inauthor:{surname}")
         queries.append(f"{title} inauthor:{surname}")
     if title and author:
         free = f"{title} {author}"
         if free not in queries:
             queries.append(free)
-    if title:
-        # Broader fallback when author-constrained queries miss.
+    elif title:
+        intitle = f"intitle:{title}"
+        if intitle not in queries:
+            queries.append(intitle)
         if title not in queries:
             queries.append(title)
     return tuple(queries)
+
+
+def _has_usable_isbn(candidate: _VolumeCandidate | None) -> bool:
+    """True when a candidate carries ISBN-13 and/or ISBN-10."""
+    if candidate is None:
+        return False
+    return bool(candidate.isbn13 or candidate.isbn10)
+
+
+def _scored_have_usable_isbn(scored: Sequence[_ScoredCandidate]) -> bool:
+    """True when any scored candidate has a usable ISBN."""
+    return any(_has_usable_isbn(item.candidate) for item in scored)
 
 
 def _extract_isbns(
@@ -530,6 +552,86 @@ def _to_review_candidate(scored: _ScoredCandidate) -> ReviewCandidate:
     )
 
 
+def _top_scored_for_log(
+    scored: Sequence[_ScoredCandidate],
+    *,
+    limit: int = 3,
+) -> list[_ScoredCandidate]:
+    """Return the highest-confidence candidates for DEBUG diagnostics."""
+    return sorted(scored, key=lambda item: item.confidence, reverse=True)[:limit]
+
+
+def _format_debug_candidates(scored: Sequence[_ScoredCandidate]) -> str:
+    """Format top candidates for a DEBUG log line (no secrets)."""
+    if not scored:
+        return "  (none)"
+    lines: list[str] = []
+    for item in scored:
+        isbn = item.candidate.isbn13 or item.candidate.isbn10 or "(none)"
+        lines.append(
+            f"  - {item.candidate.title!r} "
+            f"conf={item.confidence:.3f} isbn={isbn}"
+        )
+    return "\n".join(lines)
+
+
+def _log_lookup_start(title: str, author: str) -> None:
+    if not _logger.isEnabledFor(logging.DEBUG):
+        return
+    _logger.debug(
+        "Google Books Lookup\nBook:\n%s\n%s",
+        title,
+        author or "(no author)",
+    )
+
+
+def _log_query_diagnostics(
+    *,
+    query_number: int,
+    query_count: int,
+    query: str,
+    result_count: int,
+    scored: Sequence[_ScoredCandidate],
+    matching_metadata: bool,
+    usable_isbn: bool,
+    continued: bool,
+    decision: str | None,
+) -> None:
+    """Emit structured per-query DEBUG diagnostics (never includes API keys)."""
+    if not _logger.isEnabledFor(logging.DEBUG):
+        return
+    top = _top_scored_for_log(scored)
+    metadata_mark = "✓" if matching_metadata else "✗"
+    isbn_mark = "✓" if usable_isbn else "✗"
+    continuation = (
+        "Continuing to next strategy..."
+        if continued
+        else (f"Returning {decision}" if decision else "Done")
+    )
+    _logger.debug(
+        "Query %s/%s\n%s\nResults returned: %s\nTop candidates:\n%s\n"
+        "%s Matching metadata found\n%s Usable ISBN found\n%s",
+        query_number,
+        query_count,
+        query,
+        result_count,
+        _format_debug_candidates(top),
+        metadata_mark,
+        isbn_mark,
+        continuation,
+    )
+
+
+def _log_lookup_final(decision: BookEnrichmentStatus, message: str) -> None:
+    if not _logger.isEnabledFor(logging.DEBUG):
+        return
+    _logger.debug(
+        "Google Books final decision: %s (%s)",
+        decision.value,
+        message,
+    )
+
+
 def _result_from_candidate(
     book: Book,
     status: BookEnrichmentStatus,
@@ -558,6 +660,7 @@ def _result_from_candidate(
                 "query": query,
             },
             candidates=review_candidates,
+            provider_name=GoogleBooksEnrichmentProvider.provider_name,
         )
 
     candidate = scored.candidate
@@ -588,21 +691,26 @@ def _result_from_candidate(
             "source_isbn": book.isbn,
         },
         candidates=review_candidates,
+        provider_name=GoogleBooksEnrichmentProvider.provider_name,
     )
 
 
 class GoogleBooksEnrichmentProvider:
     """Enrich books via Google Books title/author search.
 
-    Search order (sequential requests; stops early on FOUND or AMBIGUOUS):
+    Search order (sequential requests; stops early on usable FOUND/AMBIGUOUS):
 
-    1. ``<title> inauthor:<surname>``
-    2. ``<title> <author>``
-    3. ``<title>``
+    1. ``intitle:<title> inauthor:<surname>``
+    2. ``<title> inauthor:<surname>``
+    3. ``<title> <author>``
 
-    Never performs author-only searches. Transport failures become
-    :attr:`BookEnrichmentStatus.ERROR` results - exceptions are not leaked.
+    A confident metadata match **without** a usable ISBN does not stop the
+    search — later strategies still run. Never performs author-only searches.
+    Transport failures become :attr:`BookEnrichmentStatus.ERROR` results -
+    exceptions are not leaked.
     """
+
+    provider_name = "Google Books"
 
     def __init__(
         self,
@@ -728,7 +836,9 @@ class GoogleBooksEnrichmentProvider:
     def enrich(self, book: Book) -> BookEnrichmentResult:
         """Search Google Books and return the best enrichment match.
 
-        Does not mutate ``book``.
+        Does not mutate ``book``. Exhausts configured query strategies before
+        returning ``NOT_FOUND``. Confident matches without a usable ISBN do
+        not terminate the search.
         """
         title = book.title.strip()
         author = book.author.strip()
@@ -738,6 +848,7 @@ class GoogleBooksEnrichmentProvider:
                 status=BookEnrichmentStatus.ERROR,
                 message="Cannot enrich a book with an empty title",
                 metadata={"provider": "google_books"},
+                provider_name=self.provider_name,
             )
 
         if self._rate_limit_circuit_open and self._fetch_json is None:
@@ -750,12 +861,14 @@ class GoogleBooksEnrichmentProvider:
                     "error_kind": "rate_limit",
                     "circuit_open": True,
                 },
+                provider_name=self.provider_name,
             )
 
         queries = _build_queries(title, author)
         last_not_found_message = "No Google Books results"
+        _log_lookup_start(title, author)
 
-        for query in queries:
+        for query_number, query in enumerate(queries, start=1):
             try:
                 payload = self._search(query)
                 candidates = _parse_volumes(payload)
@@ -773,6 +886,18 @@ class GoogleBooksEnrichmentProvider:
                     message = RATE_LIMIT_USER_MESSAGE
                 elif exc.kind == "auth":
                     message = AUTH_FAILURE_USER_MESSAGE
+                _log_query_diagnostics(
+                    query_number=query_number,
+                    query_count=len(queries),
+                    query=query,
+                    result_count=0,
+                    scored=(),
+                    matching_metadata=False,
+                    usable_isbn=False,
+                    continued=False,
+                    decision=BookEnrichmentStatus.ERROR.value,
+                )
+                _log_lookup_final(BookEnrichmentStatus.ERROR, message)
                 return BookEnrichmentResult(
                     isbn=book.isbn,
                     status=BookEnrichmentStatus.ERROR,
@@ -782,11 +907,23 @@ class GoogleBooksEnrichmentProvider:
                         "error_kind": exc.kind,
                         "query": query,
                     },
+                    provider_name=self.provider_name,
                 )
 
             self._record_successful_request()
             if not candidates:
                 last_not_found_message = "No Google Books results for query"
+                _log_query_diagnostics(
+                    query_number=query_number,
+                    query_count=len(queries),
+                    query=query,
+                    result_count=0,
+                    scored=(),
+                    matching_metadata=False,
+                    usable_isbn=False,
+                    continued=True,
+                    decision=None,
+                )
                 continue
 
             scored = [_score_candidate(book, candidate) for candidate in candidates]
@@ -794,8 +931,92 @@ class GoogleBooksEnrichmentProvider:
 
             if status is BookEnrichmentStatus.NOT_FOUND:
                 last_not_found_message = message
+                _log_query_diagnostics(
+                    query_number=query_number,
+                    query_count=len(queries),
+                    query=query,
+                    result_count=len(candidates),
+                    scored=scored,
+                    matching_metadata=False,
+                    usable_isbn=_scored_have_usable_isbn(scored),
+                    continued=True,
+                    decision=None,
+                )
                 continue
 
+            if status is BookEnrichmentStatus.FOUND:
+                usable = _has_usable_isbn(
+                    match.candidate if match is not None else None
+                )
+                if not usable:
+                    # Internal: metadata match without ISBN — keep searching.
+                    last_not_found_message = (
+                        "Matching catalog record had no usable ISBN"
+                    )
+                    _log_query_diagnostics(
+                        query_number=query_number,
+                        query_count=len(queries),
+                        query=query,
+                        result_count=len(candidates),
+                        scored=scored,
+                        matching_metadata=True,
+                        usable_isbn=False,
+                        continued=True,
+                        decision=None,
+                    )
+                    continue
+                _log_query_diagnostics(
+                    query_number=query_number,
+                    query_count=len(queries),
+                    query=query,
+                    result_count=len(candidates),
+                    scored=scored,
+                    matching_metadata=True,
+                    usable_isbn=True,
+                    continued=False,
+                    decision=BookEnrichmentStatus.FOUND.value,
+                )
+                _log_lookup_final(BookEnrichmentStatus.FOUND, message)
+                return _result_from_candidate(
+                    book,
+                    status,
+                    match,
+                    message=message,
+                    query=query,
+                    ambiguous_peers=peers,
+                )
+
+            # AMBIGUOUS — only stop when at least one peer has a usable ISBN.
+            usable = _scored_have_usable_isbn(peers)
+            if not usable:
+                last_not_found_message = (
+                    "Ambiguous catalog matches had no usable ISBN"
+                )
+                _log_query_diagnostics(
+                    query_number=query_number,
+                    query_count=len(queries),
+                    query=query,
+                    result_count=len(candidates),
+                    scored=scored,
+                    matching_metadata=True,
+                    usable_isbn=False,
+                    continued=True,
+                    decision=None,
+                )
+                continue
+
+            _log_query_diagnostics(
+                query_number=query_number,
+                query_count=len(queries),
+                query=query,
+                result_count=len(candidates),
+                scored=scored,
+                matching_metadata=True,
+                usable_isbn=True,
+                continued=False,
+                decision=BookEnrichmentStatus.AMBIGUOUS.value,
+            )
+            _log_lookup_final(BookEnrichmentStatus.AMBIGUOUS, message)
             return _result_from_candidate(
                 book,
                 status,
@@ -805,11 +1026,13 @@ class GoogleBooksEnrichmentProvider:
                 ambiguous_peers=peers,
             )
 
+        _log_lookup_final(BookEnrichmentStatus.NOT_FOUND, last_not_found_message)
         return BookEnrichmentResult(
             isbn=book.isbn,
             status=BookEnrichmentStatus.NOT_FOUND,
             message=last_not_found_message,
             metadata={"provider": "google_books"},
+            provider_name=self.provider_name,
         )
 
     def _search(self, query: str) -> Mapping[str, Any]:

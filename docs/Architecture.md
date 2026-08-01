@@ -369,8 +369,12 @@ BookEnrichmentService
         ▼
 BookEnrichmentProvider   (protocol)
         │
-        ├─ NullBookEnrichmentProvider          (explicit no-op)
-        └─ GoogleBooksEnrichmentProvider       (default when lookup enabled)
+        ├─ NullBookEnrichmentProvider              (explicit no-op)
+        ├─ CompositeBookEnrichmentProvider         (default pipeline)
+        │      ├─ GoogleBooksEnrichmentProvider    (primary catalog)
+        │      └─ OpenLibraryEnrichmentProvider    (fallback catalog)
+        └─ GoogleBooksEnrichmentProvider /
+           OpenLibraryEnrichmentProvider           (also injectable alone)
 ```
 
 `WorkbookGenerationService` constructs enrichment via
@@ -381,8 +385,9 @@ or accepts an injected `BookEnrichmentService` for tests.
 
 * `lookup_missing_isbns` (default **True**) gates the enrichment stage.
 * When enabled, `WorkbookGenerationService` depends only on
-  `BookEnrichmentService` (default factory uses Google Books internally —
-  the orchestrator never imports catalog SDKs).
+  `BookEnrichmentService` (default factory uses a composite provider —
+  Google Books then Open Library; the orchestrator never imports catalog
+  SDKs).
 * Progress stage `ENRICHING` reports **"Looking up missing ISBNs..."**, then
   updates with **"(n of total)"** as each missing-ISBN book is looked up.
 * Books with blank ISBN cells are imported with a provisional placeholder
@@ -520,8 +525,8 @@ There is no persistent storage; destroying the service discards the cache.
 
 * **Why on the service, not providers:** caching is an orchestration concern.
   Providers stay focused on lookups. One cache covers every
-  `BookEnrichmentProvider` (null, Google Books, future Open Library, …)
-  without duplicated logic or provider-specific HTTP caches.
+  `BookEnrichmentProvider` (null, composite, Google Books, future Open
+  Library, …) without duplicated logic or provider-specific HTTP caches.
 * **Cache key:** `(normalize_catalog_text(title), normalize_catalog_text(author))`
   via shared `services/enrichment_normalize.py` (same rules as Google Books
   matching). ISBN is **not** part of the key so rows missing ISBNs still
@@ -533,6 +538,57 @@ There is no persistent storage; destroying the service discards the cache.
 * **Diagnostics:** `cache_hits`, `cache_misses`, and `cache_size` are
   available for tests/logging only — not user-facing.
 
+### Composite enrichment pipeline (`services/lookups/composite.py`)
+
+`CompositeBookEnrichmentProvider` implements `BookEnrichmentProvider` and
+chains an ordered collection of other providers via dependency injection:
+
+```python
+CompositeBookEnrichmentProvider(
+    (
+        GoogleBooksEnrichmentProvider(...),
+        OpenLibraryEnrichmentProvider(...),
+    )
+)
+```
+
+The composite depends only on the `BookEnrichmentProvider` protocol — it
+never imports or special-cases concrete catalog types. Injection order is
+lookup priority; providers are never reordered and are never queried in
+parallel.
+
+**Per-provider flow**
+
+| Result | Action |
+|--------|--------|
+| `FOUND` | Return immediately |
+| `AMBIGUOUS` | Return immediately |
+| `NOT_FOUND` | Continue to next provider |
+| `ERROR` | Continue to next provider |
+| `SKIPPED` | Continue to next provider |
+
+If every provider returns a non-resolving status, the composite returns
+`NOT_FOUND`. Caching remains solely on `BookEnrichmentService`; the
+composite behaves like any other provider from the service's perspective.
+
+Production wiring (`create_default_enrichment_service`) injects **Google
+Books first**, then **Open Library**. Google remains the preferred catalog;
+Open Library improves coverage for titles Google cannot identify. Teachers
+never see which provider supplied a result.
+
+**Provider attribution**
+
+`BookEnrichmentResult.provider_name` records the catalog that produced the
+outcome (`"Google Books"`, `"Open Library"`, …) for logs, diagnostics,
+benchmarks, and future analytics — not for the normal teacher UI.
+
+**DEBUG diagnostics**
+
+When the `composite_enrichment` logger is at DEBUG, each lookup logs the
+provider label (optional `provider_name`, else class name), result status,
+and whether the pipeline continued or returned. Credentials and API keys
+are never logged.
+
 ### Google Books provider (`services/lookups/google_books.py`)
 
 `GoogleBooksEnrichmentProvider` keeps HTTP and Google JSON types inside the
@@ -540,13 +596,30 @@ adapter. Callers only see `BookEnrichmentResult`.
 
 **Query strategy (sequential; no author-only searches)**
 
-1. `<title> inauthor:<surname>`
-2. `<title> <author>`
-3. `<title>`
+Most specific first. Quoted `intitle:"…" inauthor:"…"` forms often return
+empty results for classroom titles, so field operators stay unquoted and
+`inauthor` uses the author surname:
 
-Stops early on `FOUND` or `AMBIGUOUS`. Empty results fall through to the next
-query. Transport failures become `ERROR` (timeouts, HTTP errors, malformed
-JSON) — exceptions are not leaked.
+1. `intitle:<title> inauthor:<surname>`
+2. `<title> inauthor:<surname>`
+3. `<title> <author>`
+
+Stops early on `FOUND` or `AMBIGUOUS` **only when the chosen match (or at
+least one ambiguous peer) has a usable ISBN-13/ISBN-10**. A confident
+metadata match without an ISBN does **not** terminate the search — later
+strategies still run. Empty / below-threshold results also fall through.
+`NOT_FOUND` is returned only after every configured strategy has been
+attempted. Transport failures become `ERROR` (timeouts, HTTP errors,
+malformed JSON) — exceptions are not leaked.
+
+**DEBUG diagnostics**
+
+When the `google_books` logger is at DEBUG, each lookup emits structured
+per-query diagnostics: book title/author, query number and text, result
+count, top candidate titles/confidence/ISBN presence, whether the
+provider continued to the next strategy, and the final decision
+(`FOUND` / `AMBIGUOUS` / `NOT_FOUND` / `ERROR`). Diagnostics never include
+API keys or full request URLs.
 
 **Normalization**
 
@@ -564,6 +637,9 @@ Each candidate is scored with weighted title/author similarity
   stored on `candidates` (descending confidence) for later review
 * `NOT_FOUND` — no candidate above the confidence floor
 * `ERROR` — network / parse failures
+
+Confidence thresholds and ambiguity rules are unchanged; incorrect ISBNs
+are treated as worse than missing ISBNs.
 
 **Result mapping**
 
@@ -606,6 +682,35 @@ HTTP **401/403** drop the key for the remainder of the run and retry once in
 anonymous mode (invalid keys are not retried repeatedly). Rate-limit and auth
 failures are not queued in the review wizard. Injectable `fetch_json` bypasses
 pacing for unit tests.
+
+### Open Library provider (`services/lookups/open_library.py`)
+
+`OpenLibraryEnrichmentProvider` is the secondary catalog. Responsibilities:
+
+* HTTP requests to the Open Library Search API
+* Parsing search JSON into a provider-local candidate model (`title`,
+  `authors`, `isbn13`, `isbn10`, `publisher`, `publish_year`, `work_key`)
+* Scoring candidates with the same confidence helpers / thresholds as Google
+  Books (reuse of public matching helpers; no speculative shared framework yet)
+
+**Query strategy**
+
+1. `title` + `author` field search
+2. `title`-only fallback
+
+No author-only searches. ISBN-13 is preferred; ISBN-10 is used only when no
+ISBN-13 is present. Metadata matches without a usable ISBN continue to the
+next strategy. Transport failures map to `ERROR`.
+
+**DEBUG diagnostics**
+
+When the `open_library` logger is at DEBUG, each lookup logs the search
+query label, candidate count, top confidence scores, accept/reject
+reasoning, and the final decision. HTTP payloads and credentials are never
+logged.
+
+Open Library improves coverage — it does **not** replace Google Books as the
+preferred catalog.
 
 Never log API keys or URLs that contain them. Production builds should obtain
 the key from environment/configuration — never embed it in source or packages.
