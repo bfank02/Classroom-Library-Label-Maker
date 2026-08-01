@@ -67,6 +67,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   benchmarks; not shown in the teacher UI)
 - Files section UX: separate Label Folder + editable Label File Name;
   four independent persisted path preferences
+- Review wizard workflow refinement: Skip advances immediately; candidate
+  selection auto-advances after ~250 ms (timer restarts on reselection);
+  Finish Review replaces Skip on the final item; Previous restores prior
+  selection/skip from `ReviewSession`
 
 ### Changed
 
@@ -78,6 +82,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Google Books first and Open Library second.
 - GUI Files section redesign: output path = label folder + filename; Browse
   for Label Folder preserves filename; stem selection on filename focus.
+- Review wizard buttons: Previous / Skip / Cancel (no Next); selected cards
+  show border + checkmark
 - Print barcodes render at 600 DPI with taller bars and fill more of the
   label; barcode row allocation grows when fewer text fields are shown
 

@@ -66,9 +66,12 @@ file name directly without opening a dialog.
 
 Click **Generate Labels**.
 
-If books still need ISBN choices, the **Review ISBN Matches** wizard appears
-so you can pick a catalog match or skip. Leave **Save updated inventory
-workbook when review is complete** checked to write a new
+If books still need ISBN choices, the **Review ISBN Matches** wizard appears.
+Choose a catalog match (it highlights, then moves on after a brief pause) or
+click **Skip** to leave that book unchanged and continue. Use **Previous** to
+go back; your prior choice is restored. On the last book, **Finish Review**
+replaces **Skip** once you have selected or skipped. Leave **Save updated
+inventory workbook when review is complete** checked to write a new
 `Inventory (Updated ISBNs).xlsx` next to your original inventory (your
 original file is never changed).
 

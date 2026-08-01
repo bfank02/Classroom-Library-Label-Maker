@@ -478,11 +478,20 @@ existing completion status (ISBN Lookup Summary, etc.)
 
 * `ReviewWizardDialog` shows progress (`Book X of Y` + bar), book title/
   author/reason, selectable candidate cards (`"{confidence_label} Match"`,
-  ISBN, title, author, publisher · year), and a **Recommended** badge on the
-  highest-confidence card.
-* Buttons call `ReviewSession` (`previous` / `next` / `skip_current` /
-  `select_candidate` / `finish`). Qt does not own the review index.
-* Single **Very High** candidate is pre-selected (teacher may still Skip).
+  ISBN, title, author, publisher · year), a **Recommended** badge on the
+  highest-confidence card, and a checkmark / selected border when chosen.
+* Streamlined workflow (Version 1.4 Phase 2): **Skip** records the decision
+  and advances immediately; selecting a candidate highlights at once and
+  auto-advances after ~250 ms (reselection cancels and restarts the timer).
+  Buttons are **Previous** / **Skip** / **Cancel**; on the final item after
+  a selection or skip, **Skip** is replaced by **Finish Review**. There is
+  no **Next** button. Returning with **Previous** restores the prior
+  selection or skipped state from `ReviewSession`.
+* Buttons call `ReviewSession` (`previous` / `skip_current` /
+  `select_candidate` / `next` for auto-advance / `finish`). Qt does not own
+  the review index.
+* Single **Very High** candidate is pre-selected without auto-advancing
+  (teacher may still Skip or change the choice).
 * Checkbox **Save updated inventory workbook when review is complete**
   (default on) is persisted in `GuiPreferences`. When checked on Finish,
   `InventoryUpdateService` writes a new workbook

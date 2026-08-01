@@ -807,7 +807,12 @@ Module: `classroom_library_label_maker.gui.review_wizard`
 
 **Purpose:** Modal wizard after generation when enrichment left review items
 with attached books. Renders progress, book details, and candidate cards;
-forwards Previous / Next / Skip / candidate clicks / Finish to the session.
+forwards Previous / Skip / candidate clicks / Finish to the session.
+
+**Workflow (v1.4):** Skip advances immediately. Candidate selection highlights
+immediately and auto-advances after ~250 ms (timer restarts on reselection).
+**Finish Review** replaces Skip on the final item once a selection or skip is
+recorded. Cancel rejects without applying. No Next button.
 
 **Finish:** seals the session (`finish()`); `GuiController` then calls
 `BookReviewService.apply` and, when the save checkbox is checked,

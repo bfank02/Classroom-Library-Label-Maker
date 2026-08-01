@@ -90,5 +90,7 @@ Phase 3 is printing only.
 
 - [x] Files section refinement (Label Folder + editable Label File Name;
       independent persistence; stem selection on focus)
+- [x] Review wizard workflow refinement (Skip / selection auto-advance;
+      Finish Review on final item; no Next button)
 
 See also: [`Architecture.md`](Architecture.md), [`../TASKS.md`](../TASKS.md).
