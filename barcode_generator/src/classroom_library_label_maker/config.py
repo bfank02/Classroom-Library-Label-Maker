@@ -37,6 +37,7 @@ from classroom_library_label_maker.constants import (
     DIR_TEMP,
     DIR_TEMPLATES,
     GOOGLE_BOOKS_API_KEY_ENV,
+    GOOGLE_BOOKS_API_KEY_FILE_NAME,
     LOGO_FILE_NAME,
     QUICK_START_FILE_NAME,
     SAMPLE_BOOKS_FILE_NAME,
@@ -137,44 +138,97 @@ class GoogleBooksAuthConfig:
         )
 
 
-def load_google_books_auth_config(
-    *,
-    environ: Mapping[str, str] | None = None,
-) -> GoogleBooksAuthConfig:
-    """Resolve Google Books API key configuration from the environment.
+def google_books_api_key_file_path() -> Path:
+    """Return the per-user Google Books API key file path.
 
-    This is the **only** place that reads ``GOOGLE_BOOKS_API_KEY``. No network
-    request is performed — validation is configuration quality only.
-
-    Args:
-        environ: Optional mapping (defaults to :data:`os.environ`). Injectable
-            for unit tests.
-
-    Returns:
-        Immutable :class:`GoogleBooksAuthConfig`.
+    Used by packaged apps (Finder / Dock launch) that do not inherit shell
+    environment variables. The file should contain a single line with the key
+    and should never be committed to source control.
     """
-    env = os.environ if environ is None else environ
-    if GOOGLE_BOOKS_API_KEY_ENV not in env:
-        return GoogleBooksAuthConfig(
-            api_key=None,
-            status=GoogleBooksAuthStatus.DISABLED_ANONYMOUS,
-        )
-    raw = env.get(GOOGLE_BOOKS_API_KEY_ENV)
+    return user_data_directory() / GOOGLE_BOOKS_API_KEY_FILE_NAME
+
+
+def _auth_from_raw_key(raw: str | None) -> GoogleBooksAuthConfig | None:
+    """Return auth config for a provided raw value, or ``None`` if unset."""
     if raw is None:
-        return GoogleBooksAuthConfig(
-            api_key=None,
-            status=GoogleBooksAuthStatus.DISABLED_ANONYMOUS,
-        )
+        return None
     stripped = str(raw).strip()
     if not stripped:
         return GoogleBooksAuthConfig(
             api_key=None,
             status=GoogleBooksAuthStatus.DISABLED_INVALID,
         )
+    # Prefer the first non-empty line (key files may end with a newline).
+    first_line = next(
+        (line.strip() for line in stripped.splitlines() if line.strip()),
+        "",
+    )
+    if not first_line:
+        return GoogleBooksAuthConfig(
+            api_key=None,
+            status=GoogleBooksAuthStatus.DISABLED_INVALID,
+        )
     return GoogleBooksAuthConfig(
-        api_key=stripped,
+        api_key=first_line,
         status=GoogleBooksAuthStatus.ENABLED,
     )
+
+
+def load_google_books_auth_config(
+    *,
+    environ: Mapping[str, str] | None = None,
+    key_file: Path | None = None,
+) -> GoogleBooksAuthConfig:
+    """Resolve Google Books API key configuration.
+
+    This is the **only** place that reads the API key. Precedence:
+
+    1. ``GOOGLE_BOOKS_API_KEY`` environment variable (when present)
+    2. Per-user key file (:func:`google_books_api_key_file_path`)
+    3. Anonymous mode
+
+    No network request is performed — validation is configuration quality only.
+
+    Args:
+        environ: Optional mapping (defaults to :data:`os.environ`). Injectable
+            for unit tests.
+        key_file: Optional key-file path override (defaults to the per-user
+            application-support file). Injectable for unit tests.
+
+    Returns:
+        Immutable :class:`GoogleBooksAuthConfig`.
+    """
+    env = os.environ if environ is None else environ
+    if GOOGLE_BOOKS_API_KEY_ENV in env:
+        from_env = _auth_from_raw_key(env.get(GOOGLE_BOOKS_API_KEY_ENV))
+        if from_env is not None:
+            return from_env
+
+    # When tests inject a fake environ mapping, skip the real user key file
+    # unless an explicit key_file path is provided.
+    if key_file is None and environ is not None:
+        return GoogleBooksAuthConfig(
+            api_key=None,
+            status=GoogleBooksAuthStatus.DISABLED_ANONYMOUS,
+        )
+
+    path = (
+        key_file if key_file is not None else google_books_api_key_file_path()
+    )
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return GoogleBooksAuthConfig(
+            api_key=None,
+            status=GoogleBooksAuthStatus.DISABLED_ANONYMOUS,
+        )
+    from_file = _auth_from_raw_key(text)
+    if from_file is None:
+        return GoogleBooksAuthConfig(
+            api_key=None,
+            status=GoogleBooksAuthStatus.DISABLED_ANONYMOUS,
+        )
+    return from_file
 
 
 def google_books_authentication_message(status: GoogleBooksAuthStatus) -> str:

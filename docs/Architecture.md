@@ -575,9 +575,15 @@ scored peers to public `ReviewCandidate` values. Never mutates the input
 
 **Authentication & rate limiting**
 
-Configuration resolves `GOOGLE_BOOKS_API_KEY` **once** in
-`config.load_google_books_auth_config()` (the only `os.environ` read for this
-key) and stores the result on `ApplicationSettings` (`google_books_api_key`,
+Configuration resolves the API key **once** in
+`config.load_google_books_auth_config()` (the only place the key is read):
+
+1. ``GOOGLE_BOOKS_API_KEY`` environment variable (when present)
+2. Per-user file ``google_books_api_key.txt`` under Application Support /
+   LOCALAPPDATA (for packaged apps that do not inherit shell exports)
+3. Anonymous mode
+
+Result is stored on `ApplicationSettings` (`google_books_api_key`,
 `google_books_auth_status`). Startup logs exactly one of:
 
 * `Google Books authentication: Enabled`

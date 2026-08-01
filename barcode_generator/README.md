@@ -276,6 +276,17 @@ export GOOGLE_BOOKS_API_KEY="your-restricted-books-api-key"
 * Startup logs authentication state once (never logs the key)
 * Rejected keys (401/403) fall back to anonymous for the rest of the run
 
+**Packaged desktop apps** launched from Finder/Dock do **not** inherit shell
+exports. Install the key once with:
+
+```powershell
+python scripts\install_google_books_api_key.py
+```
+
+(or write a one-line `google_books_api_key.txt` under the per-user Application
+Support / LOCALAPPDATA app folder). Prefer the env var in development; prefer
+the key file for packaged builds.
+
 Progress stage: **"Looking up missing ISBNs..."**, then **"(n of total)"** as
 each book is looked up. Large inventories (e.g. the teacher demo) are much
 faster with a key, but still paced and will back off on HTTP 429. Results are

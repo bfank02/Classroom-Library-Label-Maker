@@ -131,6 +131,31 @@ def test_create_default_enrichment_service_anonymous() -> None:
     )
 
 
+def test_key_file_enables_authentication(tmp_path: Path) -> None:
+    key_file = tmp_path / "google_books_api_key.txt"
+    key_file.write_text("file-key-abc\n", encoding="utf-8")
+    auth = load_google_books_auth_config(environ={}, key_file=key_file)
+    assert auth.api_key == "file-key-abc"
+    assert auth.status is GoogleBooksAuthStatus.ENABLED
+
+
+def test_env_takes_precedence_over_key_file(tmp_path: Path) -> None:
+    key_file = tmp_path / "google_books_api_key.txt"
+    key_file.write_text("file-key\n", encoding="utf-8")
+    auth = load_google_books_auth_config(
+        environ={GOOGLE_BOOKS_API_KEY_ENV: "env-key"},
+        key_file=key_file,
+    )
+    assert auth.api_key == "env-key"
+
+
+def test_empty_key_file_is_invalid(tmp_path: Path) -> None:
+    key_file = tmp_path / "google_books_api_key.txt"
+    key_file.write_text("   \n", encoding="utf-8")
+    auth = load_google_books_auth_config(environ={}, key_file=key_file)
+    assert auth.status is GoogleBooksAuthStatus.DISABLED_INVALID
+
+
 def test_auth_config_dataclass_is_immutable() -> None:
     config = GoogleBooksAuthConfig(
         api_key="x",

@@ -519,10 +519,11 @@ def test_rate_limit_circuit_skips_further_lookups(
     assert first.status is BookEnrichmentStatus.ERROR
     assert second.status is BookEnrichmentStatus.ERROR
     assert third.status is BookEnrichmentStatus.ERROR
+    assert second.message == RATE_LIMIT_STOPPED_MESSAGE
     assert third.message == RATE_LIMIT_STOPPED_MESSAGE
     assert third.metadata.get("circuit_open") is True
-    # First two books each make one attempt; third is short-circuited.
-    assert calls["n"] == 2
+    # No successful responses yet → circuit opens after the first book fails.
+    assert calls["n"] == 1
 
 
 def test_live_fetch_paces_requests(monkeypatch: pytest.MonkeyPatch) -> None:

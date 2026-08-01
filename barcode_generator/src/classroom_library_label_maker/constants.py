@@ -16,6 +16,9 @@ DEFAULT_LOG_LEVEL = "INFO"
 
 # Google Books enrichment (read only via config.load_google_books_auth_config)
 GOOGLE_BOOKS_API_KEY_ENV = "GOOGLE_BOOKS_API_KEY"
+# Packaged apps launched from Finder do not inherit shell exports; optional
+# one-line key file under the per-user application support directory.
+GOOGLE_BOOKS_API_KEY_FILE_NAME = "google_books_api_key.txt"
 
 # Label templates
 # Canonical setting / registry id (use ApplicationSettings.label_template_id).

@@ -662,6 +662,7 @@ class GoogleBooksEnrichmentProvider:
         self._request_count = 0
         self._retry_count = 0
         self._rate_limit_response_count = 0
+        self._successful_response_count = 0
 
     @property
     def uses_authentication(self) -> bool:
@@ -957,10 +958,14 @@ class GoogleBooksEnrichmentProvider:
     def _record_rate_limit_failure(self) -> None:
         """Track book-level rate-limit failures and open the circuit if needed."""
         self._consecutive_rate_limit_failures += 1
-        if (
+        # If every live attempt so far has been rate-limited, stop quickly so
+        # the UI does not sit on "(1 of N)" through minutes of doomed retries.
+        trip = (
             self._consecutive_rate_limit_failures
             >= self._rate_limit_circuit_breaker_threshold
-        ):
+            or self._successful_response_count == 0
+        )
+        if trip and not self._rate_limit_circuit_open:
             self._rate_limit_circuit_open = True
             _logger.warning(
                 "Opening Google Books rate-limit circuit after %s consecutive "
@@ -971,6 +976,7 @@ class GoogleBooksEnrichmentProvider:
     def _record_successful_request(self) -> None:
         """Reset consecutive rate-limit failure tracking after a good response."""
         self._consecutive_rate_limit_failures = 0
+        self._successful_response_count += 1
 
     def _wait_for_request_slot(self) -> None:
         """Sleep so consecutive live requests respect the minimum interval."""
