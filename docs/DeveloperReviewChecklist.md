@@ -15,6 +15,12 @@ Copy into a PR description or a filled
 - [ ] Dependencies remain directional (e.g. services → rendering protocol;
       no third-party barcode types in orchestration)
 - [ ] Extension points used instead of hardwiring future UI/Excel concerns
+- [ ] Catalog / ISBN enrichment goes through `BookEnrichmentProvider` +
+      `BookEnrichmentService` (no HTTP or provider types in
+      `WorkbookGenerationService`; gate with `lookup_missing_isbns`)
+- [ ] Interactive ISBN review uses `ReviewSession` + `BookReviewService`
+      (GUI must not own review indexes or call Google Books during review;
+      presentation lives in `ReviewWizardDialog`)
 - [ ] New work uses `WorkbookGenerationService` (or its collaborators),
       not deprecated `BatchProcessor` / `BarcodeGenerator`
 - [ ] Unexpected failures map to the existing exception hierarchy where

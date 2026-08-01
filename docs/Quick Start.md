@@ -18,6 +18,33 @@ Row 1 must use these column headers (exact spelling):
 A ready-made example is included: `samples/Sample Books.xlsx` (also under
 `barcode_generator/assets/sample-data/`).
 
+For a larger **manual QA / demo** inventory (~190 books with blank ISBNs,
+duplicates, and ambiguous titles), use
+`samples/Teacher Demo Library.xlsx`. With **Look up missing ISBNs** enabled,
+status advances as `Looking up missing ISBNs... (n of total)`.
+
+**Optional but recommended for large batches:** configure a Google Cloud API key
+restricted to the Books API.
+
+Shell / development (current terminal only)::
+
+```bash
+export GOOGLE_BOOKS_API_KEY="your-key"
+```
+
+**Packaged macOS / Windows app (Finder / Dock):** shell exports are **not**
+visible to the app. Install the key into the per-user config file instead::
+
+```bash
+cd barcode_generator
+export GOOGLE_BOOKS_API_KEY="your-key"
+python scripts/install_google_books_api_key.py
+```
+
+Then fully quit and relaunch the app. Startup should log
+`Google Books authentication: Enabled`. If logs still say anonymous mode, the
+key is not reaching the app.
+
 ## 2. Open the app
 
 Launch Classroom Library Label Maker, then choose:
@@ -36,9 +63,17 @@ workbook** path are remembered for next time. Change them anytime with Browse.
 
 Click **Generate Labels**.
 
+If books still need ISBN choices, the **Review ISBN Matches** wizard appears
+so you can pick a catalog match or skip. Leave **Save updated inventory
+workbook when review is complete** checked to write a new
+`Inventory (Updated ISBNs).xlsx` next to your original inventory (your
+original file is never changed).
+
 - Green status ending in **Ready to print** means the label workbook is ready.
 - Amber status saying **review before printing** means the file was created,
   but some labels need attention (for example a missing barcode).
+- When an updated inventory was written, the status also lists both saved
+  workbooks under **Generation Complete**.
 
 ## 4. Print from Excel
 

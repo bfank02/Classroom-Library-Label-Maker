@@ -13,6 +13,8 @@ The package root re-exports a narrow set of common types.
 ```
 ExcelImportService
         ↓
+(optional) BookEnrichmentService   # lookup_missing_isbns (default on)
+        ↓
 BatchProcessingService
         ↓
 WorkbookWriter + LabelLayoutService
@@ -26,9 +28,10 @@ Supporting stables: `IsbnValidator`, `BarcodeGenerationService`,
 `LabelTemplate` / `TemplateRegistry`, `WorkbookReader`, `WorkbookWriter`,
 `LabelSheetTarget`.
 
-**Implemented:** import, validate, generate barcodes, batch orchestration,
-label layout, label workbook **save**, CLI `generate` and desktop GUI via
-`WorkbookGenerationService`, with optional stage progress reporting.
+**Implemented:** import, optional missing-ISBN enrichment, validate, generate
+barcodes, batch orchestration, label layout, label workbook **save**, CLI
+`generate` and desktop GUI via `WorkbookGenerationService`, with stage
+progress reporting (including **"Looking up missing ISBNs..."**).
 
 **Not implemented:** **printing** / print preview, Excel VBA UI; GUI
 cancellation; CLI progress printing (reporter hooks exist).
@@ -135,12 +138,84 @@ recoverable diagnostics (e.g. missing barcode images).
 
 **Fields:** `books_imported`, `books_processed`, `labels_created`,
 `pages_created`, `barcodes_generated`, `barcodes_reused`, `output_path`,
-`elapsed_seconds`, `warnings`.
+`pdf_output_path`, `elapsed_seconds`, `warnings`, optional `enrichment`
+(`EnrichmentSummary`), `books` (post-enrichment, import order),
+`source_rows` (matching 1-based Excel rows for inventory updates).
+
+### `EnrichmentSummary` — Experimental — External
+
+**Purpose:** Shared ISBN enrichment counts for one generation run (GUI/CLI/logs).
+
+**Fields:** `enabled`, `books_with_isbn`, `books_looked_up`, `isbns_found`,
+`ambiguous_matches`, `not_found`, `lookup_errors`, `cache_hits`,
+`cache_misses`, `review_items`.
+
+**Derived:** `needs_review_count` = `len(review_items)`.
+
+### `ReviewCandidate` — Experimental — External
+
+**Purpose:** One catalog match preserved during enrichment for a future
+interactive review UI (no extra Google Books requests at review time).
+
+**Fields:** `isbn13`, `isbn10`, `title`, `author`, `publisher`,
+`published_date`, `confidence_score` (internal `[0, 1]` match score — not for
+direct UI interpretation).
+
+**Derived:** `confidence_label` → `Very High` / `High` / `Medium` / `Low`
+via `confidence_label_for_score` (single source of truth). Display as
+`"{confidence_label} Match"` in GUI/CLI when the review UI lands.
+
+Frozen dataclass. Serialized via `to_dict()` (includes both
+`confidence_score` and `confidence_label`).
+
+### `confidence_label_for_score` — Experimental — External
+
+**Purpose:** Map a numeric confidence score to a presentation label. Prefer
+`ReviewCandidate.confidence_label`; call this helper only when you have a
+raw score outside a candidate instance.
+
+Thresholds (inclusive lower bounds): ≥0.90 Very High, ≥0.80 High,
+≥0.70 Medium, else Low.
+
+### `ReviewItem` — Experimental — External
+
+**Purpose:** One book that still needs teacher attention after automatic ISBN
+lookup (`AMBIGUOUS`, `NOT_FOUND`, or `ERROR`). Successful finds are omitted.
+
+**Fields:** `title`, `author`, `status` (`BookEnrichmentStatus`), `message`
+(short explanation), `candidates` (`tuple[ReviewCandidate, ...]`, populated
+for ambiguous matches; empty otherwise), optional `book` (original
+inventory `Book` when produced by generation — used to seed
+`ReviewSession`).
+
+GUI/CLI show an **ISBN Lookup Summary** (found count, needs-review count, up
+to five titles, then `...and X more.`) when `review_items` is non-empty.
+After generation, the desktop app opens `ReviewWizardDialog` when items
+carry books for interactive review.
+
+### `ReviewDecision` — Experimental — External
+
+**Purpose:** One teacher action for a single review queue entry.
+
+**Fields:** `book` (original), `candidate` (optional `ReviewCandidate`),
+`skipped` (bool). Exactly one of skip vs candidate must be set.
+
+Frozen dataclass. Serialized via `to_dict()`.
+
+### `ReviewSessionResult` — Experimental — External
+
+**Purpose:** Outcome of applying a finished `ReviewSession` via
+`BookReviewService`.
+
+**Fields:** `updated_books`, `resolved_count`, `skipped_count`,
+`unresolved_count`, `total_reviewed` (`resolved + skipped`).
+
+Frozen dataclass. Serialized via `to_dict()`.
 
 ### `ApplicationSettings` — Stable — External
 
 **Purpose:** Project paths, logging, barcode render geometry, workbook import,
-and label template selection for a run.
+label template selection, and enrichment options for a run.
 
 **Construction:** Prefer `config.load_application_settings(...)`.
 
@@ -152,6 +227,9 @@ and label template selection for a run.
 | `default_label_type` | **Deprecated** compatibility field; not used by layout |
 | `workbook_path`, `workbook_sheet_name`, `workbook_column_*`, `workbook_header_row` | Excel import |
 | `barcode_output_directory`, `barcode_module_*` / `quiet_zone` / `font_size` / `dpi` | Barcode output + render geometry |
+| `lookup_missing_isbns` | When True (default), look up blank ISBNs during generation |
+| `google_books_api_key` | Optional API key from env (never log / serialize) |
+| `google_books_auth_status` | Startup config quality: enabled / anonymous / invalid |
 | `input_path` / `results_path` | Legacy CLI JSON paths |
 
 ### `BatchResults` — Internal / Deprecated
@@ -159,9 +237,37 @@ and label template selection for a run.
 **Purpose:** Older aggregate used only by deprecated `BatchProcessor.write_results`.
 **Do not use for new development.** Prefer `BatchProcessingResult`.
 
+### `BookEnrichmentStatus` — Experimental — External
+
+**Purpose:** Outcome codes for one enrichment attempt:
+`FOUND`, `NOT_FOUND`, `SKIPPED`, `AMBIGUOUS`, `ERROR`.
+
+### `BookEnrichmentResult` — Experimental — External
+
+**Purpose:** Immutable enrichment outcome for one `Book`. Core fields cover
+common catalog metadata; `metadata` holds additive key/value pairs without
+requiring a model redesign when new providers land.
+
+**Fields:** `isbn`, `status`, optional `title` / `author`, `message`,
+`metadata`, `candidates` (`tuple[ReviewCandidate, ...]`; set for
+`AMBIGUOUS`, empty for successful `FOUND`).
+
+| Method | Outputs |
+|--------|---------|
+| `to_dict()` | JSON-compatible `dict` (copies `metadata` and candidates) |
+
+**Notes**
+
+- Frozen dataclass (`frozen=True`, `slots=True`).
+- Providers must not mutate the input `Book`; return a new result instead.
+- Prefer this model over `IsbnLookupResult` for new enrichment pipelines.
+- Candidate lists are produced once during enrichment and reused via the
+  enrichment cache / `ReviewItem` for interactive review.
+
 ### `IsbnLookupResult` / `CoverImageResult` — Experimental — External
 
-**Purpose:** Reserved result shapes for future enrichment providers.
+**Purpose:** Reserved result shapes for narrower ISBN-string lookup and cover
+download providers. Prefer `BookEnrichmentResult` for book enrichment.
 
 ---
 
@@ -271,14 +377,143 @@ Package: `classroom_library_label_maker.services`
 | `ExcelImportService` | Stable | External | Workbook → `Book` import |
 | `LabelLayoutService` | Stable | External | Arrange books onto label sheets |
 | `WorkbookGenerationService` | Stable | External | End-to-end import → barcodes → layout → save (canonical runtime for CLI and desktop GUI) |
+| `BookEnrichmentService` | Experimental | External | Provider-agnostic book enrichment (used by generation when lookup enabled) |
+| `NullBookEnrichmentProvider` | Experimental | External | Default no-op provider (`SKIPPED`; preserves Version 1.0 behavior) |
+| `GoogleBooksEnrichmentProvider` | Experimental | External | Google Books title/author enrichment (optional; not default) |
+| `ReviewSession` | Experimental | External | UI-independent interactive review queue / decisions |
+| `BookReviewService` | Experimental | External | Apply finished review decisions → updated `Book`s |
+| `InventoryUpdateService` | Experimental | External | Write updated inventory workbook copy after review |
 | `BatchProcessor` | Internal / Deprecated | Unused by CLI | Legacy JSON stub; do not use |
 | `BarcodeGenerator` | Internal / Deprecated | Unused by CLI | Legacy stub; superseded by `BarcodeGenerationService` |
+
+### `BookEnrichmentService` — Experimental — External
+
+Module: `classroom_library_label_maker.services.book_enrichment_service`
+
+**Purpose:** Delegate enrichment of a `Book` to a `BookEnrichmentProvider`.
+Defaults to `NullBookEnrichmentProvider` when constructed alone. Generation
+uses `create_default_enrichment_service()` (Google Books) when
+`lookup_missing_isbns` is True.
+
+| Method | Inputs | Outputs |
+|--------|--------|---------|
+| `__init__(*, provider=None)` | Optional `BookEnrichmentProvider` | service |
+| `enrich(book)` | `Book` | `BookEnrichmentResult` (cached on normalized title+author) |
+| `enrich_many(books)` | `Sequence[Book]` | `list[BookEnrichmentResult]` (order preserved; uses same cache) |
+| `provider` (property) | — | configured provider |
+| `cache_hits` / `cache_misses` / `cache_size` | — | diagnostic counters (testing/logging only) |
+
+**Notes**
+
+- In-memory cache only (no disk). Key = normalized title + author (not ISBN).
+- All result statuses are cached. Providers are not called on cache hit.
+- Used by `WorkbookGenerationService` when `lookup_missing_isbns` is enabled.
+
+### `ReviewSession` — Experimental — External
+
+Module: `classroom_library_label_maker.services.book_review_service`
+
+**Purpose:** Own interactive review state (current item, navigation, decisions,
+completion). Construct from parallel `Book` / `ReviewItem` sequences or
+`ReviewSession.from_pairs(...)`. Operates only on preserved candidates — no
+catalog provider calls.
+
+| Method | Role |
+|--------|------|
+| `current_item()` / `current_book()` / `current_index()` | What the UI should show |
+| `item_count()` / `remaining_count()` / `is_complete()` | Progress |
+| `next()` / `previous()` | Navigation (`bool` if moved) |
+| `select_candidate(candidate)` / `skip_current()` | Record one decision per slot |
+| `finish()` / `is_finished()` | Seal against further edits |
+| `decisions()` / `decision_at(i)` / `books()` / `items()` | Inspection |
+
+### `BookReviewService` — Experimental — External
+
+Module: `classroom_library_label_maker.services.book_review_service`
+
+**Purpose:** Apply a **finished** `ReviewSession` to produce updated in-memory
+`Book` objects and a `ReviewSessionResult`. Does not write workbooks or call
+providers.
+
+| Method | Inputs | Outputs |
+|--------|--------|---------|
+| `apply(session)` | Finished `ReviewSession` | `ReviewSessionResult` |
+
+Selecting a candidate → new `Book` with ISBN-13 (else ISBN-10); title/author
+and other fields preserved. Skipping → original book unchanged.
+
+### `InventoryUpdateService` — Experimental — External
+
+Module: `classroom_library_label_maker.services.inventory_update_service`
+
+**Purpose:** After review, merge applied decisions into post-enrichment books
+and write a **new** inventory workbook via `InventoryWorkbookUpdater`. Never
+overwrites the original file. Default destination:
+`Inventory (Updated ISBNs).xlsx` beside the source (uses `unique_path` on
+collision).
+
+| Method | Inputs | Outputs |
+|--------|--------|---------|
+| `write_updated_inventory(...)` | source path, settings, books, source_rows, session, review result | written `Path` |
+
+Auto-enriched and review-accepted ISBNs are written; missing-placeholder /
+skipped rows are left alone. OpenPyxl stays in
+`OpenPyxlInventoryWorkbookUpdater`.
+
+### `NullBookEnrichmentProvider` — Experimental — External
+
+**Purpose:** No-op `BookEnrichmentProvider` that returns `SKIPPED` and echoes
+existing title/author. Preserves Version 1.0 generation semantics when used
+as the default collaborator.
+
+### `GoogleBooksEnrichmentProvider` — Experimental — External
+
+Module: `classroom_library_label_maker.services.lookups.google_books`
+(also re-exported from `classroom_library_label_maker.services`)
+
+**Purpose:** Search Google Books for the best title/author match. Implements
+`BookEnrichmentProvider`. HTTP and Google JSON stay inside the adapter.
+
+| Method / ctor | Inputs | Outputs |
+|---------------|--------|---------|
+| `__init__(*, timeout_seconds=10, max_results=10, api_key=None, fetch_json=None, min_request_interval_seconds=None, …)` | Optional timeout, page size, injected API key, injectable JSON GET, pacing/backoff knobs | provider |
+| `enrich(book)` | `Book` | `BookEnrichmentResult` (`FOUND` / `AMBIGUOUS` / `NOT_FOUND` / `ERROR`) |
+
+**Query order:** `title inauthor:surname` → free-text `title author` →
+`title`
+(sequential; no author-only search).
+
+**Notes**
+
+- Does not mutate `Book`.
+- Does not read environment variables; callers inject `api_key`.
+- Authenticated vs anonymous pacing defaults (~0.40s / ~1.25s).
+- Transport failures map to `ERROR` (no leaked exceptions).
+- HTTP 401/403 with a key falls back to anonymous for the rest of the run.
+- `fetch_json` is for tests / custom transports; production uses urllib.
+- Used by generation when `lookup_missing_isbns` is enabled via
+  `create_default_enrichment_service(api_key=…)`.
+
+**External use:** Yes when callers explicitly inject it into
+`BookEnrichmentService`.
 
 ---
 
 ## Protocols
 
 Module: `classroom_library_label_maker.services.protocols`
+
+### `BookEnrichmentProvider` — Experimental — External
+
+**Purpose:** Minimal provider-agnostic contract for enriching a `Book`.
+Avoids HTTP and catalog-specific types on the interface.
+
+| Method | Inputs | Outputs |
+|--------|--------|---------|
+| `enrich(book)` | `Book` | `BookEnrichmentResult` (must not mutate `book`) |
+
+**Extension point:** Implement under `services/lookups/` and inject into
+`BookEnrichmentService(provider=...)`.
 
 ### `BatchProgressReporter` — Stable — External
 
@@ -303,7 +538,9 @@ Module: `classroom_library_label_maker.services.protocols`
 
 ### `IsbnLookupService` / `CoverDownloadService` — Experimental — External
 
-**Purpose:** Future enrichment contracts (`lookup`, `download`).
+**Purpose:** Narrower ISBN-string lookup (`lookup`) and cover download
+(`download`) contracts. Prefer `BookEnrichmentProvider` for book enrichment
+pipelines.
 
 ---
 
@@ -448,23 +685,32 @@ Both are **immutable value objects** (`dataclass(frozen=True)`).
 
 Module: `classroom_library_label_maker.services.workbook_generation_service`
 
-**Purpose:** End-to-end orchestration: import inventory → process barcodes →
-layout labels → save label workbook. Does not print or display UI.
+**Purpose:** End-to-end orchestration: import inventory → optional ISBN
+enrichment → process barcodes → layout labels → save label workbook. Does not
+print or display UI. Does not import Google Books types (depends on
+`BookEnrichmentService` only).
 
 | Method | Inputs | Outputs / errors |
 |--------|--------|------------------|
-| `__init__(settings, *, importer=None, batch_processor=None, layout_service=None, writer=None, progress_reporter=None)` | Settings + optional collaborators / progress hook | service |
+| `__init__(settings, *, importer=None, enrichment=None, batch_processor=None, layout_service=None, writer=None, progress_reporter=None)` | Settings + optional collaborators / progress hook | service |
 | `generate(*, workbook_path=None, output_path=None, progress_reporter=None)` | Optional inventory / output / per-call progress override | `WorkbookGenerationResult`; may raise `ConfigurationError`, `FileSystemError`, `InvalidWorkbookError`, `LabelLayoutError`, `WorkbookGenerationError` |
 
 Default `output_path`: `{project_root}/output/library_labels.xlsx`.
 
+When `settings.lookup_missing_isbns` is True and `enrichment` is omitted, a
+default enrichment service is created with
+`create_default_enrichment_service(api_key=settings.google_books_api_key)`.
+Set `lookup_missing_isbns=False` for Version 1.0 behavior (no enrichment stage).
+
 Optional progress uses Qt-free `GenerationProgressReporter` /
 `GenerationProgress` / `GenerationStage` from
-`classroom_library_label_maker.progress` (significant stage transitions only).
+`classroom_library_label_maker.progress` (includes `ENRICHING` /
+"Looking up missing ISBNs...").
 
 The CLI `generate` command and the desktop GUI (`gui.GuiController`) both
 invoke this service as thin adapters — same generation path, no duplicated
-engine logic.
+engine logic. GUI checkbox **Look up missing ISBNs automatically** maps to
+`lookup_missing_isbns`.
 
 ---
 
@@ -481,6 +727,33 @@ engine.
 | `GenerationStage` | StrEnum milestones (`importing`, `validating`, …) |
 | `GenerationProgress` | Frozen event (`stage`, `message`); `for_stage(stage)` |
 | `GenerationProgressReporter` | Protocol: `on_progress(progress)` |
+
+---
+
+## Desktop GUI
+
+Package: `classroom_library_label_maker.gui`
+
+Presentation-only. Domain review state stays on `ReviewSession`.
+
+### `ReviewWizardDialog` — Experimental — External
+
+Module: `classroom_library_label_maker.gui.review_wizard`
+
+**Purpose:** Modal wizard after generation when enrichment left review items
+with attached books. Renders progress, book details, and candidate cards;
+forwards Previous / Next / Skip / candidate clicks / Finish to the session.
+
+**Finish:** seals the session (`finish()`); `GuiController` then calls
+`BookReviewService.apply` and, when the save checkbox is checked,
+`InventoryUpdateService.write_updated_inventory`. Completion status lists
+both the label workbook and the updated inventory when written.
+
+### `GuiController` review hook
+
+After a successful `GenerationWorker.completed` signal, the controller builds
+a session via `review_session_from_generation_result`. Empty queues skip the
+wizard and continue with the normal completion status line.
 
 ---
 

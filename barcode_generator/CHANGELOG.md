@@ -10,6 +10,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Google Books API key integration: `GOOGLE_BOOKS_API_KEY` resolved once in
+  `config.load_google_books_auth_config()`, stored on `ApplicationSettings`,
+  injected into `GoogleBooksEnrichmentProvider` (provider never reads env)
+- Startup authentication logging (`Enabled` / anonymous / invalid) with no
+  network test request and no key leakage
+- Authenticated pacing (~0.40s) vs anonymous (~1.25s), with 401/403 fallback
+  to anonymous for the remainder of a run
+- Developer enrichment benchmark:
+  `tests/benchmarks/benchmark_google_books_enrichment.py`
+- Book enrichment architecture: `BookEnrichmentService`,
+  `BookEnrichmentProvider`, `NullBookEnrichmentProvider`, plus immutable
+  `BookEnrichmentResult` / `BookEnrichmentStatus` (not wired into generation;
+  Version 1.0 behavior unchanged)
+- `GoogleBooksEnrichmentProvider`: title/author Google Books search with
+  normalization, confidence scoring, and transport errors mapped to
+  `BookEnrichmentResult` (optional inject; not used during generation)
+- In-memory enrichment cache on `BookEnrichmentService` (normalized
+  title+author key; all result statuses cached; discarded with the instance)
+- Integrated ISBN enrichment during generation (`lookup_missing_isbns`,
+  progress stage, GUI checkbox, `EnrichmentSummary` on
+  `WorkbookGenerationResult`)
+- Enrichment review details: immutable `ReviewItem` list on
+  `EnrichmentSummary`, shown in GUI/CLI ISBN Lookup Summary (up to five
+  titles) and generation logs
+- Candidate preservation for future interactive review: immutable
+  `ReviewCandidate` on ambiguous `BookEnrichmentResult` / `ReviewItem`
+  (ordered by confidence; successful finds keep an empty candidate list;
+  cached results reuse peers without extra Google Books requests)
+- User-facing confidence bands on `ReviewCandidate`: internal
+  `confidence_score` plus derived `confidence_label` (`Very High` /
+  `High` / `Medium` / `Low`) via domain `confidence_label_for_score`
+- Interactive review business layer: `ReviewSession`, immutable
+  `ReviewDecision` / `ReviewSessionResult`, and `BookReviewService`
+  (no GUI, no workbook writes, no extra catalog requests)
+- Interactive review wizard (`ReviewWizardDialog`): thin Qt UI over
+  `ReviewSession` after generation
+- Updated inventory workbook after review: `InventoryUpdateService` +
+  `OpenPyxlInventoryWorkbookUpdater` write `Inventory (Updated ISBNs).xlsx`
+  (unique suffix on collision); original inventory never overwritten;
+  completion summary lists both saved workbooks
 - Cross-platform packaging: shared `scripts/build_release.py`, macOS
   `build_macos.sh`, updated Windows `build.bat`
 - Native macOS `.app` bundle support (Finder-launchable, bundled runtime)

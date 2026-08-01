@@ -7,11 +7,17 @@ Create barcode labels for your classroom library.
 Start here: [`docs/Quick Start.md`](docs/Quick%20Start.md)
 
 1. Prepare an **inventory workbook** (Excel sheet named `Books` with columns
-   `ISBN`, `Title`, `Author`, `Copies`) — or open `samples/Sample Books.xlsx`.
+   `ISBN`, `Title`, `Author`, `Copies`) — or open `samples/Sample Books.xlsx`
+   (small starter) / `samples/Teacher Demo Library.xlsx` (large manual-QA demo).
 2. Run the app, choose your inventory workbook, a barcode folder, and where to
    save the **label workbook** (barcode and label paths are remembered after
-   the first selection).
-3. Click **Generate Labels**, then open the label workbook in Excel and print
+   the first selection). Optionally leave **Look up missing ISBNs
+   automatically** checked so blank ISBN cells are filled from title/author.
+3. Click **Generate Labels**. If some books still need ISBN choices, a
+   **Review ISBN Matches** wizard lets you pick or skip catalog matches.
+   Optionally leave **Save updated inventory workbook** checked to create
+   `Inventory (Updated ISBNs).xlsx` beside your original (the original file
+   is never overwritten). Then open the label workbook in Excel and print
    on Avery 5160 sheets.
 
 ## Layout
@@ -28,7 +34,7 @@ ClassroomLibraryLabelMaker/
 │   ├── logs/                     # Runtime logs + archive/ (not committed)
 │   └── temp/                     # Scratch files (not committed)
 ├── installer/                    # Packaging / setup
-├── samples/                      # Example inventory workbook
+├── samples/                      # Example inventory workbooks (manual QA / demos)
 ├── releases/                     # Distribution artifacts
 ├── TASKS.md
 ├── LICENSE
@@ -50,6 +56,15 @@ Design notes:
 - [`docs/templates/FeatureReviewTemplate.md`](docs/templates/FeatureReviewTemplate.md)
 - [`docs/Software Design Specification.md`](docs/Software%20Design%20Specification.md)
 - [`docs/Development Roadmap.md`](docs/Development%20Roadmap.md)
+
+## Manual testing sample
+
+For end-to-end demos (ISBN lookup, review wizard, multi-page labels, inventory
+update), use
+[`samples/Teacher Demo Library.xlsx`](samples/Teacher%20Demo%20Library.xlsx)
+(~190 classroom titles with mixed valid / blank / invalid ISBNs). Keep
+`samples/Sample Books.xlsx` for a small smoke-test list. Do not use the demo
+workbook as an automated integration-test asset.
 
 ## Development workflow (summary)
 

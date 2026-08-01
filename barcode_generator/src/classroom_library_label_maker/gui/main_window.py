@@ -155,6 +155,22 @@ class MainWindow(QMainWindow):
         self.content_label.setBuddy(self.show_title_checkbox)
         form.addRow(self.content_label, content_field)
 
+        self.lookup_missing_isbns_checkbox = QCheckBox(
+            "Look up missing ISBNs automatically"
+        )
+        self.lookup_missing_isbns_checkbox.setObjectName(
+            "lookupMissingIsbnsCheckBox"
+        )
+        self.lookup_missing_isbns_checkbox.setChecked(True)
+        self.lookup_missing_isbns_checkbox.setToolTip(
+            "When a book has no ISBN, search by title and author before "
+            "generating barcodes. Uncheck to skip online lookup."
+        )
+        self.lookup_missing_isbns_checkbox.setAccessibleName(
+            "Look up missing ISBNs automatically"
+        )
+        form.addRow("", self.lookup_missing_isbns_checkbox)
+
         root.addLayout(form)
 
         self.status_label = QLabel("")

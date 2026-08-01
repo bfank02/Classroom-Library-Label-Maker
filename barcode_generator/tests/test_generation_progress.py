@@ -53,6 +53,7 @@ def test_workbook_generation_emits_stages_in_order(tmp_path: Path) -> None:
     assert result.labels_created >= 1
     assert [event.stage for event in reporter.events] == [
         GenerationStage.IMPORTING,
+        GenerationStage.ENRICHING,
         GenerationStage.VALIDATING,
         GenerationStage.GENERATING_BARCODES,
         GenerationStage.CREATING_LABELS,
@@ -60,6 +61,7 @@ def test_workbook_generation_emits_stages_in_order(tmp_path: Path) -> None:
     ]
     assert [event.message for event in reporter.events] == [
         "Importing workbook...",
+        "Looking up missing ISBNs...",
         "Validating books...",
         "Generating barcodes...",
         "Creating labels...",

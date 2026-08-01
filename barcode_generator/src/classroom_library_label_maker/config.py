@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+import os
 from pathlib import Path
 
 from classroom_library_label_maker.constants import (
-    APP_ICON_FILE_NAME,
     APP_ICNS_FILE_NAME,
+    APP_ICON_FILE_NAME,
     DEFAULT_BARCODE_DPI,
     DEFAULT_BARCODE_FONT_SIZE,
     DEFAULT_BARCODE_MODULE_HEIGHT,
@@ -34,14 +36,21 @@ from classroom_library_label_maker.constants import (
     DIR_SAMPLE_DATA,
     DIR_TEMP,
     DIR_TEMPLATES,
+    GOOGLE_BOOKS_API_KEY_ENV,
+    GOOGLE_BOOKS_API_KEY_FILE_NAME,
     LOGO_FILE_NAME,
     QUICK_START_FILE_NAME,
     SAMPLE_BOOKS_FILE_NAME,
     SAMPLE_INVENTORY_FILE_NAME,
     VERSION_FILE_NAME,
 )
+from classroom_library_label_maker.logger import get_logger
 from classroom_library_label_maker.metadata import APP_VERSION
-from classroom_library_label_maker.models import ApplicationSettings, LabelContentOptions
+from classroom_library_label_maker.models import (
+    ApplicationSettings,
+    GoogleBooksAuthStatus,
+    LabelContentOptions,
+)
 from classroom_library_label_maker.runtime_paths import (
     bundled_resource_root,
     is_frozen_application,
@@ -106,6 +115,146 @@ def read_version(project_root: Path | None = None) -> str:
     except (OSError, FileNotFoundError):
         return APP_VERSION
     return text or APP_VERSION
+
+
+@dataclass(frozen=True, slots=True)
+class GoogleBooksAuthConfig:
+    """Resolved Google Books authentication configuration (no network checks).
+
+    Attributes:
+        api_key: Non-empty API key when authentication is enabled; otherwise
+            ``None``. Never log this value.
+        status: Local configuration quality outcome.
+    """
+
+    api_key: str | None
+    status: GoogleBooksAuthStatus
+
+    @property
+    def is_enabled(self) -> bool:
+        """Return True when a usable API key is configured."""
+        return (
+            self.status is GoogleBooksAuthStatus.ENABLED and bool(self.api_key)
+        )
+
+
+def google_books_api_key_file_path() -> Path:
+    """Return the per-user Google Books API key file path.
+
+    Used by packaged apps (Finder / Dock launch) that do not inherit shell
+    environment variables. The file should contain a single line with the key
+    and should never be committed to source control.
+    """
+    return user_data_directory() / GOOGLE_BOOKS_API_KEY_FILE_NAME
+
+
+def _auth_from_raw_key(raw: str | None) -> GoogleBooksAuthConfig | None:
+    """Return auth config for a provided raw value, or ``None`` if unset."""
+    if raw is None:
+        return None
+    stripped = str(raw).strip()
+    if not stripped:
+        return GoogleBooksAuthConfig(
+            api_key=None,
+            status=GoogleBooksAuthStatus.DISABLED_INVALID,
+        )
+    # Prefer the first non-empty line (key files may end with a newline).
+    first_line = next(
+        (line.strip() for line in stripped.splitlines() if line.strip()),
+        "",
+    )
+    if not first_line:
+        return GoogleBooksAuthConfig(
+            api_key=None,
+            status=GoogleBooksAuthStatus.DISABLED_INVALID,
+        )
+    return GoogleBooksAuthConfig(
+        api_key=first_line,
+        status=GoogleBooksAuthStatus.ENABLED,
+    )
+
+
+def load_google_books_auth_config(
+    *,
+    environ: Mapping[str, str] | None = None,
+    key_file: Path | None = None,
+) -> GoogleBooksAuthConfig:
+    """Resolve Google Books API key configuration.
+
+    This is the **only** place that reads the API key. Precedence:
+
+    1. ``GOOGLE_BOOKS_API_KEY`` environment variable (when present)
+    2. Per-user key file (:func:`google_books_api_key_file_path`)
+    3. Anonymous mode
+
+    No network request is performed — validation is configuration quality only.
+
+    Args:
+        environ: Optional mapping (defaults to :data:`os.environ`). Injectable
+            for unit tests.
+        key_file: Optional key-file path override (defaults to the per-user
+            application-support file). Injectable for unit tests.
+
+    Returns:
+        Immutable :class:`GoogleBooksAuthConfig`.
+    """
+    env = os.environ if environ is None else environ
+    if GOOGLE_BOOKS_API_KEY_ENV in env:
+        from_env = _auth_from_raw_key(env.get(GOOGLE_BOOKS_API_KEY_ENV))
+        if from_env is not None:
+            return from_env
+
+    # When tests inject a fake environ mapping, skip the real user key file
+    # unless an explicit key_file path is provided.
+    if key_file is None and environ is not None:
+        return GoogleBooksAuthConfig(
+            api_key=None,
+            status=GoogleBooksAuthStatus.DISABLED_ANONYMOUS,
+        )
+
+    path = (
+        key_file if key_file is not None else google_books_api_key_file_path()
+    )
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return GoogleBooksAuthConfig(
+            api_key=None,
+            status=GoogleBooksAuthStatus.DISABLED_ANONYMOUS,
+        )
+    from_file = _auth_from_raw_key(text)
+    if from_file is None:
+        return GoogleBooksAuthConfig(
+            api_key=None,
+            status=GoogleBooksAuthStatus.DISABLED_ANONYMOUS,
+        )
+    return from_file
+
+
+def google_books_authentication_message(status: GoogleBooksAuthStatus) -> str:
+    """Return the canonical startup authentication status message."""
+    if status is GoogleBooksAuthStatus.ENABLED:
+        return "Google Books authentication: Enabled"
+    if status is GoogleBooksAuthStatus.DISABLED_INVALID:
+        return (
+            "Google Books authentication: Disabled "
+            "(invalid API key configuration)"
+        )
+    return "Google Books authentication: Disabled (anonymous mode)"
+
+
+def log_google_books_authentication_status(
+    status: GoogleBooksAuthStatus,
+    *,
+    logger: object | None = None,
+) -> None:
+    """Log Google Books authentication state exactly once at startup.
+
+    Never logs the API key itself.
+    """
+    message = google_books_authentication_message(status)
+    log = logger if logger is not None else get_logger("config")
+    log.info("%s", message)  # type: ignore[union-attr]
 
 
 class ProjectPaths:
@@ -246,6 +395,8 @@ def load_application_settings(
     workbook_path: Path | str | None = None,
     workbook_sheet_name: str = DEFAULT_WORKBOOK_SHEET_NAME,
     label_content: LabelContentOptions | None = None,
+    lookup_missing_isbns: bool = True,
+    environ: Mapping[str, str] | None = None,
 ) -> ApplicationSettings:
     """Build :class:`ApplicationSettings` from the project tree and overrides.
 
@@ -264,6 +415,10 @@ def load_application_settings(
         workbook_path: Optional Excel workbook path for import.
         workbook_sheet_name: Worksheet name used by Excel import.
         label_content: Optional label field visibility options.
+        lookup_missing_isbns: When True, enrich books missing ISBNs during
+            generation (default True).
+        environ: Optional environment mapping for Google Books auth resolution
+            (defaults to :data:`os.environ`). Injectable for tests.
 
     Returns:
         Populated :class:`ApplicationSettings`.
@@ -277,6 +432,7 @@ def load_application_settings(
     resolved_log_file = (
         Path(log_file) if log_file is not None else paths.default_log_file
     )
+    google_books_auth = load_google_books_auth_config(environ=environ)
     return ApplicationSettings(
         barcode_output_directory=Path(barcode_output_directory)
         if barcode_output_directory is not None
@@ -306,6 +462,9 @@ def load_application_settings(
         workbook_header_row=DEFAULT_WORKBOOK_HEADER_ROW,
         label_template_id=label_template_id,
         label_content=label_content or LabelContentOptions(),
+        lookup_missing_isbns=lookup_missing_isbns,
+        google_books_api_key=google_books_auth.api_key,
+        google_books_auth_status=google_books_auth.status,
     )
 
 

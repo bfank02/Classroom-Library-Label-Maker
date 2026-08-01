@@ -14,6 +14,12 @@ APP_LOGGER_NAME = APP_PACKAGE_NAME
 DEFAULT_LOG_FILE_NAME = "application.log"
 DEFAULT_LOG_LEVEL = "INFO"
 
+# Google Books enrichment (read only via config.load_google_books_auth_config)
+GOOGLE_BOOKS_API_KEY_ENV = "GOOGLE_BOOKS_API_KEY"
+# Packaged apps launched from Finder do not inherit shell exports; optional
+# one-line key file under the per-user application support directory.
+GOOGLE_BOOKS_API_KEY_FILE_NAME = "google_books_api_key.txt"
+
 # Label templates
 # Canonical setting / registry id (use ApplicationSettings.label_template_id).
 DEFAULT_LABEL_TEMPLATE_ID = "avery-5160"
@@ -76,3 +82,13 @@ APP_ICNS_FILE_NAME = "app.icns"
 LOGO_FILE_NAME = "logo.png"
 QUICK_START_FILE_NAME = "Quick Start.md"
 GUI_PREFERENCES_FILE_NAME = "gui_preferences.json"
+
+# Default name for a copy of the inventory with review/enrichment ISBN updates.
+# Never overwrite the teacher's original workbook.
+UPDATED_INVENTORY_FILE_NAME = "Inventory (Updated ISBNs).xlsx"
+
+# Provisional ISBN used when inventory rows omit ISBN and lookup is enabled.
+# Not a valid ISBN-13; enrichment replaces it on FOUND, otherwise validation
+# follows the existing warning path.
+MISSING_ISBN_PLACEHOLDER = "MISSING"
+

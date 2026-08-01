@@ -38,16 +38,22 @@ from classroom_library_label_maker.models import (
     Book,
     BookProcessingResult,
     BookProcessingStatus,
+    EnrichmentSummary,
     GenerationCompletionState,
     ImportResult,
     ImportWarning,
     LabelContentOptions,
     LabelLayoutResult,
     LabelLayoutWarning,
+    ReviewCandidate,
+    ReviewDecision,
+    ReviewItem,
+    ReviewSessionResult,
     ValidationErrorCode,
     ValidationResult,
     WorkbookGenerationResult,
     WorkbookGenerationWarning,
+    confidence_label_for_score,
 )
 
 __all__ = [
@@ -67,6 +73,7 @@ __all__ = [
     "BookProcessingResult",
     "BookProcessingStatus",
     "ConfigurationError",
+    "EnrichmentSummary",
     "FileSystemError",
     "GenerationCompletionState",
     "ImportResult",
@@ -77,6 +84,10 @@ __all__ = [
     "LabelLayoutError",
     "LabelLayoutResult",
     "LabelLayoutWarning",
+    "ReviewCandidate",
+    "ReviewDecision",
+    "ReviewItem",
+    "ReviewSessionResult",
     "ValidationError",
     "ValidationErrorCode",
     "ValidationResult",
@@ -84,6 +95,7 @@ __all__ = [
     "WorkbookGenerationResult",
     "WorkbookGenerationWarning",
     "__version__",
+    "confidence_label_for_score",
 ]
 
 try:

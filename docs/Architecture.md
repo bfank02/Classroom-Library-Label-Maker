@@ -32,6 +32,8 @@ Architecture for **Classroom Library Label Maker**, with emphasis on the
 ```
 ExcelImportService
         ↓
+(optional) BookEnrichmentService   # lookup_missing_isbns
+        ↓
 BatchProcessingService
         ↓
 WorkbookWriter + LabelLayoutService
@@ -149,6 +151,7 @@ barcode_generator/src/classroom_library_label_maker/
 │   ├── app.py           QApplication bootstrap + event loop
 │   ├── main_window.py   Input form (paths, template, Generate)
 │   ├── controller.py    Form state actions + start/finish generation
+│   ├── review_wizard.py ReviewWizardDialog (thin over ReviewSession)
 │   ├── generation_worker.py  QObject worker (service call + progress forward)
 │   ├── icons.py         Application icon discovery (placeholder-safe)
 │   └── form_state.py    Immutable selections + validation messages
@@ -156,13 +159,16 @@ barcode_generator/src/classroom_library_label_maker/
 │   ├── isbn_validator.py
 │   ├── barcode_generation_service.py
 │   ├── batch_processing_service.py
+│   ├── book_enrichment_service.py    # Enrichment orchestration (null provider default)
+│   ├── book_review_service.py        # ReviewSession + BookReviewService
+│   ├── inventory_update_service.py   # Updated inventory workbook after review
 │   ├── excel_import_service.py
 │   ├── label_layout_service.py
 │   ├── workbook_generation_service.py
 │   ├── barcode_generator.py          # Deprecated CLI helper
 │   ├── batch_processor.py            # Deprecated CLI adapter
-│   ├── protocols.py
-│   ├── lookups/         Future catalog APIs
+│   ├── protocols.py                  # BookEnrichmentProvider + progress / lookup hooks
+│   ├── lookups/         GoogleBooksEnrichmentProvider (+ future catalogs)
 │   └── covers/          Future cover downloads
 ├── rendering/           Barcode image rendering (library-agnostic)
 │   ├── renderer.py      BarcodeRenderer protocol
@@ -172,6 +178,8 @@ barcode_generator/src/classroom_library_label_maker/
 │   ├── openpyxl_workbook_reader.py     OpenPyxlWorkbookReader
 │   ├── workbook_writer.py              WorkbookWriter protocol
 │   ├── openpyxl_workbook_writer.py     OpenPyxlWorkbookWriter
+│   ├── inventory_workbook_updater.py   InventoryWorkbookUpdater protocol
+│   ├── openpyxl_inventory_workbook_updater.py  ISBN save-as updates
 │   ├── workbook_presentation.py        Print-ready view / page setup
 │   ├── label_sheet_target.py           LabelSheetTarget + LabelPlacement
 │   ├── in_memory_label_sheet_target.py InMemoryLabelSheetTarget
@@ -205,14 +213,15 @@ Root package `__init__` exports a narrow public API (models + exceptions +
 | `progress` | Qt-free generation stage events for GUI/CLI adapters |
 | `gui` | Desktop presentation (PySide6); thin adapter only |
 | `gui.generation_worker` | Background `QObject` that runs the generation service |
+| `gui.review_wizard` | `ReviewWizardDialog` over `ReviewSession` |
 | `gui.form_state` | Immutable GUI selections + field validation messages |
 | `metadata` | Single source of truth for product identity |
 | `models` | Domain dataclasses and `BarcodeStatus` enum |
 | `exceptions` | Typed application errors |
 | `config` | Project root, VERSION, asset/runtime paths |
 | `logger` | Production logging setup (no import-time side effects) |
-| `services.*` | Validation, generation, batch, import, layout, workbook generation |
-| `services.protocols` | Extension contracts for lookups / covers |
+| `services.*` | Validation, generation, batch, enrichment, import, layout, workbook generation |
+| `services.protocols` | Extension contracts for enrichment / lookups / covers / progress |
 | `rendering` | Library-agnostic barcode image rendering |
 | `workbooks` | Library-agnostic spreadsheet read / label-sheet write |
 | `label_templates` | Immutable physical label-sheet specifications |
@@ -249,8 +258,12 @@ is populated from that message.
 ### Performance benchmarks
 
 Engineering timings live under `barcode_generator/tests/benchmarks/`. They are
-**not** part of the normal unit-test suite and must **never** fail CI. See the
-barcode generator README for how to run them and how to interpret results.
+manual developer tools — **not** part of the normal unit-test suite and must
+**never** fail CI. See the barcode generator README for how to run them.
+
+* `benchmark_isbn_validator.py` — ISBN normalize/validate throughput
+* `benchmark_google_books_enrichment.py` — Teacher Demo Library enrichment
+  (requests, cache, 429s, wall time; optional `GOOGLE_BOOKS_API_KEY`)
 
 ## Rendering layer (`rendering/`)
 
@@ -342,6 +355,277 @@ as a stable extension point.
 `BatchProcessingResult.books_per_second` is derived as
 `total_processed / elapsed_seconds` (returns `0.0` when elapsed time is zero).
 It is not stored separately.
+
+### Book enrichment service (`services/book_enrichment_service.py`)
+
+`BookEnrichmentService` is the orchestration layer for automatic ISBN / catalog
+metadata enrichment. It depends **only** on the `BookEnrichmentProvider`
+protocol and never imports HTTP clients or catalog SDKs.
+
+```
+BookEnrichmentService
+        │  enrich(book) / enrich_many(books)
+        │  in-memory cache (normalized title + author)
+        ▼
+BookEnrichmentProvider   (protocol)
+        │
+        ├─ NullBookEnrichmentProvider          (explicit no-op)
+        └─ GoogleBooksEnrichmentProvider       (default when lookup enabled)
+```
+
+`WorkbookGenerationService` constructs enrichment via
+`create_default_enrichment_service(api_key=settings.google_books_api_key)` when
+`lookup_missing_isbns` is True,
+or accepts an injected `BookEnrichmentService` for tests.
+**Phase 3 behavior (integrated enrichment)**
+
+* `lookup_missing_isbns` (default **True**) gates the enrichment stage.
+* When enabled, `WorkbookGenerationService` depends only on
+  `BookEnrichmentService` (default factory uses Google Books internally —
+  the orchestrator never imports catalog SDKs).
+* Progress stage `ENRICHING` reports **"Looking up missing ISBNs..."**, then
+  updates with **"(n of total)"** as each missing-ISBN book is looked up.
+* Books with blank ISBN cells are imported with a provisional placeholder
+  when lookup is enabled, enriched by title/author, then validated as usual.
+* Ambiguous / not-found / error outcomes become warnings; generation continues.
+* `EnrichmentSummary` on `WorkbookGenerationResult` records counts (already
+  had ISBN, looked up, found, ambiguous, not found, errors, cache hits/misses)
+  plus `review_items` (`ReviewItem` title/author/status/message, optional
+  `candidates`) for books that still need attention. GUI and CLI show an
+  **ISBN Lookup Summary** with up to five review titles when needed.
+* When `lookup_missing_isbns` is **False**, import skips blank ISBN rows and
+  no enrichment stage runs (Version 1.0 behavior).
+* The teacher's inventory workbook is never modified.
+
+**Candidate preservation (Phase 4.1 — future interactive review)**
+
+Automatic enrichment already produces `AMBIGUOUS` / `NOT_FOUND` / `ERROR`
+outcomes. Phase 4.1 preserves catalog choices on those results so a later
+review UI can let teachers pick an ISBN **without additional Google Books
+requests**:
+
+* Immutable `ReviewCandidate` holds `isbn13`, `isbn10`, `title`, `author`,
+  `publisher`, `published_date`, and internal `confidence_score`. Presentation
+  uses derived `confidence_label` (`Very High` / `High` / `Medium` / `Low`)
+  from domain thresholds — GUI/CLI must not reinterpret the numeric score.
+* `BookEnrichmentResult.candidates` is populated for `AMBIGUOUS` (ordered by
+  descending confidence). Successful `FOUND` lookups keep `candidates=()`.
+* `ReviewItem.candidates` carries the same tuple through
+  `EnrichmentSummary` for the generation result.
+* The in-memory enrichment cache stores the full result (including
+  candidates), so repeat title/author lookups reuse preserved peers.
+
+No review dialog is built in this phase; generation behavior is unchanged
+aside from attaching candidate data on review items.
+
+**Confidence presentation (domain layer)**
+
+Match selection still uses numeric scores inside providers. For teacher-facing
+copy, `ReviewCandidate.confidence_score` is the internal `[0, 1]` value and
+`ReviewCandidate.confidence_label` (via `confidence_label_for_score`) maps it
+to `Very High` / `High` / `Medium` / `Low` using module thresholds
+(`CONFIDENCE_LABEL_VERY_HIGH` ≥ 0.90, `HIGH` ≥ 0.80, `MEDIUM` ≥ 0.70).
+Adapters should show `"{confidence_label} Match"` and must not duplicate
+threshold logic in Qt, CLI, or formatting helpers.
+
+**Interactive review workflow (Phase 4.2 — business layer only)**
+
+After enrichment, teachers can resolve ambiguous matches without further
+catalog requests. The workflow is fully UI-independent:
+
+```
+GUI (ReviewWizardDialog)  →  ReviewSession  →  BookReviewService  →  updated Book objects
+```
+
+* `ReviewSession` owns queue state: current item/book, navigation
+  (`next` / `previous`), teacher decisions, remaining/completion, and
+  `finish()` to seal the session. Construct from parallel `Book` +
+  `ReviewItem` pairs (or `ReviewSession.from_pairs`). The GUI must not
+  keep its own indexes.
+* Immutable `ReviewDecision` records exactly one action per queue entry:
+  select a preserved `ReviewCandidate`, or `skipped=True`.
+* `BookReviewService.apply(finished_session)` produces
+  `ReviewSessionResult` (`updated_books`, resolved/skipped/unresolved/
+  total_reviewed). Selecting a candidate creates a **new** `Book` with
+  the chosen ISBN (ISBN-13 preferred) and preserves title, author, and
+  other fields. Skipping leaves the original book unchanged.
+* No workbook writes, no Google Books / provider calls, no Qt types.
+  Generation (`WorkbookGenerationService`) attaches the original `Book` on
+  each `ReviewItem` so the GUI can seed a session without re-querying.
+
+**Interactive review wizard (Phase 4.3 — GUI presentation)**
+
+```
+GenerationWorker.completed
+        │
+        ▼
+GuiController._on_generation_completed
+        │  if review items with books →
+        ▼
+ReviewWizardDialog  (Qt)  ──actions──►  ReviewSession  (domain)
+        │ Finish
+        ▼
+BookReviewService.apply(finished session)
+        │
+        ▼
+existing completion status (ISBN Lookup Summary, etc.)
+```
+
+* `ReviewWizardDialog` shows progress (`Book X of Y` + bar), book title/
+  author/reason, selectable candidate cards (`"{confidence_label} Match"`,
+  ISBN, title, author, publisher · year), and a **Recommended** badge on the
+  highest-confidence card.
+* Buttons call `ReviewSession` (`previous` / `next` / `skip_current` /
+  `select_candidate` / `finish`). Qt does not own the review index.
+* Single **Very High** candidate is pre-selected (teacher may still Skip).
+* Checkbox **Save updated inventory workbook when review is complete**
+  (default on) is persisted in `GuiPreferences`. When checked on Finish,
+  `InventoryUpdateService` writes a new workbook
+  (`Inventory (Updated ISBNs).xlsx`, unique suffix on collision) beside the
+  original — never overwriting the teacher's file. Auto-enriched and
+  review-accepted ISBNs are written; skipped rows stay unchanged.
+* Completion status includes a **Generation Complete** block listing the
+  label workbook and updated inventory when written.
+* No review items → wizard is skipped; success flow unchanged.
+
+**Inventory workbook update (Phase 4.4)**
+
+```
+ReviewSession + BookReviewService
+        │ merged books (import order)
+        ▼
+InventoryUpdateService
+        │
+        ▼
+InventoryWorkbookUpdater (OpenPyxlInventoryWorkbookUpdater)
+        │ save-as copy
+        ▼
+Inventory (Updated ISBNs).xlsx
+```
+
+* `WorkbookGenerationResult.books` / `source_rows` carry post-enrichment books
+  and Excel row numbers so the updater can patch ISBN cells without
+  re-importing or changing generation behavior.
+* OpenPyxl stays in the workbook adapter; the service only builds update
+  pairs and chooses a unique destination path (`utils.file_utils.unique_path`).
+
+**In-memory enrichment cache**
+
+
+
+
+`BookEnrichmentService` keeps a process-local dict of
+`BookEnrichmentResult` values for the lifetime of the service instance.
+There is no persistent storage; destroying the service discards the cache.
+
+* **Why on the service, not providers:** caching is an orchestration concern.
+  Providers stay focused on lookups. One cache covers every
+  `BookEnrichmentProvider` (null, Google Books, future Open Library, …)
+  without duplicated logic or provider-specific HTTP caches.
+* **Cache key:** `(normalize_catalog_text(title), normalize_catalog_text(author))`
+  via shared `services/enrichment_normalize.py` (same rules as Google Books
+  matching). ISBN is **not** part of the key so rows missing ISBNs still
+  share a lookup for the same work.
+* **Behavior:** on hit, return the cached result immediately (no provider
+  call; `Book` unchanged). On miss, call the provider, store the result,
+  return it. **All** statuses are cached (`FOUND`, `NOT_FOUND`,
+  `AMBIGUOUS`, `ERROR`, `SKIPPED`) to avoid repeat work for failures too.
+* **Diagnostics:** `cache_hits`, `cache_misses`, and `cache_size` are
+  available for tests/logging only — not user-facing.
+
+### Google Books provider (`services/lookups/google_books.py`)
+
+`GoogleBooksEnrichmentProvider` keeps HTTP and Google JSON types inside the
+adapter. Callers only see `BookEnrichmentResult`.
+
+**Query strategy (sequential; no author-only searches)**
+
+1. `<title> inauthor:<surname>`
+2. `<title> <author>`
+3. `<title>`
+
+Stops early on `FOUND` or `AMBIGUOUS`. Empty results fall through to the next
+query. Transport failures become `ERROR` (timeouts, HTTP errors, malformed
+JSON) — exceptions are not leaked.
+
+**Normalization**
+
+Titles and authors are compared after casefolding, stripping punctuation, and
+collapsing whitespace (so `Charlotte's Web` matches `Charlottes Web`).
+
+**Confidence scoring**
+
+Each candidate is scored with weighted title/author similarity
+(`0.65 * title + 0.35 * author` via `difflib` + token overlap). Selection:
+
+* `FOUND` — single confident match, or multiple editions of the same work
+  (prefer ISBN-13); `candidates` left empty
+* `AMBIGUOUS` — multiple distinct works with close high scores; peer list
+  stored on `candidates` (descending confidence) for later review
+* `NOT_FOUND` — no candidate above the confidence floor
+* `ERROR` — network / parse failures
+
+**Result mapping**
+
+Populates `isbn` (ISBN-13 preferred), `title`, `author`, and `metadata`
+(`isbn13`, `isbn10`, `authors`, `normalized_title`, `confidence`,
+`google_volume_id`, `provider=google_books`, …). On `AMBIGUOUS`, also maps
+scored peers to public `ReviewCandidate` values. Never mutates the input
+`Book`.
+
+**Authentication & rate limiting**
+
+Configuration resolves the API key **once** in
+`config.load_google_books_auth_config()` (the only place the key is read):
+
+1. ``GOOGLE_BOOKS_API_KEY`` environment variable (when present)
+2. Per-user file ``google_books_api_key.txt`` under Application Support /
+   LOCALAPPDATA (for packaged apps that do not inherit shell exports)
+3. Anonymous mode
+
+Result is stored on `ApplicationSettings` (`google_books_api_key`,
+`google_books_auth_status`). Startup logs exactly one of:
+
+* `Google Books authentication: Enabled`
+* `Google Books authentication: Disabled (anonymous mode)`
+* `Google Books authentication: Disabled (invalid API key configuration)`
+
+No network “test” request is made at startup. The key is injected into
+`GoogleBooksEnrichmentProvider(api_key=...)` via
+`create_default_enrichment_service(api_key=settings.google_books_api_key)`;
+the provider never reads the environment.
+
+Live HTTP pacing defaults:
+
+* **Authenticated** ≈ 0.40s between requests
+* **Anonymous** ≈ 1.25s between requests
+
+HTTP **429** responses still use capped exponential backoff (up to 6 retries,
+max ~65s, honoring `Retry-After`), adaptive slowdown, and a circuit breaker.
+HTTP **401/403** drop the key for the remainder of the run and retry once in
+anonymous mode (invalid keys are not retried repeatedly). Rate-limit and auth
+failures are not queued in the review wizard. Injectable `fetch_json` bypasses
+pacing for unit tests.
+
+Never log API keys or URLs that contain them. Production builds should obtain
+the key from environment/configuration — never embed it in source or packages.
+
+**Testing**
+
+Inject `fetch_json=` to supply canned payloads; unit tests do not require
+Internet access.
+
+**Adding another catalog provider**
+
+1. Implement `BookEnrichmentProvider.enrich(book) -> BookEnrichmentResult`
+   under `services/lookups/` (keep HTTP details inside the adapter).
+2. Inject it: `BookEnrichmentService(provider=MyProvider(...))` (or change
+   `create_default_enrichment_service()`).
+3. For ambiguous outcomes, populate `BookEnrichmentResult.candidates` so
+   interactive review can reuse peers without a second catalog round-trip.
+
+`IsbnLookupService` remains a narrower ISBN-string lookup protocol; prefer
+`BookEnrichmentProvider` for new enrichment work.
 
 ### Deprecated modules (unused by CLI)
 
@@ -588,13 +872,15 @@ missing files become placeholders with warnings.
 `WorkbookGenerationService` is the end-to-end orchestrator:
 
 1. `ExcelImportService.import_books`
-2. `BatchProcessingService.process_books` (validate + generate/reuse barcodes)
-3. `WorkbookWriter.create_workbook`
-4. `LabelLayoutService.layout_books` on `writer.get_label_sheet_target()`
-5. `WorkbookWriter.save`
+2. Optional `BookEnrichmentService` (when `lookup_missing_isbns`)
+3. `BatchProcessingService.process_books` (validate + generate/reuse barcodes)
+4. `WorkbookWriter.create_workbook`
+5. `LabelLayoutService.layout_books` on `writer.get_label_sheet_target()`
+6. `WorkbookWriter.save`
 
-Returns immutable `WorkbookGenerationResult`. Does **not** print or show UI.
-Default output path: `{project_root}/output/library_labels.xlsx`.
+Returns immutable `WorkbookGenerationResult` (including `EnrichmentSummary`).
+Does **not** print or show UI. Default output path:
+`{project_root}/output/library_labels.xlsx`.
 
 ### Future label template extension points
 
@@ -638,6 +924,7 @@ Inventory Excel workbook
 WorkbookGenerationService.generate()
     │
     ├─ ExcelImportService.import_books()
+    ├─ BookEnrichmentService (optional; lookup_missing_isbns)
     ├─ BatchProcessingService.process_books()
     │     ├─ IsbnValidator
     │     └─ BarcodeGenerationService
@@ -646,15 +933,15 @@ WorkbookGenerationService.generate()
     └─ WorkbookWriter.save(output_path)
     │
     ▼
-WorkbookGenerationResult  +  output/*.xlsx  +  output/barcodes/*.png
+WorkbookGenerationResult (+ EnrichmentSummary)  +  output/*.xlsx  +  barcodes
 logs/application.log (rotating)
 ```
 
-**Implemented today:** import, validation, barcode generation, batch
-orchestration, label layout, label workbook **save**, CLI `generate` and
-desktop GUI via `WorkbookGenerationService`
+**Implemented today:** import, optional missing-ISBN enrichment, validation,
+barcode generation, batch orchestration, label layout, label workbook
+**save**, CLI `generate` and desktop GUI via `WorkbookGenerationService`
 (`python -m classroom_library_label_maker.gui`). GUI generation runs on a
-Qt worker thread with stage progress in the status line.
+Qt worker thread with stage progress (including ISBN lookup).
 
 **Not implemented:** GUI cancellation, **printing** / print preview, Excel VBA
 UI (Phase 2). CLI does not yet print progress events (hooks are ready).
@@ -761,7 +1048,10 @@ by `WorkbookGenerationService`.
 2. **CLI progress output** — consume `GenerationProgressReporter` without
    changing the generation pipeline
 3. **CLI commands** — `validate`, `clean`, `diagnostics` already registered
-4. **ISBN lookup APIs** — `IsbnLookupService` under `services/lookups/`
+4. **ISBN / catalog enrichment** — wired into generation when
+   `lookup_missing_isbns` is True (`BookEnrichmentService` +
+   `GoogleBooksEnrichmentProvider` by default). Additional providers can
+   still be injected under `services/lookups/`.
 5. **Cover downloads** — `CoverDownloadService` under `services/covers/`
 6. **Rendering backends** — additional `BarcodeRenderer` implementations under
    `rendering/` (SVG, QR, Code128, alternate libraries)

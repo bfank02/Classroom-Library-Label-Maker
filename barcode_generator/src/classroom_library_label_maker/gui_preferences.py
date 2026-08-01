@@ -2,13 +2,16 @@
 
 Stores last-used barcode folder and label workbook paths under the
 platform user-data directory so teachers do not re-select them every launch.
+Also remembers the review-wizard inventory-save preference (writing the
+inventory is implemented in a later milestone).
+
 Qt-free: safe to import from tests and path helpers.
 """
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
+import json
 from pathlib import Path
 from typing import Any
 
@@ -20,10 +23,11 @@ _PREFERENCES_VERSION = 1
 
 @dataclass(frozen=True, slots=True)
 class GuiPreferences:
-    """Remembered GUI path selections."""
+    """Remembered GUI path selections and review preferences."""
 
     barcode_folder: Path | None = None
     output_workbook: Path | None = None
+    save_updated_inventory_on_review: bool = True
 
 
 def default_gui_preferences_path() -> Path:
@@ -80,9 +84,13 @@ def load_gui_preferences(*, path: Path | None = None) -> GuiPreferences:
         return GuiPreferences()
     if not isinstance(payload, dict):
         return GuiPreferences()
+    save_flag = payload.get("save_updated_inventory_on_review", True)
+    if not isinstance(save_flag, bool):
+        save_flag = True
     return GuiPreferences(
         barcode_folder=_optional_path(payload.get("barcode_folder")),
         output_workbook=_optional_path(payload.get("output_workbook")),
+        save_updated_inventory_on_review=save_flag,
     )
 
 
@@ -97,6 +105,9 @@ def save_gui_preferences(
         "version": _PREFERENCES_VERSION,
         "barcode_folder": _path_to_str(preferences.barcode_folder),
         "output_workbook": _path_to_str(preferences.output_workbook),
+        "save_updated_inventory_on_review": (
+            preferences.save_updated_inventory_on_review
+        ),
     }
     preferences_path.parent.mkdir(parents=True, exist_ok=True)
     preferences_path.write_text(

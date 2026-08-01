@@ -16,6 +16,7 @@ class GenerationStage(StrEnum):
     """Significant milestones during workbook generation."""
 
     IMPORTING = "importing"
+    ENRICHING = "enriching"
     VALIDATING = "validating"
     GENERATING_BARCODES = "generating_barcodes"
     CREATING_LABELS = "creating_labels"
@@ -24,6 +25,7 @@ class GenerationStage(StrEnum):
 
 _STAGE_MESSAGES: dict[GenerationStage, str] = {
     GenerationStage.IMPORTING: "Importing workbook...",
+    GenerationStage.ENRICHING: "Looking up missing ISBNs...",
     GenerationStage.VALIDATING: "Validating books...",
     GenerationStage.GENERATING_BARCODES: "Generating barcodes...",
     GenerationStage.CREATING_LABELS: "Creating labels...",

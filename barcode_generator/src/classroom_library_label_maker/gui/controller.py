@@ -17,14 +17,16 @@ Does **not** implement ISBN / import / barcode / layout logic or cancellation.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QObject, QThread, Slot
-from PySide6.QtWidgets import QFileDialog
+from PySide6.QtWidgets import QDialog, QFileDialog
 
 from classroom_library_label_maker.config import load_application_settings
 from classroom_library_label_maker.exceptions import ApplicationError
+from classroom_library_label_maker.generation_summary import gui_completion_status
 from classroom_library_label_maker.gui.form_state import GenerationFormState
 from classroom_library_label_maker.gui.generation_worker import (
     GenerationJob,
@@ -33,6 +35,7 @@ from classroom_library_label_maker.gui.generation_worker import (
     WorkbookGenerator,
     _default_generation_service,
 )
+from classroom_library_label_maker.gui.review_wizard import ReviewWizardDialog
 from classroom_library_label_maker.gui_preferences import (
     GuiPreferences,
     default_gui_preferences_path,
@@ -46,14 +49,22 @@ from classroom_library_label_maker.label_templates import (
     TemplateRegistry,
     create_default_template_registry,
 )
-from classroom_library_label_maker.generation_summary import gui_completion_status
 from classroom_library_label_maker.logger import get_logger
 from classroom_library_label_maker.models import (
     ApplicationSettings,
     LabelContentOptions,
+    ReviewSessionResult,
     WorkbookGenerationResult,
 )
 from classroom_library_label_maker.progress import GenerationProgress
+from classroom_library_label_maker.services.book_review_service import (
+    BookReviewService,
+    ReviewSession,
+    review_session_from_generation_result,
+)
+from classroom_library_label_maker.services.inventory_update_service import (
+    InventoryUpdateService,
+)
 from classroom_library_label_maker.user_paths import (
     barcode_folder_dialog_start_directory,
     inventory_dialog_start_directory,
@@ -67,10 +78,27 @@ OpenFileDialog = Callable[[], Path | None]
 OpenDirDialog = Callable[[], Path | None]
 SaveFileDialog = Callable[[], Path | None]
 
+
+@dataclass(frozen=True, slots=True)
+class ReviewWizardOutcome:
+    """Result of a completed (accepted) review wizard run."""
+
+    session: ReviewSession
+    save_updated_inventory: bool
+    review_result: ReviewSessionResult
+
+
+ReviewWizardRunner = Callable[
+    [ReviewSession, bool],
+    ReviewWizardOutcome | None,
+]
+
 # Re-export for existing tests / callers.
 __all__ = [
     "GenerationServiceFactory",
     "GuiController",
+    "ReviewWizardOutcome",
+    "ReviewWizardRunner",
     "WorkbookGenerator",
     "ensure_excel_workbook_suffix",
     "template_display_name",
@@ -103,12 +131,17 @@ class GuiController(QObject):
         save_output_dialog: SaveFileDialog | None = None,
         generation_service_factory: GenerationServiceFactory | None = None,
         preferences_path: Path | None = None,
+        review_wizard_runner: ReviewWizardRunner | None = None,
+        book_review_service: BookReviewService | None = None,
+        inventory_update_service: InventoryUpdateService | None = None,
     ) -> None:
         super().__init__(window)
         self._window = window
         self._logger = get_logger("gui")
         self._registry = template_registry or create_default_template_registry()
-        self._open_inventory_dialog = open_inventory_dialog or self._default_open_inventory
+        self._open_inventory_dialog = (
+            open_inventory_dialog or self._default_open_inventory
+        )
         self._open_barcode_folder_dialog = (
             open_barcode_folder_dialog or self._default_open_barcode_folder
         )
@@ -117,6 +150,16 @@ class GuiController(QObject):
             generation_service_factory or _default_generation_service
         )
         self._preferences_path = preferences_path
+        self._review_wizard_runner = (
+            review_wizard_runner or self._default_run_review_wizard
+        )
+        self._book_review_service = book_review_service or BookReviewService()
+        self._inventory_update_service = (
+            inventory_update_service or InventoryUpdateService()
+        )
+        self._save_updated_inventory_on_review = True
+        self._last_review_result: ReviewSessionResult | None = None
+        self._last_updated_inventory_path: Path | None = None
         self._state = GenerationFormState()
         self._is_generating = False
         self._active_thread: QThread | None = None
@@ -171,6 +214,11 @@ class GuiController(QObject):
         self._state = self._state.with_label_content(content)
         self._refresh_ui()
 
+    def set_lookup_missing_isbns(self, enabled: bool) -> None:
+        """Update whether missing ISBNs are looked up during generation."""
+        self._state = self._state.with_lookup_missing_isbns(enabled)
+        self._refresh_ui()
+
     def on_label_content_changed(self) -> None:
         """Handle Show on labels checkbox changes."""
         if self._is_generating:
@@ -182,6 +230,14 @@ class GuiController(QObject):
             show_barcode=window.show_barcode_checkbox.isChecked(),
         )
         self.set_label_content(content)
+
+    def on_lookup_missing_isbns_changed(self) -> None:
+        """Handle Look up missing ISBNs checkbox changes."""
+        if self._is_generating:
+            return
+        self.set_lookup_missing_isbns(
+            self._window.lookup_missing_isbns_checkbox.isChecked()
+        )
 
     def browse_inventory_workbook(self) -> None:
         """Open a native file dialog for the inventory workbook."""
@@ -242,6 +298,7 @@ class GuiController(QObject):
             barcode_output_directory=barcodes,
             label_template_id=template_id,
             label_content=self._state.label_content,
+            lookup_missing_isbns=self._state.lookup_missing_isbns,
             overwrite=False,
         )
 
@@ -320,9 +377,110 @@ class GuiController(QObject):
             "Generation complete: %s",
             result.to_dict()["summary"],
         )
+        inventory_path = self._run_interactive_review_if_needed(result)
         level = "warning" if result.requires_review else "ok"
-        self._set_status(gui_completion_status(result), level=level)
+        self._set_status(
+            gui_completion_status(
+                result,
+                updated_inventory_path=inventory_path,
+            ),
+            level=level,
+        )
         self._set_inputs_enabled(True)
+
+    def _run_interactive_review_if_needed(
+        self,
+        result: WorkbookGenerationResult,
+    ) -> Path | None:
+        """Present the review wizard when enrichment left items for teachers.
+
+        Returns:
+            Path to an updated inventory workbook when one was written;
+            otherwise ``None``.
+        """
+        self._last_updated_inventory_path = None
+        session = review_session_from_generation_result(result)
+        if session is None:
+            return None
+        outcome = self._review_wizard_runner(
+            session,
+            self._save_updated_inventory_on_review,
+        )
+        if outcome is None:
+            self._logger.info("ISBN review wizard dismissed without Finish")
+            return None
+        self._last_review_result = outcome.review_result
+        self._save_updated_inventory_on_review = outcome.save_updated_inventory
+        self._persist_preferences()
+        self._logger.info(
+            "ISBN review finished: resolved=%s skipped=%s unresolved=%s "
+            "save_inventory=%s",
+            outcome.review_result.resolved_count,
+            outcome.review_result.skipped_count,
+            outcome.review_result.unresolved_count,
+            outcome.save_updated_inventory,
+        )
+        if not outcome.save_updated_inventory:
+            return None
+        return self._write_updated_inventory(result, outcome)
+
+    def _write_updated_inventory(
+        self,
+        result: WorkbookGenerationResult,
+        outcome: ReviewWizardOutcome,
+    ) -> Path | None:
+        """Write a non-destructive inventory copy with accepted ISBN updates."""
+        source = self._state.inventory_workbook
+        if source is None:
+            self._logger.warning(
+                "Cannot write updated inventory: no inventory workbook selected"
+            )
+            return None
+        if not result.books or not result.source_rows:
+            self._logger.warning(
+                "Cannot write updated inventory: generation result has no "
+                "book/source_row data"
+            )
+            return None
+        try:
+            settings = self.build_application_settings()
+            written = self._inventory_update_service.write_updated_inventory(
+                source_path=source,
+                settings=settings,
+                books=result.books,
+                source_rows=result.source_rows,
+                session=outcome.session,
+                review_result=outcome.review_result,
+            )
+        except Exception as exc:
+            self._logger.error(
+                "Failed to write updated inventory workbook: %s",
+                exc,
+                exc_info=True,
+            )
+            return None
+        self._last_updated_inventory_path = written
+        return written
+
+    def _default_run_review_wizard(
+        self,
+        session: ReviewSession,
+        save_updated_inventory: bool,
+    ) -> ReviewWizardOutcome | None:
+        dialog = ReviewWizardDialog(
+            session,
+            save_updated_inventory=save_updated_inventory,
+            parent=self._window,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        # Finish already sealed the session inside the dialog.
+        review_result = self._book_review_service.apply(dialog.session())
+        return ReviewWizardOutcome(
+            session=dialog.session(),
+            save_updated_inventory=dialog.save_updated_inventory(),
+            review_result=review_result,
+        )
 
     @Slot(object)
     def _on_generation_failed(self, exc: object) -> None:
@@ -369,6 +527,7 @@ class GuiController(QObject):
         window.show_title_checkbox.setEnabled(enabled)
         window.show_author_checkbox.setEnabled(enabled)
         window.show_barcode_checkbox.setEnabled(enabled)
+        window.lookup_missing_isbns_checkbox.setEnabled(enabled)
         if enabled:
             window.generate_button.setEnabled(self._state.is_valid)
         else:
@@ -395,6 +554,9 @@ class GuiController(QObject):
         window.show_title_checkbox.toggled.connect(self.on_label_content_changed)
         window.show_author_checkbox.toggled.connect(self.on_label_content_changed)
         window.show_barcode_checkbox.toggled.connect(self.on_label_content_changed)
+        window.lookup_missing_isbns_checkbox.toggled.connect(
+            self.on_lookup_missing_isbns_changed
+        )
         window.generate_button.clicked.connect(self.on_generate_labels)
 
     def _refresh_ui(self) -> None:
@@ -415,6 +577,7 @@ class GuiController(QObject):
         )
         self._sync_template_combo()
         self._sync_content_checkboxes()
+        self._sync_lookup_missing_isbns_checkbox()
 
         if self._is_generating:
             self._set_inputs_enabled(False)
@@ -439,6 +602,14 @@ class GuiController(QObject):
                 checkbox.blockSignals(True)
                 checkbox.setChecked(checked)
                 checkbox.blockSignals(False)
+
+    def _sync_lookup_missing_isbns_checkbox(self) -> None:
+        checkbox = self._window.lookup_missing_isbns_checkbox
+        checked = self._state.lookup_missing_isbns
+        if checkbox.isChecked() != checked:
+            checkbox.blockSignals(True)
+            checkbox.setChecked(checked)
+            checkbox.blockSignals(False)
 
     def _sync_template_combo(self) -> None:
         combo = self._window.label_template_combo
@@ -492,7 +663,7 @@ class GuiController(QObject):
         return default_gui_preferences_path()
 
     def _restore_preferences(self) -> None:
-        """Seed barcode folder and label workbook from remembered paths."""
+        """Seed barcode folder, label workbook, and review prefs from disk."""
         preferences = load_gui_preferences(path=self._preferences_file())
         barcode = usable_barcode_folder(preferences.barcode_folder)
         output = usable_output_workbook(preferences.output_workbook)
@@ -500,14 +671,20 @@ class GuiController(QObject):
             self._state = self._state.with_barcode_folder(barcode)
         if output is not None:
             self._state = self._state.with_output_workbook(output)
+        self._save_updated_inventory_on_review = (
+            preferences.save_updated_inventory_on_review
+        )
 
     def _persist_preferences(self) -> None:
-        """Write current barcode / label paths for the next launch."""
+        """Write current barcode / label paths and review prefs for next launch."""
         try:
             save_gui_preferences(
                 GuiPreferences(
                     barcode_folder=self._state.barcode_folder,
                     output_workbook=self._state.output_workbook,
+                    save_updated_inventory_on_review=(
+                        self._save_updated_inventory_on_review
+                    ),
                 ),
                 path=self._preferences_file(),
             )

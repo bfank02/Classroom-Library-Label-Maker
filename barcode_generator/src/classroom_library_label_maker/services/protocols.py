@@ -1,8 +1,11 @@
 """Protocols for optional enrichment, progress reporting, and cancellation.
 
-Implementations will live under ``services.lookups`` and ``services.covers``
-when those features are built. Progress reporters and cancellation tokens may
-be supplied by CLI or future UI layers without changing
+Book enrichment uses :class:`BookEnrichmentProvider` (Book →
+:class:`~classroom_library_label_maker.models.BookEnrichmentResult`). Catalog
+implementations will live under ``services.lookups`` when those features are
+built. Cover downloads use :class:`CoverDownloadService` under
+``services.covers``. Progress reporters and cancellation tokens may be
+supplied by CLI or future UI layers without changing
 :class:`BatchProcessingService` method signatures.
 """
 
@@ -12,14 +15,45 @@ from pathlib import Path
 from typing import Protocol
 
 from classroom_library_label_maker.models import (
+    Book,
+    BookEnrichmentResult,
     BookProcessingResult,
     CoverImageResult,
     IsbnLookupResult,
 )
 
 
+class BookEnrichmentProvider(Protocol):
+    """Provider-agnostic contract for enriching a :class:`Book`.
+
+    Implementations must not expose HTTP, API keys, or catalog-specific types
+    through this interface. Return a :class:`BookEnrichmentResult` that
+    describes the outcome (found, not found, skipped, ambiguous, or error).
+
+    Future Google Books / Open Library adapters implement this protocol and
+    are injected into
+    :class:`~classroom_library_label_maker.services.book_enrichment_service.BookEnrichmentService`.
+    """
+
+    def enrich(self, book: Book) -> BookEnrichmentResult:
+        """Enrich ``book`` with catalog metadata when available.
+
+        Args:
+            book: Book to enrich (ISBN and existing fields).
+
+        Returns:
+            Immutable enrichment outcome. Does not mutate ``book``.
+        """
+        ...
+
+
 class IsbnLookupService(Protocol):
-    """Protocol for future ISBN metadata lookup providers."""
+    """Protocol for future ISBN-string metadata lookup providers.
+
+    Narrower than :class:`BookEnrichmentProvider`: operates on an ISBN string
+    rather than a :class:`Book`. Prefer ``BookEnrichmentProvider`` for new
+    enrichment pipelines; this protocol remains for low-level ISBN lookups.
+    """
 
     def lookup(self, isbn: str) -> IsbnLookupResult:
         """Look up metadata for an ISBN.

@@ -55,7 +55,26 @@ Phase 3 is printing only.
 
 ## Phase 5 — Extensibility
 
-- [ ] ISBN lookup providers (`services/lookups/`)
+- [x] Book enrichment architecture (`BookEnrichmentService`,
+      `BookEnrichmentProvider`, `NullBookEnrichmentProvider`)
+- [x] Google Books enrichment provider (`GoogleBooksEnrichmentProvider`)
+- [x] In-memory enrichment cache on `BookEnrichmentService` (title/author key)
+- [x] Wire enrichment into generation (`lookup_missing_isbns`, GUI checkbox,
+      progress stage, `EnrichmentSummary`)
+- [x] Enrichment review details (`ReviewItem` + ISBN Lookup Summary in GUI/CLI)
+- [x] Candidate preservation for interactive review (`ReviewCandidate` on
+      `BookEnrichmentResult` / `ReviewItem`; ambiguous peers retained; no
+      review dialog yet)
+- [x] User-facing confidence labels (`confidence_score` +
+      `confidence_label` / `confidence_label_for_score`; no GUI yet)
+- [x] Interactive review service (`ReviewSession`, `ReviewDecision`,
+      `ReviewSessionResult`, `BookReviewService`) — no GUI yet
+- [x] Interactive review wizard (`ReviewWizardDialog` over `ReviewSession`)
+- [x] Persist selected / auto-enriched ISBNs to an updated inventory workbook
+      copy after review (`InventoryUpdateService`; original never overwritten)
+- [x] Google Books API key integration (config-only env read, startup
+      validation, authenticated pacing, anonymous fallback on 401/403)
+- [ ] Additional catalog providers (Open Library, …)
 - [ ] Cover image downloads (`services/covers/`)
 - [ ] Inventory / checkout / reading-level workflows
 - [ ] Additional barcode symbologies and label types

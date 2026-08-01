@@ -653,6 +653,237 @@ class GenerationCompletionState(StrEnum):
     SUCCESS_WITH_WARNINGS = "success_with_warnings"
 
 
+# Presentation thresholds for :attr:`ReviewCandidate.confidence_label`.
+# Independent of Google Books match-selection thresholds — do not reuse those
+# in GUI/CLI; call :func:`confidence_label_for_score` (or the property) instead.
+CONFIDENCE_LABEL_VERY_HIGH = 0.90
+CONFIDENCE_LABEL_HIGH = 0.80
+CONFIDENCE_LABEL_MEDIUM = 0.70
+
+_CONFIDENCE_LABEL_VERY_HIGH = "Very High"
+_CONFIDENCE_LABEL_HIGH = "High"
+_CONFIDENCE_LABEL_MEDIUM = "Medium"
+_CONFIDENCE_LABEL_LOW = "Low"
+
+
+def confidence_label_for_score(score: float) -> str:
+    """Map an internal confidence score in ``[0, 1]`` to a presentation label.
+
+    Single source of truth for user-facing confidence wording. Adapters should
+    display ``f"{label} Match"`` (e.g. ``"High Match"``) and must not apply
+    their own thresholds.
+    """
+    if score >= CONFIDENCE_LABEL_VERY_HIGH:
+        return _CONFIDENCE_LABEL_VERY_HIGH
+    if score >= CONFIDENCE_LABEL_HIGH:
+        return _CONFIDENCE_LABEL_HIGH
+    if score >= CONFIDENCE_LABEL_MEDIUM:
+        return _CONFIDENCE_LABEL_MEDIUM
+    return _CONFIDENCE_LABEL_LOW
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewCandidate:
+    """One catalog match preserved for interactive ISBN review.
+
+    Produced during enrichment (especially for ``AMBIGUOUS`` outcomes) so a
+    later review UI can present choices without additional API requests.
+
+    Attributes:
+        isbn13: ISBN-13 when available.
+        isbn10: ISBN-10 when available.
+        title: Catalog title.
+        author: Catalog author(s), typically comma-joined.
+        publisher: Publisher name when available.
+        published_date: Publication date string when available.
+        confidence_score: Internal match confidence in ``[0, 1]`` against the
+            inventory book. Not for direct UI display.
+    """
+
+    isbn13: str | None = None
+    isbn10: str | None = None
+    title: str = ""
+    author: str = ""
+    publisher: str | None = None
+    published_date: str | None = None
+    confidence_score: float = 0.0
+
+    @property
+    def confidence_label(self) -> str:
+        """User-facing confidence band (``Very High`` / ``High`` / ``Medium`` /
+        ``Low``). Prefer this over interpreting :attr:`confidence_score`.
+        """
+        return confidence_label_for_score(self.confidence_score)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize this candidate to a JSON-compatible dictionary."""
+        return {
+            "isbn13": self.isbn13,
+            "isbn10": self.isbn10,
+            "title": self.title,
+            "author": self.author,
+            "publisher": self.publisher,
+            "published_date": self.published_date,
+            "confidence_score": self.confidence_score,
+            "confidence_label": self.confidence_label,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewItem:
+    """A book that still needs teacher attention after ISBN enrichment.
+
+    Attributes:
+        title: Inventory title.
+        author: Inventory author.
+        status: Enrichment outcome that requires review (ambiguous / not found /
+            error).
+        message: Short, actionable explanation for UI and logs.
+        candidates: Catalog matches preserved for interactive review. Populated
+            for ambiguous outcomes; empty for successful finds and most other
+            statuses.
+        book: Original in-memory :class:`Book` when produced by generation
+            (used to seed ``ReviewSession``).
+    """
+
+    title: str
+    author: str
+    status: BookEnrichmentStatus
+    message: str
+    candidates: tuple[ReviewCandidate, ...] = ()
+    book: Book | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize this item to a JSON-compatible dictionary."""
+        payload: dict[str, Any] = {
+            "title": self.title,
+            "author": self.author,
+            "status": self.status.value,
+            "message": self.message,
+            "candidates": [candidate.to_dict() for candidate in self.candidates],
+        }
+        if self.book is not None:
+            payload["book"] = self.book.to_dict()
+        return payload
+
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewDecision:
+    """One teacher action for a single review queue entry.
+
+    Exactly one of ``skipped`` or a selected ``candidate`` must be set.
+
+    Attributes:
+        book: Original in-memory book that was under review.
+        candidate: Chosen catalog match when the teacher selected an ISBN.
+        skipped: When True, the book is left unchanged.
+    """
+
+    book: Book
+    candidate: ReviewCandidate | None = None
+    skipped: bool = False
+
+    def __post_init__(self) -> None:
+        if self.skipped and self.candidate is not None:
+            raise ValueError("skipped decisions must not include a candidate")
+        if not self.skipped and self.candidate is None:
+            raise ValueError("non-skipped decisions require a candidate")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize this decision to a JSON-compatible dictionary."""
+        return {
+            "book": self.book.to_dict(),
+            "candidate": (
+                None if self.candidate is None else self.candidate.to_dict()
+            ),
+            "skipped": self.skipped,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewSessionResult:
+    """Outcome of applying a completed interactive review session.
+
+    Attributes:
+        updated_books: Books in session order after decisions (new instances
+            when an ISBN was selected; originals when skipped or unresolved).
+        resolved_count: Books updated with a selected candidate ISBN.
+        skipped_count: Books explicitly skipped by the teacher.
+        unresolved_count: Queue entries with no recorded decision.
+        total_reviewed: ``resolved_count + skipped_count``.
+    """
+
+    updated_books: tuple[Book, ...] = ()
+    resolved_count: int = 0
+    skipped_count: int = 0
+    unresolved_count: int = 0
+    total_reviewed: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize this result to a JSON-compatible dictionary."""
+        return {
+            "updated_books": [book.to_dict() for book in self.updated_books],
+            "resolved_count": self.resolved_count,
+            "skipped_count": self.skipped_count,
+            "unresolved_count": self.unresolved_count,
+            "total_reviewed": self.total_reviewed,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class EnrichmentSummary:
+    """Aggregate ISBN enrichment outcomes for one generation run.
+
+    Shared by GUI, CLI, and logs so adapters do not recount results.
+
+    Attributes:
+        enabled: Whether enrichment ran for this generation.
+        books_with_isbn: Books that already had an ISBN (not looked up).
+        books_looked_up: Books sent to the enrichment provider.
+        isbns_found: Lookups that returned a usable ISBN (``FOUND`` applied).
+        ambiguous_matches: Lookups that returned ``AMBIGUOUS``.
+        not_found: Lookups that returned ``NOT_FOUND``.
+        lookup_errors: Lookups that returned ``ERROR``.
+        cache_hits: In-memory enrichment cache hits during the run.
+        cache_misses: In-memory enrichment cache misses during the run.
+        review_items: Books requiring manual attention (ambiguous / not found /
+            error). Successful lookups are omitted.
+    """
+
+    enabled: bool = False
+    books_with_isbn: int = 0
+    books_looked_up: int = 0
+    isbns_found: int = 0
+    ambiguous_matches: int = 0
+    not_found: int = 0
+    lookup_errors: int = 0
+    cache_hits: int = 0
+    cache_misses: int = 0
+    review_items: tuple[ReviewItem, ...] = ()
+
+    @property
+    def needs_review_count(self) -> int:
+        """Number of books that still need teacher attention."""
+        return len(self.review_items)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize this summary to a JSON-compatible dictionary."""
+        return {
+            "enabled": self.enabled,
+            "books_with_isbn": self.books_with_isbn,
+            "books_looked_up": self.books_looked_up,
+            "isbns_found": self.isbns_found,
+            "ambiguous_matches": self.ambiguous_matches,
+            "not_found": self.not_found,
+            "lookup_errors": self.lookup_errors,
+            "cache_hits": self.cache_hits,
+            "cache_misses": self.cache_misses,
+            "needs_review_count": self.needs_review_count,
+            "review_items": [item.to_dict() for item in self.review_items],
+        }
+
+
 @dataclass(frozen=True, slots=True)
 class WorkbookGenerationWarning:
     """Recoverable issue during end-to-end workbook generation.
@@ -698,7 +929,10 @@ class WorkbookGenerationResult:
         output_path: Path to the saved label workbook.
         pdf_output_path: Path to the print-ready label PDF (preferred for scanning).
         elapsed_seconds: Wall-clock duration of the full run.
-        warnings: Recoverable issues from import, batch, or layout.
+        warnings: Recoverable issues from import, enrichment, batch, or layout.
+        enrichment: Optional ISBN enrichment summary for this run.
+        books: Post-enrichment books in import order (for inventory updates).
+        source_rows: Matching 1-based Excel row numbers from import.
     """
 
     books_imported: int = 0
@@ -711,6 +945,9 @@ class WorkbookGenerationResult:
     pdf_output_path: Path | None = None
     elapsed_seconds: float = 0.0
     warnings: tuple[WorkbookGenerationWarning, ...] = ()
+    enrichment: EnrichmentSummary | None = None
+    books: tuple[Book, ...] = ()
+    source_rows: tuple[int, ...] = ()
 
     @property
     def warning_count(self) -> int:
@@ -736,23 +973,28 @@ class WorkbookGenerationResult:
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize generation results to a JSON-compatible dictionary."""
+        summary: dict[str, Any] = {
+            "books_imported": self.books_imported,
+            "books_processed": self.books_processed,
+            "labels_created": self.labels_created,
+            "pages_created": self.pages_created,
+            "barcodes_generated": self.barcodes_generated,
+            "barcodes_reused": self.barcodes_reused,
+            "output_path": str(self.output_path) if self.output_path else None,
+            "pdf_output_path": (
+                str(self.pdf_output_path) if self.pdf_output_path else None
+            ),
+            "elapsed_seconds": self.elapsed_seconds,
+            "warning_count": self.warning_count,
+            "requires_review": self.requires_review,
+            "completion_state": self.completion_state.value,
+        }
+        if self.enrichment is not None:
+            summary["enrichment"] = self.enrichment.to_dict()
+        summary["book_count"] = len(self.books)
+        summary["source_row_count"] = len(self.source_rows)
         return {
-            "summary": {
-                "books_imported": self.books_imported,
-                "books_processed": self.books_processed,
-                "labels_created": self.labels_created,
-                "pages_created": self.pages_created,
-                "barcodes_generated": self.barcodes_generated,
-                "barcodes_reused": self.barcodes_reused,
-                "output_path": str(self.output_path) if self.output_path else None,
-                "pdf_output_path": (
-                    str(self.pdf_output_path) if self.pdf_output_path else None
-                ),
-                "elapsed_seconds": self.elapsed_seconds,
-                "warning_count": self.warning_count,
-                "requires_review": self.requires_review,
-                "completion_state": self.completion_state.value,
-            },
+            "summary": summary,
             "warnings": [warning.to_dict() for warning in self.warnings],
         }
 
@@ -765,6 +1007,18 @@ class WorkbookGenerationResult:
             f"output_path={self.output_path!r}, "
             f"elapsed_seconds={self.elapsed_seconds!r})"
         )
+
+
+class GoogleBooksAuthStatus(StrEnum):
+    """Local configuration quality for the Google Books API key.
+
+    Does not imply Google accepted the key — only that the configured value
+    passed startup validation (present and non-empty after strip).
+    """
+
+    ENABLED = "enabled"
+    DISABLED_ANONYMOUS = "disabled_anonymous"
+    DISABLED_INVALID = "disabled_invalid"
 
 
 @dataclass(slots=True)
@@ -800,6 +1054,13 @@ class ApplicationSettings:
         label_template_id: Single source of truth for the registered label
             template id (e.g. ``avery-5160``). Used by LabelLayoutService.
         label_content: Which title/author/barcode fields appear on labels.
+        lookup_missing_isbns: When True, look up missing ISBNs during generation
+            via ``BookEnrichmentService`` before barcode validation.
+        google_books_api_key: Optional Google Books API key resolved at settings
+            load time. Never log or serialize this value.
+        google_books_auth_status: Startup validation outcome for the API key
+            (enabled / anonymous / invalid). Does not imply Google accepted the
+            key — only that configuration quality passed local checks.
     """
 
     barcode_output_directory: Path
@@ -828,6 +1089,11 @@ class ApplicationSettings:
     workbook_header_row: int = DEFAULT_WORKBOOK_HEADER_ROW
     label_template_id: str = DEFAULT_LABEL_TEMPLATE_ID
     label_content: LabelContentOptions = field(default_factory=LabelContentOptions)
+    lookup_missing_isbns: bool = True
+    google_books_api_key: str | None = None
+    google_books_auth_status: GoogleBooksAuthStatus = (
+        GoogleBooksAuthStatus.DISABLED_ANONYMOUS
+    )
 
     def __post_init__(self) -> None:
         """Normalize path fields to :class:`~pathlib.Path` instances."""
@@ -843,6 +1109,9 @@ class ApplicationSettings:
             self.log_file = Path(self.log_file)
         if self.workbook_path is not None:
             self.workbook_path = Path(self.workbook_path)
+        if self.google_books_api_key is not None:
+            stripped = self.google_books_api_key.strip()
+            self.google_books_api_key = stripped or None
         if not self.app_version.strip():
             raise ValueError("app_version must not be empty")
         if not self.default_label_type.strip():
@@ -876,22 +1145,99 @@ class ApplicationSettings:
             if not str(value).strip():
                 raise ValueError(f"{name} must not be empty")
 
+    @property
+    def google_books_authenticated(self) -> bool:
+        """Return True when a non-empty API key is configured for enrichment."""
+        return (
+            self.google_books_auth_status is GoogleBooksAuthStatus.ENABLED
+            and bool(self.google_books_api_key)
+        )
+
     def __repr__(self) -> str:
-        """Return a developer-friendly representation."""
+        """Return a developer-friendly representation (never includes API keys)."""
         return (
             f"ApplicationSettings(version={self.app_version!r}, "
             f"barcode_output_directory={self.barcode_output_directory!r}, "
             f"log_directory={self.log_directory!r}, "
-            f"default_label_type={self.default_label_type!r})"
+            f"default_label_type={self.default_label_type!r}, "
+            f"google_books_auth_status={self.google_books_auth_status.value!r})"
         )
 
 
 # --- Extension-point models (future features) ---------------------------------
 
 
+class BookEnrichmentStatus(StrEnum):
+    """Outcome status for a single book enrichment attempt.
+
+    Providers should prefer these statuses over ad-hoc strings so callers can
+    branch without knowing which catalog backend ran.
+    """
+
+    FOUND = "found"
+    NOT_FOUND = "not_found"
+    SKIPPED = "skipped"
+    AMBIGUOUS = "ambiguous"
+    ERROR = "error"
+
+
+@dataclass(frozen=True, slots=True)
+class BookEnrichmentResult:
+    """Immutable outcome of enriching one :class:`Book`.
+
+    Designed as an extension-friendly value object: core fields cover common
+    catalog metadata, while ``metadata`` holds additional key/value pairs
+    without requiring a model redesign when new providers land.
+
+    Attributes:
+        isbn: ISBN associated with the enrichment attempt (usually the book's).
+        status: Enrichment outcome.
+        title: Resolved or suggested title when available.
+        author: Resolved or suggested author when available.
+        message: Human-readable detail for logs and summaries.
+        metadata: Extensible bag for optional fields (e.g. publisher, subjects).
+            Nested values are not deep-frozen; callers should treat them as
+            read-only.
+        candidates: Catalog matches preserved for interactive review. Set for
+            ``AMBIGUOUS`` outcomes; empty for successful ``FOUND`` lookups.
+    """
+
+    isbn: str
+    status: BookEnrichmentStatus
+    title: str | None = None
+    author: str | None = None
+    message: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+    candidates: tuple[ReviewCandidate, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize this result to a JSON-compatible dictionary."""
+        return {
+            "isbn": self.isbn,
+            "status": self.status.value,
+            "title": self.title,
+            "author": self.author,
+            "message": self.message,
+            "metadata": dict(self.metadata),
+            "candidates": [candidate.to_dict() for candidate in self.candidates],
+        }
+
+    def __repr__(self) -> str:
+        """Return a developer-friendly representation."""
+        return (
+            f"BookEnrichmentResult(isbn={self.isbn!r}, "
+            f"status={self.status!r}, title={self.title!r}, "
+            f"candidates={len(self.candidates)})"
+        )
+
+
 @dataclass(slots=True)
 class IsbnLookupResult:
     """Result model for future ISBN metadata lookup providers.
+
+    Prefer :class:`BookEnrichmentResult` for new enrichment work. This model
+    remains as a narrower ISBN-string lookup shape used by
+    :class:`~classroom_library_label_maker.services.protocols.IsbnLookupService`.
 
     Attributes:
         isbn: Queried ISBN.

@@ -9,8 +9,8 @@ same shared codebase.
 
 **Canonical pipeline:**
 `WorkbookGenerationService` (also the CLI `generate` runtime) =
-`ExcelImportService` → `BatchProcessingService` → `LabelLayoutService` →
-`WorkbookWriter.save`
+`ExcelImportService` → optional `BookEnrichmentService` →
+`BatchProcessingService` → `LabelLayoutService` → `WorkbookWriter.save`
 
 **Desktop GUI:** PySide6 main window collects inputs and invokes
 `WorkbookGenerationService` on a background Qt worker thread (same engine as
@@ -78,13 +78,14 @@ barcode_generator/
 │       │   ├── isbn_validator.py
 │       │   ├── barcode_generation_service.py
 │       │   ├── batch_processing_service.py
+│       │   ├── book_enrichment_service.py  # Enrichment orchestration (null default)
 │       │   ├── excel_import_service.py
 │       │   ├── label_layout_service.py
 │       │   ├── workbook_generation_service.py
 │       │   ├── barcode_generator.py    # Deprecated CLI helper
 │       │   ├── batch_processor.py      # Deprecated CLI adapter
-│       │   ├── protocols.py            # Lookup / cover / progress contracts
-│       │   ├── lookups/                # Future ISBN APIs
+│       │   ├── protocols.py            # Enrichment / lookup / cover / progress contracts
+│       │   ├── lookups/                # GoogleBooksEnrichmentProvider (+ future)
 │       │   └── covers/                 # Future cover downloads
 │       ├── rendering/                  # Barcode image rendering (protocol + backends)
 │       │   ├── renderer.py
@@ -108,7 +109,7 @@ barcode_generator/
 │
 ├── tests/
 │   ├── conftest.py
-│   ├── benchmarks/             # Manual ISBN timing (not CI)
+│   ├── benchmarks/             # Manual ISBN / enrichment timings (not CI)
 │   ├── golden/                 # Optional golden PNGs + helpers
 │   ├── assets/workbooks/       # Sample .xlsx files for import tests
 │   ├── integration/                # Reserved for E2E tests
@@ -248,6 +249,58 @@ python -c "from classroom_library_label_maker.config import load_application_set
 - Optional `BatchProgressReporter` for future progress UI
 - Optional `BatchCancellationToken` constructor hook for future cooperative
   cancel (accepted now, **not enforced** yet)
+
+### Book enrichment (missing ISBNs during generation)
+
+`BookEnrichmentService` looks up missing ISBNs by title/author when
+`lookup_missing_isbns` is True (default). Generation injects the default
+Google Books provider via
+`create_default_enrichment_service(api_key=settings.google_books_api_key)`;
+the orchestrator depends only on `BookEnrichmentService`. The API key is
+resolved once in `config.load_google_books_auth_config()` (never read inside
+the provider).
+
+GUI: checkbox **Look up missing ISBNs automatically** (checked by default).
+Uncheck for Version 1.0 behavior (blank ISBN rows skipped at import; no
+lookup stage).
+
+**Google Books authentication**
+
+```bash
+export GOOGLE_BOOKS_API_KEY="your-restricted-books-api-key"
+```
+
+* Missing / unset → anonymous mode (slower pacing, still supported)
+* Empty / whitespace → disabled (invalid configuration); anonymous requests
+* Non-empty → authenticated mode (~0.40s pacing); appends `key=` on requests
+* Startup logs authentication state once (never logs the key)
+* Rejected keys (401/403) fall back to anonymous for the rest of the run
+
+**Packaged desktop apps** launched from Finder/Dock do **not** inherit shell
+exports. Install the key once with:
+
+```powershell
+python scripts\install_google_books_api_key.py
+```
+
+(or write a one-line `google_books_api_key.txt` under the per-user Application
+Support / LOCALAPPDATA app folder). Prefer the env var in development; prefer
+the key file for packaged builds.
+
+Progress stage: **"Looking up missing ISBNs..."**, then **"(n of total)"** as
+each book is looked up. Large inventories (e.g. the teacher demo) are much
+faster with a key, but still paced and will back off on HTTP 429. Results are
+summarized in
+`EnrichmentSummary` on `WorkbookGenerationResult` (consumed by GUI/CLI/logs).
+When some books still need attention, the completion message includes an
+**ISBN Lookup Summary** with found/needs-review counts and up to five titles.
+
+- In-memory cache on the service (normalized title+author; all statuses except
+  transient rate-limit errors)
+- Ambiguous / not-found / errors become warnings; generation continues
+- Teacher inventory workbook is never modified
+- Matching strategy: [`docs/Architecture.md`](../docs/Architecture.md)
+- Public surface: [`docs/PublicAPI.md`](../docs/PublicAPI.md)
 
 ### Excel import
 
@@ -485,26 +538,26 @@ python -m pytest
 python -m pytest tests\integration -v
 ```
 
-### ISBN validator benchmarks (manual only)
+### Performance benchmarks (manual only)
 
-`tests/benchmarks/` holds **engineering performance timings** for
-`IsbnValidator`. They exist to spot accidental slowdowns during refactors, not
-to enforce hard SLAs.
+`tests/benchmarks/` holds **engineering performance timings**. They exist to
+spot accidental slowdowns during refactors, not to enforce hard SLAs. They are
+**not** CI gates.
 
-**Why they exist**
-
-- Give developers a quick local signal when changing normalization/validation.
-- Produce comparable timings across machines/commits without coupling CI to
-  wall-clock variance.
-
-**How to run**
+**ISBN validator**
 
 ```powershell
-# Preferred: run as a script (prints timings only)
 python tests\benchmarks\benchmark_isbn_validator.py
-
-# Optional: invoke via pytest on that file alone
+# optional:
 python -m pytest tests\benchmarks\benchmark_isbn_validator.py -v -s
+```
+
+**Google Books enrichment** (Teacher Demo Library; network required; optional
+`GOOGLE_BOOKS_API_KEY`). Reports total books, missing ISBNs, requests, cache
+hits/misses, 429 retries, and wall time — never prints API keys:
+
+```powershell
+python tests\benchmarks\benchmark_google_books_enrichment.py
 ```
 
 Default `python -m pytest` does **not** collect these files (they are named
@@ -513,9 +566,9 @@ Default `python -m pytest` does **not** collect these files (they are named
 **How to interpret results**
 
 - Compare relative times on the **same machine** before/after a change.
-- Absolute numbers vary by CPU, power plan, and background load — do not treat
+- Absolute numbers vary by CPU, power plan, network, and quota — do not treat
   them as pass/fail gates.
-- Look for order-of-magnitude regressions (e.g. 10× slower), not millisecond noise.
+- Look for order-of-magnitude regressions, not millisecond noise.
 
 **CI policy**
 
