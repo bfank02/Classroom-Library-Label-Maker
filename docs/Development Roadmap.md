@@ -86,4 +86,16 @@ Phase 3 is printing only.
 - [ ] Additional barcode symbologies and label types
 - [ ] Automatic updates
 
+## Version 1.4 — Desktop UX
+
+- [x] Files section refinement (Label Folder + editable Label File Name;
+      independent persistence; stem selection on focus)
+- [x] Review wizard workflow refinement (Skip / selection auto-advance;
+      Finish Review on final item; no Next button)
+- [x] Ready to Print completion experience (full-page summary; Done → Home)
+- [x] Review experience polish (section hierarchy, cards, badges, skipped
+      presentation; presentation-only)
+- [x] Home screen organization & polish (Files / Options / Actions; header;
+      version footer)
+
 See also: [`Architecture.md`](Architecture.md), [`../TASKS.md`](../TASKS.md).

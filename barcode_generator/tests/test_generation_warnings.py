@@ -199,11 +199,13 @@ def test_gui_clean_success_status(qapp, tmp_paths: dict[str, Path]) -> None:
     controller.on_generate_labels()
     wait_until_generation_finished(controller)
 
-    status = window.status_label.text()
-    assert "done" in status.lower()
-    assert "ready to print" in status.lower()
-    assert "warning" not in status.lower()
-    assert window.status_label.property("statusLevel") == "ok"
+    assert window.is_showing_completion()
+    assert "Ready to Print" in window.completion_view.headline_label.text()
+    details = window.completion_view.details_label.text().lower()
+    assert "2 labels created" in details
+    assert "warning" not in details
+    assert window.completion_view.summary() is not None
+    assert window.completion_view.summary().requires_attention is False
     window.close()
 
 
@@ -223,12 +225,13 @@ def test_gui_success_with_warnings_status(
     controller.on_generate_labels()
     wait_until_generation_finished(controller)
 
-    status = window.status_label.text().lower()
-    assert "2 warnings" in status
-    assert "review before printing" in status
-    assert "ready to print" not in status
-    assert "isbn validation failed" not in status
-    assert window.status_label.property("statusLevel") == "warning"
+    assert window.is_showing_completion()
+    details = window.completion_view.details_label.text().lower()
+    assert "2 warnings" in details
+    assert "review before printing" in details
+    assert "isbn validation failed" not in details
+    assert window.completion_view.summary() is not None
+    assert window.completion_view.summary().requires_attention is True
     window.close()
 
 

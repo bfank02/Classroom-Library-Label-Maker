@@ -99,42 +99,42 @@ def _two_book_session() -> tuple[ReviewSession, ReviewCandidate, ReviewCandidate
 
 def test_wizard_progress_and_navigation(qapp) -> None:
     session, c1a, _ = _two_book_session()
-    dialog = ReviewWizardDialog(session)
+    dialog = ReviewWizardDialog(session, auto_advance_ms=0)
     dialog.show()
     QApplication.processEvents()
 
     assert dialog.progress_label.text() == "Book 1 of 2"
     assert dialog.progress_bar.value() == 1
     assert dialog.progress_bar.maximum() == 2
-    assert dialog.remaining_label.text() == "2 books remaining"
+    assert dialog.remaining_label.text() == "2 Remaining"
     assert dialog.title_label.text() == "Book One"
     assert "Author" in dialog.author_label.text()
-    assert dialog.reason_label.text() == "Multiple catalog matches"
+    assert "multiple matching editions" in dialog.reason_label.text().lower()
     assert "b45309" in dialog.reason_label.styleSheet()
     assert dialog.previous_button.isEnabled() is False
-    assert dialog.next_button.isEnabled() is False
-    assert dialog.finish_button.text() == "Finish Review"
+    assert dialog.skip_button.isVisible() is True
+    assert dialog.finish_button.isVisible() is False
+    assert dialog.cancel_button.isVisible() is True
+    assert not hasattr(dialog, "next_button")
 
     dialog._cards[0].clicked.emit(c1a)
     QApplication.processEvents()
-    assert dialog.next_button.isEnabled() is True
-    assert dialog.remaining_label.text() == "1 book remaining"
-
-    dialog.next_button.click()
-    QApplication.processEvents()
+    assert dialog.remaining_label.text() == "1 Remaining"
     assert dialog.progress_label.text() == "Book 2 of 2"
     assert dialog.progress_bar.value() == 2
     assert dialog.title_label.text() == "Book Two"
     assert dialog.previous_button.isEnabled() is True
-    assert dialog.next_button.isEnabled() is False
 
     dialog.skip_button.click()
     QApplication.processEvents()
+    assert dialog.finish_button.isVisible() is True
     assert "1 skip" in dialog.finish_button.text()
+    assert dialog.skip_button.isVisible() is False
 
     dialog.previous_button.click()
     QApplication.processEvents()
     assert dialog.progress_label.text() == "Book 1 of 2"
+    assert dialog._cards[0].property("selected") is True
     dialog.close()
 
 
@@ -146,7 +146,7 @@ def test_wizard_recommended_badge_on_highest_confidence(qapp) -> None:
 
     badges = dialog.findChildren(QLabel, "reviewRecommendedBadge")
     assert len(badges) == 1
-    assert badges[0].text() == "Recommended"
+    assert badges[0].text() == "⭐ Recommended Match"
     assert dialog._cards[0].candidate == c1a
     assert dialog._cards[0].findChild(QLabel, "reviewRecommendedBadge") is not None
     assert dialog._cards[1].findChild(QLabel, "reviewRecommendedBadge") is None
@@ -185,6 +185,8 @@ def test_wizard_preselects_single_very_high_candidate(qapp) -> None:
     assert session.has_decision_for_current()
     assert session.decision_for_current().candidate == only
     assert dialog._cards[0].property("selected") is True
+    assert dialog._advance_timer.isActive() is False
+    assert dialog.finish_button.isVisible() is True
     dialog.close()
 
 
@@ -221,11 +223,16 @@ def test_wizard_save_preference_defaults_checked_and_toggleable(qapp) -> None:
 
 
 def test_wizard_finish_seals_session_and_accepts(qapp) -> None:
-    session, c1a, _ = _two_book_session()
-    dialog = ReviewWizardDialog(session)
+    session, c1a, c2 = _two_book_session()
+    dialog = ReviewWizardDialog(session, auto_advance_ms=0)
     dialog.show()
     QApplication.processEvents()
     dialog._cards[0].clicked.emit(c1a)
+    QApplication.processEvents()
+    assert dialog.progress_label.text() == "Book 2 of 2"
+    dialog._cards[0].clicked.emit(c2)
+    QApplication.processEvents()
+    assert dialog.finish_button.isVisible() is True
     dialog.finish_button.click()
     QApplication.processEvents()
 
@@ -415,7 +422,8 @@ def test_controller_skips_inventory_write_when_unchecked(
     controller.on_generate_labels()
     wait_until_generation_finished(controller)
     assert controller._last_updated_inventory_path is None
-    assert "Inventory workbook updated" not in window.status_label.text()
+    assert window.is_showing_completion()
+    assert window.completion_view.inventory_file_block.isHidden()
     window.close()
 
 

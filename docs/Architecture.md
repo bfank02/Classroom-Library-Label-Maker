@@ -473,25 +473,44 @@ ReviewWizardDialog  (Qt)  ──actions──►  ReviewSession  (domain)
 BookReviewService.apply(finished session)
         │
         ▼
-existing completion status (ISBN Lookup Summary, etc.)
+Ready to Print completion page (GuiCompletionSummary / CompletionView)
 ```
 
-* `ReviewWizardDialog` shows progress (`Book X of Y` + bar), book title/
-  author/reason, selectable candidate cards (`"{confidence_label} Match"`,
-  ISBN, title, author, publisher · year), and a **Recommended** badge on the
-  highest-confidence card.
-* Buttons call `ReviewSession` (`previous` / `next` / `skip_current` /
-  `select_candidate` / `finish`). Qt does not own the review index.
-* Single **Very High** candidate is pre-selected (teacher may still Skip).
+* `ReviewWizardDialog` is organized into Progress, Book Information, and
+  Candidate Selection sections with clearer spacing and typography
+  (Version 1.4 Phase 4 presentation polish).
+* Progress shows **Review ISBN Matches**, `Book X of Y`, a progress bar, and
+  `N Remaining`.
+* Book Information shows title, author, and amber teacher-facing guidance
+  (e.g. multiple matching editions) — not warning/error styling.
+* Candidate cards are the primary interaction: stronger selected border,
+  light tint, subtle elevation, and a short checkmark fade (~150 ms).
+  Recommended cards show **⭐ Recommended Match** with the confidence label
+  beneath (e.g. Very High Match).
+* Returning to a skipped book shows **This book will be skipped.**; choosing
+  a candidate clears that state automatically.
+* Streamlined workflow (Version 1.4 Phase 2) is unchanged: **Skip** advances
+  immediately; selection auto-advances after ~250 ms; buttons are
+  **Previous** / **Skip** / **Cancel**; **Finish Review** replaces Skip on
+  the final item after a decision. No **Next** button.
+* Buttons call `ReviewSession` (`previous` / `skip_current` /
+  `select_candidate` / `next` for auto-advance / `finish`). Qt does not own
+  the review index.
+* Single **Very High** candidate is pre-selected without auto-advancing
+  (teacher may still Skip or change the choice).
 * Checkbox **Save updated inventory workbook when review is complete**
   (default on) is persisted in `GuiPreferences`. When checked on Finish,
   `InventoryUpdateService` writes a new workbook
   (`Inventory (Updated ISBNs).xlsx`, unique suffix on collision) beside the
   original — never overwriting the teacher's file. Auto-enriched and
   review-accepted ISBNs are written; skipped rows stay unchanged.
-* Completion status includes a **Generation Complete** block listing the
-  label workbook and updated inventory when written.
-* No review items → wizard is skipped; success flow unchanged.
+* After review (or when no review is needed), the GUI shows a full-page
+  **✔ Ready to Print** completion view (`CompletionView` +
+  `build_gui_completion_summary`) with label/page counts, optional ISBN and
+  books-reviewed lines, Files Created (label workbook; updated inventory only
+  when written), and **Open Label Workbook** / **Open Updated Inventory** /
+  **Done**. **Done** returns to Home with Files settings preserved.
+* No review items → wizard is skipped; Ready to Print still appears on success.
 
 **Inventory workbook update (Phase 4.4)**
 
@@ -1066,7 +1085,7 @@ label-maker-gui   # same entry point after pip install
 ### Desktop GUI workflow (RC3.5 — polished)
 
 ```
-MainWindow
+MainWindow (QStackedWidget: Home | Ready to Print)
   Generate Labels
       → GuiController validates + build_application_settings()
       → GenerationJob (immutable inputs)
@@ -1074,22 +1093,36 @@ MainWindow
             → WorkbookGenerationService.generate(progress_reporter=…)
                 → GenerationProgress (stage + message)
             → emit progress / completed(result) | failed(exc)
-      → GuiController updates status label
+      → progress updates Home status label
+      → on success: optional review wizard, then CompletionView
+      → Done → Home (settings preserved)
 ```
 
 UX notes:
 
 * Window title is the product name; Esc closes the window
-* Save dialog defaults to `Documents/library_labels.xlsx` and applies/preserves
-  Excel extensions; inventory browse prefers the sample workbook folder when
-  present
-* Terminology: **inventory workbook** (input) and **label workbook** (output)
-* Status wording is concise and actionable (no Python tracebacks)
-* Completed runs use three presentation states from
-  `WorkbookGenerationResult.completion_state`: clean success, success with
-  warnings (review before printing), or failure via exception. Warning details
-  stay on `result.warnings` for CLI listing / a future details UI; the status
-  line shows only a count + review guidance
+* Home (Version 1.4 Phase 5): subtle header (product name + tagline), then
+  labeled **Files** / **Options** / **Actions** sections top to bottom, with
+  a muted `Version x.y.z` footer for support
+* **Files** section: Inventory Workbook, Barcode Folder, Label Folder (Browse
+  preserves filename), and editable Label File Name (stem selected on focus;
+  `.xlsx` / `.xlsm` normalized). Generation still receives a full
+  `output_path` (`label_folder / label_filename`)
+* **Options** section: label template, label contents, Look up missing ISBNs
+* **Actions** section: status message + emphasized **Generate Labels** button
+  (status is not part of Files)
+* `GuiPreferences` persists inventory workbook, barcode folder, label folder,
+  and label filename independently (legacy `output_workbook` migrates on load)
+* Inventory browse prefers the sample workbook folder when present; folder
+  dialogs prefer Documents / last-used paths
+* Terminology: **inventory workbook** (input) and **label workbook** (output
+  file in the chosen label folder)
+* Status wording during generate/fail is concise and actionable (no Python
+  tracebacks)
+* Successful runs replace the Home form with **✔ Ready to Print**
+  (`GuiCompletionSummary` from existing result fields). Warning runs still
+  use that page and note “review before printing”. Failures stay on Home.
+  Warning details remain on `result.warnings` for CLI listing.
 * Application icon loads from `assets/icons/` when a non-empty file is present
 * Teacher quick start: `docs/Quick Start.md`; sample inventory:
   `samples/Sample Books.xlsx`

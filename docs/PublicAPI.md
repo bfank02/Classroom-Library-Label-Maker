@@ -806,19 +806,32 @@ Presentation-only. Domain review state stays on `ReviewSession`.
 Module: `classroom_library_label_maker.gui.review_wizard`
 
 **Purpose:** Modal wizard after generation when enrichment left review items
-with attached books. Renders progress, book details, and candidate cards;
-forwards Previous / Next / Skip / candidate clicks / Finish to the session.
+with attached books. Renders Progress / Book Information / Candidate
+Selection sections with polished cards and badges; forwards Previous / Skip /
+candidate clicks / Finish to the session.
+
+**Presentation (v1.4 Phase 4):** Clear section hierarchy, friendly amber
+guidance, **⭐ Recommended Match** with confidence beneath, stronger selected
+card styling, and **This book will be skipped.** when restoring a skip.
+
+**Workflow (v1.4 Phase 2):** Skip advances immediately. Candidate selection
+highlights immediately and auto-advances after ~250 ms (timer restarts on
+reselection). **Finish Review** replaces Skip on the final item once a
+selection or skip is recorded. Cancel rejects without applying. No Next
+button.
 
 **Finish:** seals the session (`finish()`); `GuiController` then calls
 `BookReviewService.apply` and, when the save checkbox is checked,
-`InventoryUpdateService.write_updated_inventory`. Completion status lists
-both the label workbook and the updated inventory when written.
+`InventoryUpdateService.write_updated_inventory`. The GUI then shows the
+**Ready to Print** completion page (`CompletionView`) with created files and
+open/Done actions.
 
 ### `GuiController` review hook
 
 After a successful `GenerationWorker.completed` signal, the controller builds
 a session via `review_session_from_generation_result`. Empty queues skip the
-wizard and continue with the normal completion status line.
+wizard. Successful generation (with or without review) then shows the Ready
+to Print completion page instead of leaving Generate Labels on screen.
 
 ---
 

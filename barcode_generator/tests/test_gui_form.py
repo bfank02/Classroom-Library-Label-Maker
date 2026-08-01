@@ -50,7 +50,7 @@ def test_form_state_invalid_when_empty() -> None:
     assert not state.is_valid
     assert any("inventory" in m.lower() for m in messages)
     assert any("barcode" in m.lower() for m in messages)
-    assert any("save" in m.lower() for m in messages)
+    assert any("label folder" in m.lower() for m in messages)
     assert any("template" in m.lower() for m in messages)
 
 
@@ -58,18 +58,21 @@ def test_form_state_valid_with_existing_paths(tmp_paths: dict[str, Path]) -> Non
     state = GenerationFormState(
         inventory_workbook=tmp_paths["inventory"],
         barcode_folder=tmp_paths["barcodes"],
-        output_workbook=tmp_paths["output"],
+        label_folder=tmp_paths["output"].parent,
+        label_filename=tmp_paths["output"].name,
         label_template_id=DEFAULT_LABEL_TEMPLATE_ID,
     )
     assert state.is_valid
     assert state.validation_messages() == ()
+    assert state.output_workbook == tmp_paths["output"]
 
 
 def test_form_state_rejects_missing_inventory(tmp_paths: dict[str, Path]) -> None:
     state = GenerationFormState(
         inventory_workbook=tmp_paths["inventory"].with_name("missing.xlsx"),
         barcode_folder=tmp_paths["barcodes"],
-        output_workbook=tmp_paths["output"],
+        label_folder=tmp_paths["output"].parent,
+        label_filename=tmp_paths["output"].name,
         label_template_id=DEFAULT_LABEL_TEMPLATE_ID,
     )
     assert not state.is_valid
@@ -80,7 +83,8 @@ def test_form_state_rejects_non_excel_output(tmp_paths: dict[str, Path]) -> None
     state = GenerationFormState(
         inventory_workbook=tmp_paths["inventory"],
         barcode_folder=tmp_paths["barcodes"],
-        output_workbook=tmp_paths["output"].with_suffix(".txt"),
+        label_folder=tmp_paths["output"].parent,
+        label_filename="notes.txt",
         label_template_id=DEFAULT_LABEL_TEMPLATE_ID,
     )
     assert not state.is_valid
@@ -96,6 +100,8 @@ def test_main_window_builds_input_controls(qapp) -> None:
     assert window.findChild(object, "inventoryBrowseButton") is not None
     assert window.findChild(object, "barcodeBrowseButton") is not None
     assert window.findChild(object, "outputBrowseButton") is not None
+    assert window.findChild(object, "labelFilenameEdit") is not None
+    assert window.findChild(object, "filesGroup") is not None
     assert window.findChild(object, "labelTemplateCombo") is not None
     assert window.findChild(object, "generateButton") is not None
     assert window.findChild(object, "statusLabel") is not None
@@ -139,16 +145,17 @@ def test_controller_browse_dialogs_update_paths(
         window,
         open_inventory_dialog=lambda: tmp_paths["inventory"],
         open_barcode_folder_dialog=lambda: tmp_paths["barcodes"],
-        save_output_dialog=lambda: tmp_paths["output"],
+        open_label_folder_dialog=lambda: tmp_paths["output"].parent,
     )
 
     controller.browse_inventory_workbook()
     controller.browse_barcode_folder()
-    controller.browse_output_workbook()
+    controller.browse_label_folder()
 
     assert controller.state.inventory_workbook == tmp_paths["inventory"].resolve()
     assert controller.state.barcode_folder == tmp_paths["barcodes"].resolve()
-    assert controller.state.output_workbook == tmp_paths["output"].resolve()
+    assert controller.state.label_folder == tmp_paths["output"].parent.resolve()
+    assert controller.state.label_filename == "library_labels.xlsx"
     assert window.generate_button.isEnabled()
     window.close()
 
@@ -201,8 +208,9 @@ def test_generate_labels_uses_injected_service(
     assert calls == [
         (tmp_paths["inventory"].resolve(), tmp_paths["output"].resolve())
     ]
-    assert "1 label" in window.status_label.text().lower()
-    assert "done" in window.status_label.text().lower()
+    assert window.is_showing_completion()
+    details = window.completion_view.details_label.text().lower()
+    assert "1 label" in details
     window.close()
 
 

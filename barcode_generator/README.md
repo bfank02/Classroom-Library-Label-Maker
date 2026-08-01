@@ -426,26 +426,49 @@ Both call `classroom_library_label_maker.gui:main`, which creates
 ### Current user workflow
 
 The main window collects generation inputs and runs the engine **in the
-background**:
+background**. Home is organized top to bottom:
 
-1. **Inventory workbook** — Browse… (Excel `.xlsx` / `.xlsm`; dialog opens in
+**Header** — product name + short tagline (not a splash screen).
+
+**Files**
+
+1. **Inventory Workbook** — Browse… (Excel `.xlsx` / `.xlsm`; dialog opens in
    the sample folder when `Sample Books.xlsx` is present)
-2. **Barcode folder** — Browse… (starts in Documents)
-3. **Label workbook** — Browse… (save dialog defaults to
-   `Documents/library_labels.xlsx`; extension preserved / applied
-   automatically)
-4. **Label template** — combo (default **Avery 5160**)
-5. **Generate Labels** — enabled when all fields validate; starts
-   `WorkbookGenerationService` on a Qt worker thread
+2. **Barcode Folder** — Browse… (starts in Documents)
+3. **Label Folder** — Browse… (folder only; preserves the current file name)
+4. **Label File Name** — editable field (default `library_labels.xlsx`; stem
+   selected on focus so renaming feels like Finder / Explorer; extension
+   normalized with `ensure_excel_workbook_suffix` / `normalize_label_filename`)
+
+Generation receives `label_folder / label_filename` as a complete
+`output_path`. All four Files values are persisted in `gui_preferences.json`.
+
+**Options** — label template (default **Avery 5160**), label contents, and
+**Look up missing ISBNs automatically**.
+
+**Actions** — status line (progress / validation / errors) and the primary
+**Generate Labels** button (emphasized; starts `WorkbookGenerationService` on
+a Qt worker thread).
+
+Muted **Version x.y.z** appears in the lower-right for support.
+
+When enrichment leaves ambiguous matches, **Review ISBN Matches** opens over
+`ReviewSession` with Progress / Book Information / Candidate Selection
+sections: **Skip** advances immediately; selecting a candidate highlights
+(stronger border, tint, checkmark) and auto-advances after ~250 ms;
+**Previous** restores the prior selection or “This book will be skipped.”;
+**Finish Review** replaces Skip on the final item after a decision. Domain
+review logic is unchanged.
 
 Teacher quick start: [`docs/Quick Start.md`](../docs/Quick%20Start.md).
 Sample inventory: `assets/sample-data/Sample Books.xlsx` (also
 `samples/Sample Books.xlsx` at the repo root).
 
-While generating, Browse buttons, the template combo, and Generate are
-disabled. The status line shows engine stage updates, then a clean success,
-success-with-warnings (review before printing), or friendly error message.
-Press **Esc** to close the window.
+While generating, Browse buttons, the filename field, the template combo, and
+Generate are disabled. The status line shows engine stage updates. On success,
+the Home form is replaced by a **✔ Ready to Print** page (open created files
+or **Done** to return Home with settings preserved). Failures stay on Home
+with a friendly status message. Press **Esc** to close the window.
 
 Icon loading prefers the platform-native icon (`app.icns` on macOS, `app.ico`
 on Windows), then `logo.png`.
@@ -456,7 +479,8 @@ on Windows), then `logo.png`.
 |--------|------|
 | `gui/app.py` | `QApplication` bootstrap + event loop + icon |
 | `gui/icons.py` | Application icon discovery (empty placeholders ignored) |
-| `gui/main_window.py` | Widgets / layout / accessibility / Esc to close |
+| `gui/main_window.py` | Home + Ready to Print stack / accessibility / Esc |
+| `gui/completion_view.py` | Ready to Print completion page widgets |
 | `gui/controller.py` | Form actions, validation, start/finish generation |
 | `gui/generation_worker.py` | `QObject` worker: run service, emit progress/completed/failed |
 | `gui/form_state.py` | Immutable selections + validation messages |

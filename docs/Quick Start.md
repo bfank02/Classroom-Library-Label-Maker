@@ -47,33 +47,56 @@ key is not reaching the app.
 
 ## 2. Open the app
 
-Launch Classroom Library Label Maker, then choose:
+Launch Classroom Library Label Maker. The Home screen shows a short header,
+then three sections from top to bottom:
 
-1. **Inventory workbook** — your book list (or the sample file).
-2. **Barcode folder** — any empty folder where barcode images can be saved.
-3. **Label workbook** — where to save the printable labels file (default name
-   `library_labels.xlsx`).
-4. **Label template** — leave **Avery 5160** selected unless you use a
+**Files**
+
+1. **Inventory Workbook** — your book list (or the sample file).
+2. **Barcode Folder** — any empty folder where barcode images can be saved.
+3. **Label Folder** — the folder where the printable labels file is saved.
+4. **Label File Name** — the workbook name (default `library_labels.xlsx`).
+   Click the field to rename; the `.xlsx` extension stays visible.
+
+**Options**
+
+5. **Label template** — leave **Avery 5160** selected unless you use a
    different sheet.
+6. Label contents and **Look up missing ISBNs automatically** as needed.
 
-After the first successful selection, the **barcode folder** and **label
-workbook** path are remembered for next time. Change them anytime with Browse.
+**Actions**
+
+Status messages and **Generate Labels** live here (not in Files).
+
+After the first successful selection, the inventory workbook, barcode folder,
+label folder, and label file name are remembered for next time. Change a folder
+anytime with Browse (Browse for Label Folder keeps your file name). Edit the
+file name directly without opening a dialog. The muted version label in the
+lower-right corner is for support if you need to report which build you have.
 
 ## 3. Generate labels
 
-Click **Generate Labels**.
+In **Actions**, click **Generate Labels**.
 
-If books still need ISBN choices, the **Review ISBN Matches** wizard appears
-so you can pick a catalog match or skip. Leave **Save updated inventory
-workbook when review is complete** checked to write a new
+If books still need ISBN choices, the **Review ISBN Matches** wizard appears.
+Choose a catalog match (it highlights, then moves on after a brief pause) or
+click **Skip** to leave that book unchanged and continue. Use **Previous** to
+go back; your prior choice is restored. On the last book, **Finish Review**
+replaces **Skip** once you have selected or skipped. Leave **Save updated
+inventory workbook when review is complete** checked to write a new
 `Inventory (Updated ISBNs).xlsx` next to your original inventory (your
 original file is never changed).
 
-- Green status ending in **Ready to print** means the label workbook is ready.
-- Amber status saying **review before printing** means the file was created,
+When generation finishes, the main window shows a **✔ Ready to Print** page
+(not a dialog): label/page counts, optional ISBN and review totals, the
+created file names, and actions to **Open Label Workbook**, **Open Updated
+Inventory** (when written), or **Done**. **Done** returns to the Home screen
+with your Files settings preserved so you can generate again.
+
+- A clean Ready to Print page means the label workbook is ready.
+- If the summary mentions **review before printing**, the file was created
   but some labels need attention (for example a missing barcode).
-- When an updated inventory was written, the status also lists both saved
-  workbooks under **Generation Complete**.
+- Updated inventory appears under **Files Created** only when one was written.
 
 ## 4. Print from Excel
 

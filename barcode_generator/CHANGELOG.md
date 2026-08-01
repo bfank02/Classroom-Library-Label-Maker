@@ -65,6 +65,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Google Books `NOT_FOUND`
 - `BookEnrichmentResult.provider_name` for catalog attribution (diagnostics /
   benchmarks; not shown in the teacher UI)
+- Files section UX: separate Label Folder + editable Label File Name;
+  four independent persisted path preferences
+- Review wizard workflow refinement: Skip advances immediately; candidate
+  selection auto-advances after ~250 ms (timer restarts on reselection);
+  Finish Review replaces Skip on the final item; Previous restores prior
+  selection/skip from `ReviewSession`
+- Ready to Print completion page after successful generation
+  (`CompletionView` / `GuiCompletionSummary`): open created files; Done
+  returns Home with Files settings preserved
+- Review wizard presentation polish: Progress / Book / Candidates sections,
+  friendly amber guidance, **⭐ Recommended Match**, stronger selected cards,
+  skipped-state banner
+- Home screen organization: Files / Options / Actions sections, application
+  header, muted version footer (`Version 1.4.0`)
 
 ### Changed
 
@@ -74,6 +88,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   diagnostics (no API keys). Confidence thresholds unchanged.
 - Default enrichment wiring uses `CompositeBookEnrichmentProvider` with
   Google Books first and Open Library second.
+- GUI Files section redesign: output path = label folder + filename; Browse
+  for Label Folder preserves filename; stem selection on filename focus.
+- Review wizard buttons: Previous / Skip / Cancel (no Next); selected cards
+  show border + checkmark
+- Successful GUI generation ends on a Ready to Print page instead of leaving
+  Generate Labels visible with a long status message
+- Review wizard layout and card/badge styling refined for readability
+  (workflow unchanged)
+- Home screen grouped into Files / Options / Actions; status moved under
+  Actions; Generate Labels emphasized
+- Package version set to **1.4.0**
 - Print barcodes render at 600 DPI with taller bars and fill more of the
   label; barcode row allocation grows when fewer text fields are shown
 

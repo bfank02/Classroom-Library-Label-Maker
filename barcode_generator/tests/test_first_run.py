@@ -140,12 +140,17 @@ def test_barcode_and_save_dialogs_prefer_last_used(tmp_path: Path) -> None:
     assert name == "my_labels.xlsx"
 
 
-def test_gui_uses_inventory_and_label_workbook_labels(qapp) -> None:
+def test_gui_uses_files_section_labels(qapp) -> None:
     window = MainWindow()
     inventory_text = window.inventory_label.text().replace("&", "")
-    output_text = window.output_label.text().replace("&", "")
-    assert "Inventory workbook" in inventory_text
-    assert "Label workbook" in output_text
-    assert "Output workbook" not in output_text
-    assert window.output_browse_button.accessibleName() == "Browse for label workbook"
+    barcode_text = window.barcode_label.text().replace("&", "")
+    folder_text = window.output_label.text().replace("&", "")
+    filename_text = window.filename_label.text().replace("&", "")
+    assert "Inventory Workbook" in inventory_text
+    assert "Barcode Folder" in barcode_text
+    assert "Label Folder" in folder_text
+    assert "Label File Name" in filename_text
+    assert "Output workbook" not in folder_text
+    assert window.output_browse_button.accessibleName() == "Browse for label folder"
+    assert window.filename_edit.accessibleName() == "Label File Name"
     window.close()

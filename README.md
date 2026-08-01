@@ -9,16 +9,22 @@ Start here: [`docs/Quick Start.md`](docs/Quick%20Start.md)
 1. Prepare an **inventory workbook** (Excel sheet named `Books` with columns
    `ISBN`, `Title`, `Author`, `Copies`) — or open `samples/Sample Books.xlsx`
    (small starter) / `samples/Teacher Demo Library.xlsx` (large manual-QA demo).
-2. Run the app, choose your inventory workbook, a barcode folder, and where to
-   save the **label workbook** (barcode and label paths are remembered after
-   the first selection). Optionally leave **Look up missing ISBNs
-   automatically** checked so blank ISBN cells are filled from title/author.
-3. Click **Generate Labels**. If some books still need ISBN choices, a
-   **Review ISBN Matches** wizard lets you pick or skip catalog matches.
-   Optionally leave **Save updated inventory workbook** checked to create
+2. Run the app. The Home screen has an application header plus **Files**,
+   **Options**, and **Actions** sections. In **Files**, choose your inventory
+   workbook, a barcode folder, a label folder, and the label file name (paths
+   and the filename are remembered after the first selection). In **Options**,
+   optionally leave **Look up missing ISBNs automatically** checked so blank
+   ISBN cells are filled from title/author.
+3. In **Actions**, click **Generate Labels** (status messages appear in that
+   section). If some books still need ISBN choices, a
+   **Review ISBN Matches** wizard lets you pick or skip catalog matches
+   (clear Progress / book / match sections; Skip and selections advance
+   automatically; Finish Review appears on the last book). Optionally leave
+   **Save updated inventory workbook** checked to create
    `Inventory (Updated ISBNs).xlsx` beside your original (the original file
-   is never overwritten). Then open the label workbook in Excel and print
-   on Avery 5160 sheets.
+   is never overwritten). When generation finishes, a **✔ Ready to Print**
+   page lists what was created and lets you open the files or click **Done**
+   to return Home. Then print the label workbook on Avery 5160 sheets.
 
 ## Layout
 
