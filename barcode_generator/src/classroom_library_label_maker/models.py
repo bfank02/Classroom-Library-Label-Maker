@@ -889,9 +889,72 @@ class ApplicationSettings:
 # --- Extension-point models (future features) ---------------------------------
 
 
+class BookEnrichmentStatus(StrEnum):
+    """Outcome status for a single book enrichment attempt.
+
+    Providers should prefer these statuses over ad-hoc strings so callers can
+    branch without knowing which catalog backend ran.
+    """
+
+    FOUND = "found"
+    NOT_FOUND = "not_found"
+    SKIPPED = "skipped"
+    AMBIGUOUS = "ambiguous"
+    ERROR = "error"
+
+
+@dataclass(frozen=True, slots=True)
+class BookEnrichmentResult:
+    """Immutable outcome of enriching one :class:`Book`.
+
+    Designed as an extension-friendly value object: core fields cover common
+    catalog metadata, while ``metadata`` holds additional key/value pairs
+    without requiring a model redesign when new providers land.
+
+    Attributes:
+        isbn: ISBN associated with the enrichment attempt (usually the book's).
+        status: Enrichment outcome.
+        title: Resolved or suggested title when available.
+        author: Resolved or suggested author when available.
+        message: Human-readable detail for logs and summaries.
+        metadata: Extensible bag for optional fields (e.g. publisher, subjects).
+            Nested values are not deep-frozen; callers should treat them as
+            read-only.
+    """
+
+    isbn: str
+    status: BookEnrichmentStatus
+    title: str | None = None
+    author: str | None = None
+    message: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize this result to a JSON-compatible dictionary."""
+        return {
+            "isbn": self.isbn,
+            "status": self.status.value,
+            "title": self.title,
+            "author": self.author,
+            "message": self.message,
+            "metadata": dict(self.metadata),
+        }
+
+    def __repr__(self) -> str:
+        """Return a developer-friendly representation."""
+        return (
+            f"BookEnrichmentResult(isbn={self.isbn!r}, "
+            f"status={self.status!r}, title={self.title!r})"
+        )
+
+
 @dataclass(slots=True)
 class IsbnLookupResult:
     """Result model for future ISBN metadata lookup providers.
+
+    Prefer :class:`BookEnrichmentResult` for new enrichment work. This model
+    remains as a narrower ISBN-string lookup shape used by
+    :class:`~classroom_library_label_maker.services.protocols.IsbnLookupService`.
 
     Attributes:
         isbn: Queried ISBN.

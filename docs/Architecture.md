@@ -156,13 +156,14 @@ barcode_generator/src/classroom_library_label_maker/
 │   ├── isbn_validator.py
 │   ├── barcode_generation_service.py
 │   ├── batch_processing_service.py
+│   ├── book_enrichment_service.py    # Enrichment orchestration (null provider default)
 │   ├── excel_import_service.py
 │   ├── label_layout_service.py
 │   ├── workbook_generation_service.py
 │   ├── barcode_generator.py          # Deprecated CLI helper
 │   ├── batch_processor.py            # Deprecated CLI adapter
-│   ├── protocols.py
-│   ├── lookups/         Future catalog APIs
+│   ├── protocols.py                  # BookEnrichmentProvider + progress / lookup hooks
+│   ├── lookups/         GoogleBooksEnrichmentProvider (+ future catalogs)
 │   └── covers/          Future cover downloads
 ├── rendering/           Barcode image rendering (library-agnostic)
 │   ├── renderer.py      BarcodeRenderer protocol
@@ -211,8 +212,8 @@ Root package `__init__` exports a narrow public API (models + exceptions +
 | `exceptions` | Typed application errors |
 | `config` | Project root, VERSION, asset/runtime paths |
 | `logger` | Production logging setup (no import-time side effects) |
-| `services.*` | Validation, generation, batch, import, layout, workbook generation |
-| `services.protocols` | Extension contracts for lookups / covers |
+| `services.*` | Validation, generation, batch, enrichment, import, layout, workbook generation |
+| `services.protocols` | Extension contracts for enrichment / lookups / covers / progress |
 | `rendering` | Library-agnostic barcode image rendering |
 | `workbooks` | Library-agnostic spreadsheet read / label-sheet write |
 | `label_templates` | Immutable physical label-sheet specifications |
@@ -342,6 +343,91 @@ as a stable extension point.
 `BatchProcessingResult.books_per_second` is derived as
 `total_processed / elapsed_seconds` (returns `0.0` when elapsed time is zero).
 It is not stored separately.
+
+### Book enrichment service (`services/book_enrichment_service.py`)
+
+`BookEnrichmentService` is the orchestration layer for automatic ISBN / catalog
+metadata enrichment. It depends **only** on the `BookEnrichmentProvider`
+protocol and never imports HTTP clients or catalog SDKs.
+
+```
+BookEnrichmentService
+        │  enrich(book) / enrich_many(books)
+        ▼
+BookEnrichmentProvider   (protocol)
+        │
+        ├─ NullBookEnrichmentProvider          (default — SKIPPED, no I/O)
+        └─ GoogleBooksEnrichmentProvider       (services/lookups/ — optional)
+```
+
+**Phase 1–2 behavior**
+
+* Default collaborator is `NullBookEnrichmentProvider`, which returns
+  `BookEnrichmentStatus.SKIPPED` and does not mutate the input `Book`.
+* `GoogleBooksEnrichmentProvider` implements the same protocol using the
+  Google Books Volumes API (title/author search). Inject explicitly; it is
+  **not** the default.
+* Enrichment is **not** wired into `WorkbookGenerationService`,
+  `BatchProcessingService`, the CLI, or the GUI. Generation output remains
+  identical to Version 1.0.
+* Result shape is the immutable `BookEnrichmentResult` value object
+  (`FOUND` / `NOT_FOUND` / `SKIPPED` / `AMBIGUOUS` / `ERROR`), with a
+  `metadata` dict for additive fields without model redesign.
+
+### Google Books provider (`services/lookups/google_books.py`)
+
+`GoogleBooksEnrichmentProvider` keeps HTTP and Google JSON types inside the
+adapter. Callers only see `BookEnrichmentResult`.
+
+**Query strategy (sequential; no author-only searches)**
+
+1. `intitle:"<title>" inauthor:"<author>"`
+2. `intitle:"<title>"`
+3. `<title> <author>`
+
+Stops early on `FOUND` or `AMBIGUOUS`. Empty results fall through to the next
+query. Transport failures become `ERROR` (timeouts, HTTP errors, malformed
+JSON) — exceptions are not leaked.
+
+**Normalization**
+
+Titles and authors are compared after casefolding, stripping punctuation, and
+collapsing whitespace (so `Charlotte's Web` matches `Charlottes Web`).
+
+**Confidence scoring**
+
+Each candidate is scored with weighted title/author similarity
+(`0.65 * title + 0.35 * author` via `difflib` + token overlap). Selection:
+
+* `FOUND` — single confident match, or multiple editions of the same work
+  (prefer ISBN-13)
+* `AMBIGUOUS` — multiple distinct works with close high scores
+* `NOT_FOUND` — no candidate above the confidence floor
+* `ERROR` — network / parse failures
+
+**Result mapping**
+
+Populates `isbn` (ISBN-13 preferred), `title`, `author`, and `metadata`
+(`isbn13`, `isbn10`, `authors`, `normalized_title`, `confidence`,
+`google_volume_id`, `provider=google_books`, …). Never mutates the input
+`Book`.
+
+**Testing**
+
+Inject `fetch_json=` to supply canned payloads; unit tests do not require
+Internet access.
+
+**Adding another catalog provider**
+
+1. Implement `BookEnrichmentProvider.enrich(book) -> BookEnrichmentResult`
+   under `services/lookups/` (keep HTTP details inside the adapter).
+2. Inject it: `BookEnrichmentService(provider=MyProvider(...))`.
+3. Wire the service into the generation pipeline in a later milestone — do
+   not change `WorkbookGenerationService` until enrichment is intentionally
+   enabled.
+
+`IsbnLookupService` remains a narrower ISBN-string lookup protocol; prefer
+`BookEnrichmentProvider` for new enrichment work.
 
 ### Deprecated modules (unused by CLI)
 
@@ -761,7 +847,11 @@ by `WorkbookGenerationService`.
 2. **CLI progress output** — consume `GenerationProgressReporter` without
    changing the generation pipeline
 3. **CLI commands** — `validate`, `clean`, `diagnostics` already registered
-4. **ISBN lookup APIs** — `IsbnLookupService` under `services/lookups/`
+4. **ISBN / catalog enrichment** — `BookEnrichmentProvider` implementations
+   under `services/lookups/` injected into `BookEnrichmentService`.
+   `GoogleBooksEnrichmentProvider` is implemented; null provider remains the
+   default (not wired into generation). Narrower `IsbnLookupService` remains
+   for ISBN-string lookups.
 5. **Cover downloads** — `CoverDownloadService` under `services/covers/`
 6. **Rendering backends** — additional `BarcodeRenderer` implementations under
    `rendering/` (SVG, QR, Code128, alternate libraries)

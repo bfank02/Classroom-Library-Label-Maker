@@ -9,13 +9,19 @@ Canonical pipeline for new development and the CLI ``generate`` command::
 
 Also stable: :class:`IsbnValidator`, :class:`BarcodeGenerationService`.
 
+Experimental enrichment (not wired into generation yet):
+
+* :class:`BookEnrichmentService`
+* :class:`NullBookEnrichmentProvider`
+* :class:`GoogleBooksEnrichmentProvider` (``services.lookups``)
+
 Deprecated / unused by the CLI (kept for transitional imports only):
 
 * :class:`BatchProcessor`
 * :class:`BarcodeGenerator`
 
-Extension protocols live in ``services.protocols``; future providers belong
-under ``services.lookups`` and ``services.covers``.
+Extension protocols live in ``services.protocols``; catalog providers belong
+under ``services.lookups`` and cover providers under ``services.covers``.
 """
 
 from __future__ import annotations
@@ -28,6 +34,10 @@ from classroom_library_label_maker.services.batch_processing_service import (
     BatchProcessingService,
 )
 from classroom_library_label_maker.services.batch_processor import BatchProcessor
+from classroom_library_label_maker.services.book_enrichment_service import (
+    BookEnrichmentService,
+    NullBookEnrichmentProvider,
+)
 from classroom_library_label_maker.services.excel_import_service import (
     ExcelImportService,
 )
@@ -38,6 +48,9 @@ from classroom_library_label_maker.services.isbn_validator import (
 from classroom_library_label_maker.services.label_layout_service import (
     LabelLayoutService,
 )
+from classroom_library_label_maker.services.lookups import (
+    GoogleBooksEnrichmentProvider,
+)
 from classroom_library_label_maker.services.workbook_generation_service import (
     WorkbookGenerationService,
 )
@@ -47,9 +60,12 @@ __all__ = [
     "BarcodeGenerator",
     "BatchProcessingService",
     "BatchProcessor",
+    "BookEnrichmentService",
     "ExcelImportService",
+    "GoogleBooksEnrichmentProvider",
     "ISBNValidator",
     "IsbnValidator",
     "LabelLayoutService",
+    "NullBookEnrichmentProvider",
     "WorkbookGenerationService",
 ]

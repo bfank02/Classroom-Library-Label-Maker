@@ -55,7 +55,13 @@ Phase 3 is printing only.
 
 ## Phase 5 — Extensibility
 
-- [ ] ISBN lookup providers (`services/lookups/`)
+- [x] Book enrichment architecture (`BookEnrichmentService`,
+      `BookEnrichmentProvider`, `NullBookEnrichmentProvider`) — not wired into
+      generation yet; behavior unchanged from Version 1.0
+- [x] Google Books enrichment provider (`GoogleBooksEnrichmentProvider`) —
+      optional inject; not used during generation
+- [ ] Additional catalog providers (Open Library, …)
+- [ ] Wire enrichment into the generation pipeline when enabled
 - [ ] Cover image downloads (`services/covers/`)
 - [ ] Inventory / checkout / reading-level workflows
 - [ ] Additional barcode symbologies and label types

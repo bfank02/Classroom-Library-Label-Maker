@@ -78,13 +78,14 @@ barcode_generator/
 │       │   ├── isbn_validator.py
 │       │   ├── barcode_generation_service.py
 │       │   ├── batch_processing_service.py
+│       │   ├── book_enrichment_service.py  # Enrichment orchestration (null default)
 │       │   ├── excel_import_service.py
 │       │   ├── label_layout_service.py
 │       │   ├── workbook_generation_service.py
 │       │   ├── barcode_generator.py    # Deprecated CLI helper
 │       │   ├── batch_processor.py      # Deprecated CLI adapter
-│       │   ├── protocols.py            # Lookup / cover / progress contracts
-│       │   ├── lookups/                # Future ISBN APIs
+│       │   ├── protocols.py            # Enrichment / lookup / cover / progress contracts
+│       │   ├── lookups/                # GoogleBooksEnrichmentProvider (+ future)
 │       │   └── covers/                 # Future cover downloads
 │       ├── rendering/                  # Barcode image rendering (protocol + backends)
 │       │   ├── renderer.py
@@ -248,6 +249,25 @@ python -c "from classroom_library_label_maker.config import load_application_set
 - Optional `BatchProgressReporter` for future progress UI
 - Optional `BatchCancellationToken` constructor hook for future cooperative
   cancel (accepted now, **not enforced** yet)
+
+### Book enrichment (optional; not used during generation)
+
+`BookEnrichmentService` is the extension point for automatic ISBN / catalog
+lookup. It depends only on `BookEnrichmentProvider` and defaults to
+`NullBookEnrichmentProvider` (`SKIPPED`, no network I/O).
+
+`GoogleBooksEnrichmentProvider` searches Google Books by title/author
+(confidence-scored; sequential queries). Inject it explicitly — it is **not**
+wired into `WorkbookGenerationService`, the CLI, or the GUI:
+
+```powershell
+python -c "from classroom_library_label_maker.models import Book; from classroom_library_label_maker.services import BookEnrichmentService, GoogleBooksEnrichmentProvider; b=Book(isbn='9780064400558', title=\"Charlotte's Web\", author='E. B. White'); r=BookEnrichmentService(provider=GoogleBooksEnrichmentProvider()).enrich(b); print(r.status, r.isbn, r.title)"
+```
+
+- Default path (null provider) leaves generation behavior unchanged
+- Matching strategy and HTTP error handling:
+  [`docs/Architecture.md`](../docs/Architecture.md)
+- Public surface: [`docs/PublicAPI.md`](../docs/PublicAPI.md)
 
 ### Excel import
 

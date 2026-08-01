@@ -159,9 +159,34 @@ and label template selection for a run.
 **Purpose:** Older aggregate used only by deprecated `BatchProcessor.write_results`.
 **Do not use for new development.** Prefer `BatchProcessingResult`.
 
+### `BookEnrichmentStatus` — Experimental — External
+
+**Purpose:** Outcome codes for one enrichment attempt:
+`FOUND`, `NOT_FOUND`, `SKIPPED`, `AMBIGUOUS`, `ERROR`.
+
+### `BookEnrichmentResult` — Experimental — External
+
+**Purpose:** Immutable enrichment outcome for one `Book`. Core fields cover
+common catalog metadata; `metadata` holds additive key/value pairs without
+requiring a model redesign when new providers land.
+
+**Fields:** `isbn`, `status`, optional `title` / `author`, `message`,
+`metadata`.
+
+| Method | Outputs |
+|--------|---------|
+| `to_dict()` | JSON-compatible `dict` (copies `metadata`) |
+
+**Notes**
+
+- Frozen dataclass (`frozen=True`, `slots=True`).
+- Providers must not mutate the input `Book`; return a new result instead.
+- Prefer this model over `IsbnLookupResult` for new enrichment pipelines.
+
 ### `IsbnLookupResult` / `CoverImageResult` — Experimental — External
 
-**Purpose:** Reserved result shapes for future enrichment providers.
+**Purpose:** Reserved result shapes for narrower ISBN-string lookup and cover
+download providers. Prefer `BookEnrichmentResult` for book enrichment.
 
 ---
 
@@ -271,14 +296,79 @@ Package: `classroom_library_label_maker.services`
 | `ExcelImportService` | Stable | External | Workbook → `Book` import |
 | `LabelLayoutService` | Stable | External | Arrange books onto label sheets |
 | `WorkbookGenerationService` | Stable | External | End-to-end import → barcodes → layout → save (canonical runtime for CLI and desktop GUI) |
+| `BookEnrichmentService` | Experimental | External | Provider-agnostic book enrichment orchestration (not wired into generation yet) |
+| `NullBookEnrichmentProvider` | Experimental | External | Default no-op provider (`SKIPPED`; preserves Version 1.0 behavior) |
+| `GoogleBooksEnrichmentProvider` | Experimental | External | Google Books title/author enrichment (optional; not default) |
 | `BatchProcessor` | Internal / Deprecated | Unused by CLI | Legacy JSON stub; do not use |
 | `BarcodeGenerator` | Internal / Deprecated | Unused by CLI | Legacy stub; superseded by `BarcodeGenerationService` |
+
+### `BookEnrichmentService` — Experimental — External
+
+Module: `classroom_library_label_maker.services.book_enrichment_service`
+
+**Purpose:** Delegate enrichment of a `Book` to a `BookEnrichmentProvider`.
+Defaults to `NullBookEnrichmentProvider`. Performs no HTTP. Not used by
+`WorkbookGenerationService` / CLI / GUI in this release.
+
+| Method | Inputs | Outputs |
+|--------|--------|---------|
+| `__init__(*, provider=None)` | Optional `BookEnrichmentProvider` | service |
+| `enrich(book)` | `Book` | `BookEnrichmentResult` |
+| `enrich_many(books)` | `Sequence[Book]` | `list[BookEnrichmentResult]` (order preserved) |
+| `provider` (property) | — | configured provider |
+
+**External use:** Yes for library callers experimenting with enrichment; do
+not assume it runs during label generation until a later milestone wires it in.
+
+### `NullBookEnrichmentProvider` — Experimental — External
+
+**Purpose:** No-op `BookEnrichmentProvider` that returns `SKIPPED` and echoes
+existing title/author. Preserves Version 1.0 generation semantics when used
+as the default collaborator.
+
+### `GoogleBooksEnrichmentProvider` — Experimental — External
+
+Module: `classroom_library_label_maker.services.lookups.google_books`
+(also re-exported from `classroom_library_label_maker.services`)
+
+**Purpose:** Search Google Books for the best title/author match. Implements
+`BookEnrichmentProvider`. HTTP and Google JSON stay inside the adapter.
+
+| Method / ctor | Inputs | Outputs |
+|---------------|--------|---------|
+| `__init__(*, timeout_seconds=10, max_results=10, api_key=None, fetch_json=None)` | Optional timeout, page size, API key, injectable JSON GET | provider |
+| `enrich(book)` | `Book` | `BookEnrichmentResult` (`FOUND` / `AMBIGUOUS` / `NOT_FOUND` / `ERROR`) |
+
+**Query order:** `intitle+inauthor` → `intitle` → free-text `title author`
+(sequential; no author-only search).
+
+**Notes**
+
+- Does not mutate `Book`.
+- Transport failures map to `ERROR` (no leaked exceptions).
+- `fetch_json` is for tests / custom transports; production uses urllib.
+- Not the default provider; not used by generation / CLI / GUI.
+
+**External use:** Yes when callers explicitly inject it into
+`BookEnrichmentService`.
 
 ---
 
 ## Protocols
 
 Module: `classroom_library_label_maker.services.protocols`
+
+### `BookEnrichmentProvider` — Experimental — External
+
+**Purpose:** Minimal provider-agnostic contract for enriching a `Book`.
+Avoids HTTP and catalog-specific types on the interface.
+
+| Method | Inputs | Outputs |
+|--------|--------|---------|
+| `enrich(book)` | `Book` | `BookEnrichmentResult` (must not mutate `book`) |
+
+**Extension point:** Implement under `services/lookups/` and inject into
+`BookEnrichmentService(provider=...)`.
 
 ### `BatchProgressReporter` — Stable — External
 
@@ -303,7 +393,9 @@ Module: `classroom_library_label_maker.services.protocols`
 
 ### `IsbnLookupService` / `CoverDownloadService` — Experimental — External
 
-**Purpose:** Future enrichment contracts (`lookup`, `download`).
+**Purpose:** Narrower ISBN-string lookup (`lookup`) and cover download
+(`download`) contracts. Prefer `BookEnrichmentProvider` for book enrichment
+pipelines.
 
 ---
 

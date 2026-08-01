@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Book enrichment architecture: `BookEnrichmentService`,
+  `BookEnrichmentProvider`, `NullBookEnrichmentProvider`, plus immutable
+  `BookEnrichmentResult` / `BookEnrichmentStatus` (not wired into generation;
+  Version 1.0 behavior unchanged)
+- `GoogleBooksEnrichmentProvider`: title/author Google Books search with
+  normalization, confidence scoring, and transport errors mapped to
+  `BookEnrichmentResult` (optional inject; not used during generation)
 - Cross-platform packaging: shared `scripts/build_release.py`, macOS
   `build_macos.sh`, updated Windows `build.bat`
 - Native macOS `.app` bundle support (Finder-launchable, bundled runtime)
