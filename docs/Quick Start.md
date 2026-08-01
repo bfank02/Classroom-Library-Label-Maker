@@ -18,6 +18,10 @@ Row 1 must use these column headers (exact spelling):
 A ready-made example is included: `samples/Sample Books.xlsx` (also under
 `barcode_generator/assets/sample-data/`).
 
+For a larger **manual QA / demo** inventory (~190 books with blank ISBNs,
+duplicates, and ambiguous titles), use
+`samples/Teacher Demo Library.xlsx`.
+
 ## 2. Open the app
 
 Launch Classroom Library Label Maker, then choose:
