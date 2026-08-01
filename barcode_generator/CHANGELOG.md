@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Integrated ISBN enrichment during generation (`lookup_missing_isbns`,
   progress stage, GUI checkbox, `EnrichmentSummary` on
   `WorkbookGenerationResult`)
+- Enrichment review details: immutable `ReviewItem` list on
+  `EnrichmentSummary`, shown in GUI/CLI ISBN Lookup Summary (up to five
+  titles) and generation logs
 - Cross-platform packaging: shared `scripts/build_release.py`, macOS
   `build_macos.sh`, updated Windows `build.bat`
 - Native macOS `.app` bundle support (Finder-launchable, bundled runtime)

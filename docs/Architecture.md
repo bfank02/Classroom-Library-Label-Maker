@@ -378,7 +378,9 @@ or accepts an injected `BookEnrichmentService` for tests.
 * Ambiguous / not-found / error outcomes become warnings; generation continues.
 * `EnrichmentSummary` on `WorkbookGenerationResult` records counts (already
   had ISBN, looked up, found, ambiguous, not found, errors, cache hits/misses)
-  for GUI, CLI, and logs.
+  plus `review_items` (`ReviewItem` title/author/status/message) for books that
+  still need attention. GUI and CLI show an **ISBN Lookup Summary** with up to
+  five review titles when needed.
 * When `lookup_missing_isbns` is **False**, import skips blank ISBN rows and
   no enrichment stage runs (Version 1.0 behavior).
 * The teacher's inventory workbook is never modified.

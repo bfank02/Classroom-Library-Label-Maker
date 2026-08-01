@@ -263,6 +263,8 @@ lookup stage).
 
 Progress stage: **"Looking up missing ISBNs..."**. Results are summarized in
 `EnrichmentSummary` on `WorkbookGenerationResult` (consumed by GUI/CLI/logs).
+When some books still need attention, the completion message includes an
+**ISBN Lookup Summary** with found/needs-review counts and up to five titles.
 
 - In-memory cache on the service (normalized title+author; all statuses)
 - Ambiguous / not-found / errors become warnings; generation continues

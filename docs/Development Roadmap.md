@@ -63,6 +63,7 @@ Phase 3 is printing only.
 - [x] In-memory enrichment cache on `BookEnrichmentService` (title/author key)
 - [x] Wire enrichment into generation (`lookup_missing_isbns`, GUI checkbox,
       progress stage, `EnrichmentSummary`)
+- [x] Enrichment review details (`ReviewItem` + ISBN Lookup Summary in GUI/CLI)
 - [ ] Additional catalog providers (Open Library, …)
 - [ ] Cover image downloads (`services/covers/`)
 - [ ] Inventory / checkout / reading-level workflows

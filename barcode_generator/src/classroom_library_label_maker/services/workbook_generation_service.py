@@ -32,6 +32,7 @@ from classroom_library_label_maker.models import (
     EnrichmentSummary,
     ImportWarning,
     LabelLayoutWarning,
+    ReviewItem,
     WorkbookGenerationResult,
     WorkbookGenerationWarning,
 )
@@ -315,6 +316,7 @@ class WorkbookGenerationService:
         not_found = 0
         errors = 0
         warnings: list[WorkbookGenerationWarning] = []
+        review_items: list[ReviewItem] = []
         updated: list[Book] = []
 
         for book in books:
@@ -325,10 +327,12 @@ class WorkbookGenerationService:
 
             looked_up += 1
             result = enrichment.enrich(book)
-            next_book, warning = self._apply_enrichment_result(book, result)
+            next_book, warning, review = self._apply_enrichment_result(book, result)
             updated.append(next_book)
             if warning is not None:
                 warnings.append(warning)
+            if review is not None:
+                review_items.append(review)
 
             if result.status is BookEnrichmentStatus.FOUND:
                 if next_book.isbn != book.isbn and self._isbn_validator.is_valid(
@@ -358,15 +362,33 @@ class WorkbookGenerationService:
             lookup_errors=errors,
             cache_hits=enrichment.cache_hits - hits_before,
             cache_misses=enrichment.cache_misses - misses_before,
+            review_items=tuple(review_items),
         )
+        if review_items:
+            _logger.info(
+                "ISBN enrichment needs review for %s book(s):",
+                len(review_items),
+            )
+            for item in review_items:
+                _logger.info(
+                    "  [%s] %s by %s - %s",
+                    item.status.value,
+                    item.title,
+                    item.author,
+                    item.message,
+                )
         return updated, summary, warnings
 
     def _apply_enrichment_result(
         self,
         book: Book,
         result: BookEnrichmentResult,
-    ) -> tuple[Book, WorkbookGenerationWarning | None]:
-        """Apply a successful lookup; emit warnings for non-fatal outcomes."""
+    ) -> tuple[
+        Book,
+        WorkbookGenerationWarning | None,
+        ReviewItem | None,
+    ]:
+        """Apply a successful lookup; emit warnings/review items for outcomes."""
         if result.status is BookEnrichmentStatus.FOUND:
             candidate = (result.isbn or "").strip()
             if candidate and self._isbn_validator.is_valid(candidate):
@@ -380,46 +402,86 @@ class WorkbookGenerationService:
                     location=book.location,
                     condition=book.condition,
                 )
-                return enriched, None
-            return book, WorkbookGenerationWarning(
-                message=(
-                    f"Enrichment found no usable ISBN for "
-                    f"{book.title!r} by {book.author!r}"
+                return enriched, None, None
+            return (
+                book,
+                WorkbookGenerationWarning(
+                    message=(
+                        f"Enrichment found no usable ISBN for "
+                        f"{book.title!r} by {book.author!r}"
+                    ),
+                    code="enrichment_not_found",
+                    isbn=book.isbn,
                 ),
-                code="enrichment_not_found",
-                isbn=book.isbn,
+                ReviewItem(
+                    title=book.title,
+                    author=book.author,
+                    status=BookEnrichmentStatus.NOT_FOUND,
+                    message="No usable ISBN found",
+                ),
             )
 
         if result.status is BookEnrichmentStatus.AMBIGUOUS:
-            return book, WorkbookGenerationWarning(
-                message=(
-                    f"Ambiguous ISBN match for {book.title!r} by {book.author!r}"
-                    + (f": {result.message}" if result.message else "")
+            return (
+                book,
+                WorkbookGenerationWarning(
+                    message=(
+                        f"Ambiguous ISBN match for {book.title!r} by "
+                        f"{book.author!r}"
+                        + (f": {result.message}" if result.message else "")
+                    ),
+                    code="enrichment_ambiguous",
+                    isbn=book.isbn,
                 ),
-                code="enrichment_ambiguous",
-                isbn=book.isbn,
+                ReviewItem(
+                    title=book.title,
+                    author=book.author,
+                    status=BookEnrichmentStatus.AMBIGUOUS,
+                    message="Multiple catalog matches",
+                ),
             )
 
         if result.status is BookEnrichmentStatus.ERROR:
-            return book, WorkbookGenerationWarning(
-                message=(
-                    f"ISBN lookup error for {book.title!r} by {book.author!r}"
-                    + (f": {result.message}" if result.message else "")
+            short = (result.message or "Lookup failed").strip()
+            if len(short) > 80:
+                short = short[:77] + "..."
+            return (
+                book,
+                WorkbookGenerationWarning(
+                    message=(
+                        f"ISBN lookup error for {book.title!r} by {book.author!r}"
+                        + (f": {result.message}" if result.message else "")
+                    ),
+                    code="enrichment_error",
+                    isbn=book.isbn,
                 ),
-                code="enrichment_error",
-                isbn=book.isbn,
+                ReviewItem(
+                    title=book.title,
+                    author=book.author,
+                    status=BookEnrichmentStatus.ERROR,
+                    message=short or "Lookup failed",
+                ),
             )
 
         if result.status is BookEnrichmentStatus.NOT_FOUND:
-            return book, WorkbookGenerationWarning(
-                message=(
-                    f"No ISBN found for {book.title!r} by {book.author!r}"
+            return (
+                book,
+                WorkbookGenerationWarning(
+                    message=(
+                        f"No ISBN found for {book.title!r} by {book.author!r}"
+                    ),
+                    code="enrichment_not_found",
+                    isbn=book.isbn,
                 ),
-                code="enrichment_not_found",
-                isbn=book.isbn,
+                ReviewItem(
+                    title=book.title,
+                    author=book.author,
+                    status=BookEnrichmentStatus.NOT_FOUND,
+                    message="No ISBN found",
+                ),
             )
 
-        return book, None
+        return book, None, None
 
     def _report(
         self,

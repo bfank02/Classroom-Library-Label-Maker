@@ -654,6 +654,33 @@ class GenerationCompletionState(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class ReviewItem:
+    """A book that still needs teacher attention after ISBN enrichment.
+
+    Attributes:
+        title: Inventory title.
+        author: Inventory author.
+        status: Enrichment outcome that requires review (ambiguous / not found /
+            error).
+        message: Short, actionable explanation for UI and logs.
+    """
+
+    title: str
+    author: str
+    status: BookEnrichmentStatus
+    message: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize this item to a JSON-compatible dictionary."""
+        return {
+            "title": self.title,
+            "author": self.author,
+            "status": self.status.value,
+            "message": self.message,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class EnrichmentSummary:
     """Aggregate ISBN enrichment outcomes for one generation run.
 
@@ -669,6 +696,8 @@ class EnrichmentSummary:
         lookup_errors: Lookups that returned ``ERROR``.
         cache_hits: In-memory enrichment cache hits during the run.
         cache_misses: In-memory enrichment cache misses during the run.
+        review_items: Books requiring manual attention (ambiguous / not found /
+            error). Successful lookups are omitted.
     """
 
     enabled: bool = False
@@ -680,6 +709,12 @@ class EnrichmentSummary:
     lookup_errors: int = 0
     cache_hits: int = 0
     cache_misses: int = 0
+    review_items: tuple[ReviewItem, ...] = ()
+
+    @property
+    def needs_review_count(self) -> int:
+        """Number of books that still need teacher attention."""
+        return len(self.review_items)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize this summary to a JSON-compatible dictionary."""
@@ -693,6 +728,8 @@ class EnrichmentSummary:
             "lookup_errors": self.lookup_errors,
             "cache_hits": self.cache_hits,
             "cache_misses": self.cache_misses,
+            "needs_review_count": self.needs_review_count,
+            "review_items": [item.to_dict() for item in self.review_items],
         }
 
 
@@ -849,8 +886,7 @@ class ApplicationSettings:
             template id (e.g. ``avery-5160``). Used by LabelLayoutService.
         label_content: Which title/author/barcode fields appear on labels.
         lookup_missing_isbns: When True, look up missing ISBNs during generation
-            via :class:`~classroom_library_label_maker.services.book_enrichment_service.BookEnrichmentService`
-            before barcode validation.
+            via ``BookEnrichmentService`` before barcode validation.
     """
 
     barcode_output_directory: Path

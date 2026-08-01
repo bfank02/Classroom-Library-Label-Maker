@@ -147,7 +147,20 @@ recoverable diagnostics (e.g. missing barcode images).
 
 **Fields:** `enabled`, `books_with_isbn`, `books_looked_up`, `isbns_found`,
 `ambiguous_matches`, `not_found`, `lookup_errors`, `cache_hits`,
-`cache_misses`.
+`cache_misses`, `review_items`.
+
+**Derived:** `needs_review_count` = `len(review_items)`.
+
+### `ReviewItem` — Experimental — External
+
+**Purpose:** One book that still needs teacher attention after automatic ISBN
+lookup (`AMBIGUOUS`, `NOT_FOUND`, or `ERROR`). Successful finds are omitted.
+
+**Fields:** `title`, `author`, `status` (`BookEnrichmentStatus`), `message`
+(short explanation).
+
+GUI/CLI show an **ISBN Lookup Summary** (found count, needs-review count, up
+to five titles, then `...and X more.`) when `review_items` is non-empty.
 
 ### `ApplicationSettings` — Stable — External
 
