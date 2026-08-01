@@ -40,6 +40,16 @@ def _publication_year(candidate: ReviewCandidate) -> str:
     return raw or "—"
 
 
+_CARD_LABEL_STYLE = (
+    "QLabel#reviewConfidenceBadge {color: #1a1a1a; font-weight: 600;}"
+    "QLabel#reviewRecommendedBadge {color: #146c43; font-weight: 600;}"
+    "QLabel#reviewCandidateIsbn {color: #1a1a1a;}"
+    "QLabel#reviewCandidateTitle {color: #111111; font-weight: 600;}"
+    "QLabel#reviewCandidateAuthor {color: #333333;}"
+    "QLabel#reviewCandidateMeta {color: #555555;}"
+)
+
+
 class CandidateCard(QFrame):
     """Selectable card for one preserved catalog candidate."""
 
@@ -102,28 +112,28 @@ class CandidateCard(QFrame):
         self.set_selected(False)
 
     def set_selected(self, selected: bool) -> None:
-        """Update visual selection styling."""
+        """Update visual selection styling.
+
+        Cards always use a light surface with explicit dark label colors so
+        text stays readable under macOS dark mode (system text would otherwise
+        be light-on-light).
+        """
         self.setProperty("selected", selected)
         self.style().unpolish(self)
         self.style().polish(self)
         if selected:
-            self.setStyleSheet(
+            frame = (
                 "QFrame#reviewCandidateCard {"
                 "border: 2px solid #2a6f97; border-radius: 6px;"
-                "background: #eef6fb;}"
-                "QLabel#reviewConfidenceBadge {font-weight: 600;}"
-                "QLabel#reviewRecommendedBadge {"
-                "color: #1b4332; font-weight: 600;}"
+                "background: #e8f4fc;}"
             )
         else:
-            self.setStyleSheet(
+            frame = (
                 "QFrame#reviewCandidateCard {"
-                "border: 1px solid #c5c5c5; border-radius: 6px;"
-                "background: #ffffff;}"
-                "QLabel#reviewConfidenceBadge {font-weight: 600;}"
-                "QLabel#reviewRecommendedBadge {"
-                "color: #1b4332; font-weight: 600;}"
+                "border: 1px solid #b0b0b0; border-radius: 6px;"
+                "background: #f5f5f5;}"
             )
+        self.setStyleSheet(frame + _CARD_LABEL_STYLE)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
@@ -348,6 +358,7 @@ class ReviewWizardDialog(QDialog):
             )
             empty.setObjectName("reviewCandidatesEmpty")
             empty.setWordWrap(True)
+            empty.setStyleSheet("color: #cccccc;")
             self._candidates_layout.addWidget(empty)
             self._candidates_layout.addStretch(1)
             return
