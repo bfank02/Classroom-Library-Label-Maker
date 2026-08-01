@@ -2,6 +2,9 @@
 
 Widgets and layout live here. Form state, validation, and user actions are
 owned by :class:`~classroom_library_label_maker.gui.controller.GuiController`.
+
+Version 1.4 Phase 5 organizes Home into Files / Options / Actions with a
+subtle header and version footer (presentation only).
 """
 
 from __future__ import annotations
@@ -28,10 +31,14 @@ from PySide6.QtWidgets import (
 
 from classroom_library_label_maker.constants import DEFAULT_LABEL_FILENAME
 from classroom_library_label_maker.gui.completion_view import CompletionView
-from classroom_library_label_maker.metadata import APP_NAME
+from classroom_library_label_maker.metadata import APP_NAME, APP_VERSION
 
 _HOME_PAGE = 0
 _COMPLETION_PAGE = 1
+
+_HOME_TAGLINE = (
+    "Generate printable barcode labels for your classroom library."
+)
 
 
 class FilenameLineEdit(QLineEdit):
@@ -63,8 +70,8 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle(APP_NAME)
-        self.setMinimumSize(560, 480)
-        self.resize(720, 560)
+        self.setMinimumSize(600, 560)
+        self.resize(740, 640)
         self.setAccessibleName(APP_NAME)
 
         central = QWidget(self)
@@ -91,7 +98,7 @@ class MainWindow(QMainWindow):
         return self.stack.currentIndex() == _COMPLETION_PAGE
 
     def show_home(self) -> None:
-        """Show the normal Files / options / Generate home screen."""
+        """Show the normal Files / Options / Actions home screen."""
         self.stack.setCurrentIndex(_HOME_PAGE)
 
     def show_completion(self) -> None:
@@ -102,9 +109,44 @@ class MainWindow(QMainWindow):
         home = QWidget()
         home.setObjectName("homePage")
         root = QVBoxLayout(home)
-        root.setContentsMargins(28, 24, 28, 24)
-        root.setSpacing(18)
+        root.setContentsMargins(32, 28, 32, 20)
+        root.setSpacing(22)
 
+        root.addWidget(self._build_header())
+        root.addWidget(self._build_files_section())
+        root.addWidget(self._build_options_section())
+        root.addWidget(self._build_actions_section())
+        root.addStretch(1)
+        root.addLayout(self._build_version_row())
+        return home
+
+    def _build_header(self) -> QWidget:
+        header = QWidget()
+        header.setObjectName("homeHeader")
+        header.setAccessibleName("Application header")
+        layout = QVBoxLayout(header)
+        layout.setContentsMargins(0, 0, 0, 4)
+        layout.setSpacing(6)
+
+        self.header_title_label = QLabel(APP_NAME)
+        self.header_title_label.setObjectName("homeHeaderTitle")
+        self.header_title_label.setStyleSheet(
+            "font-size: 22px; font-weight: 700; color: #111111;"
+        )
+        self.header_title_label.setAccessibleName(APP_NAME)
+        layout.addWidget(self.header_title_label)
+
+        self.header_subtitle_label = QLabel(_HOME_TAGLINE)
+        self.header_subtitle_label.setObjectName("homeHeaderSubtitle")
+        self.header_subtitle_label.setWordWrap(True)
+        self.header_subtitle_label.setStyleSheet(
+            "font-size: 13px; color: #555555;"
+        )
+        self.header_subtitle_label.setAccessibleName("Application description")
+        layout.addWidget(self.header_subtitle_label)
+        return header
+
+    def _build_files_section(self) -> QGroupBox:
         files_group = QGroupBox("Files")
         files_group.setObjectName("filesGroup")
         files_group.setAccessibleName("Files")
@@ -113,7 +155,7 @@ class MainWindow(QMainWindow):
             "and label file name."
         )
         files_layout = QVBoxLayout(files_group)
-        files_layout.setContentsMargins(12, 16, 12, 12)
+        files_layout.setContentsMargins(16, 18, 16, 16)
         files_layout.setSpacing(0)
 
         form = QFormLayout()
@@ -177,7 +219,19 @@ class MainWindow(QMainWindow):
         ) = self._add_filename_row(form)
 
         files_layout.addLayout(form)
-        root.addWidget(files_group)
+        return files_group
+
+    def _build_options_section(self) -> QGroupBox:
+        options_group = QGroupBox("Options")
+        options_group.setObjectName("optionsGroup")
+        options_group.setAccessibleName("Options")
+        options_group.setAccessibleDescription(
+            "Choose the label template, what appears on each label, and "
+            "whether to look up missing ISBNs automatically."
+        )
+        options_layout = QVBoxLayout(options_group)
+        options_layout.setContentsMargins(16, 18, 16, 16)
+        options_layout.setSpacing(0)
 
         options_form = QFormLayout()
         options_form.setContentsMargins(0, 0, 0, 0)
@@ -265,7 +319,19 @@ class MainWindow(QMainWindow):
         )
         options_form.addRow("", self.lookup_missing_isbns_checkbox)
 
-        root.addLayout(options_form)
+        options_layout.addLayout(options_form)
+        return options_group
+
+    def _build_actions_section(self) -> QGroupBox:
+        actions_group = QGroupBox("Actions")
+        actions_group.setObjectName("actionsGroup")
+        actions_group.setAccessibleName("Actions")
+        actions_group.setAccessibleDescription(
+            "Generate labels and view progress or status messages."
+        )
+        actions_layout = QVBoxLayout(actions_group)
+        actions_layout.setContentsMargins(16, 18, 16, 18)
+        actions_layout.setSpacing(16)
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusLabel")
@@ -273,16 +339,15 @@ class MainWindow(QMainWindow):
         self.status_label.setAlignment(
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
         )
-        self.status_label.setMinimumHeight(48)
+        self.status_label.setMinimumHeight(40)
         self.status_label.setAccessibleName("Status")
         self.status_label.setAccessibleDescription(
-            "Shows guidance, progress, success, and error messages."
+            "Shows guidance, progress, and error messages for generation."
         )
-        root.addWidget(self.status_label)
-
-        root.addStretch(1)
+        actions_layout.addWidget(self.status_label)
 
         button_row = QHBoxLayout()
+        button_row.setContentsMargins(0, 4, 0, 0)
         button_row.setSpacing(12)
         button_row.addStretch(1)
         self.generate_button = QPushButton("&Generate Labels")
@@ -290,8 +355,12 @@ class MainWindow(QMainWindow):
         self.generate_button.setEnabled(False)
         self.generate_button.setDefault(True)
         self.generate_button.setAutoDefault(True)
-        self.generate_button.setMinimumWidth(168)
-        self.generate_button.setMinimumHeight(32)
+        self.generate_button.setMinimumWidth(200)
+        self.generate_button.setMinimumHeight(40)
+        self.generate_button.setStyleSheet(
+            "QPushButton#generateButton {"
+            "font-size: 14px; font-weight: 600; padding: 8px 20px;}"
+        )
         self.generate_button.setToolTip(
             "Create the printable label workbook from your selections."
         )
@@ -302,8 +371,27 @@ class MainWindow(QMainWindow):
         )
         button_row.addWidget(self.generate_button)
         button_row.addStretch(1)
-        root.addLayout(button_row)
-        return home
+        actions_layout.addLayout(button_row)
+        return actions_group
+
+    def _build_version_row(self) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 4, 0, 0)
+        row.addStretch(1)
+        self.version_label = QLabel(f"Version {APP_VERSION}")
+        self.version_label.setObjectName("homeVersionLabel")
+        self.version_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        self.version_label.setStyleSheet(
+            "font-size: 11px; color: #888888;"
+        )
+        self.version_label.setAccessibleName("Application version")
+        self.version_label.setAccessibleDescription(
+            "Application version for support and troubleshooting"
+        )
+        row.addWidget(self.version_label)
+        return row
 
     def _install_shortcuts(self) -> None:
         close_action = QAction(self)
@@ -393,7 +481,14 @@ class MainWindow(QMainWindow):
         QWidget.setTabOrder(self.label_template_combo, self.show_title_checkbox)
         QWidget.setTabOrder(self.show_title_checkbox, self.show_author_checkbox)
         QWidget.setTabOrder(self.show_author_checkbox, self.show_barcode_checkbox)
-        QWidget.setTabOrder(self.show_barcode_checkbox, self.generate_button)
+        QWidget.setTabOrder(
+            self.show_barcode_checkbox,
+            self.lookup_missing_isbns_checkbox,
+        )
+        QWidget.setTabOrder(
+            self.lookup_missing_isbns_checkbox,
+            self.generate_button,
+        )
         QWidget.setTabOrder(
             self.completion_view.open_label_button,
             self.completion_view.open_inventory_button,

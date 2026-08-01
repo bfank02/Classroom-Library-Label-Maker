@@ -9,12 +9,14 @@ Start here: [`docs/Quick Start.md`](docs/Quick%20Start.md)
 1. Prepare an **inventory workbook** (Excel sheet named `Books` with columns
    `ISBN`, `Title`, `Author`, `Copies`) — or open `samples/Sample Books.xlsx`
    (small starter) / `samples/Teacher Demo Library.xlsx` (large manual-QA demo).
-2. Run the app. In the **Files** section choose your inventory workbook, a
-   barcode folder, a label folder, and the label file name (paths and the
-   filename are remembered after the first selection). Optionally leave
-   **Look up missing ISBNs automatically** checked so blank ISBN cells are
-   filled from title/author.
-3. Click **Generate Labels**. If some books still need ISBN choices, a
+2. Run the app. The Home screen has an application header plus **Files**,
+   **Options**, and **Actions** sections. In **Files**, choose your inventory
+   workbook, a barcode folder, a label folder, and the label file name (paths
+   and the filename are remembered after the first selection). In **Options**,
+   optionally leave **Look up missing ISBNs automatically** checked so blank
+   ISBN cells are filled from title/author.
+3. In **Actions**, click **Generate Labels** (status messages appear in that
+   section). If some books still need ISBN choices, a
    **Review ISBN Matches** wizard lets you pick or skip catalog matches
    (clear Progress / book / match sections; Skip and selections advance
    automatically; Finish Review appears on the last book). Optionally leave

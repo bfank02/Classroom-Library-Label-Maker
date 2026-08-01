@@ -1101,10 +1101,16 @@ MainWindow (QStackedWidget: Home | Ready to Print)
 UX notes:
 
 * Window title is the product name; Esc closes the window
+* Home (Version 1.4 Phase 5): subtle header (product name + tagline), then
+  labeled **Files** / **Options** / **Actions** sections top to bottom, with
+  a muted `Version x.y.z` footer for support
 * **Files** section: Inventory Workbook, Barcode Folder, Label Folder (Browse
   preserves filename), and editable Label File Name (stem selected on focus;
   `.xlsx` / `.xlsm` normalized). Generation still receives a full
   `output_path` (`label_folder / label_filename`)
+* **Options** section: label template, label contents, Look up missing ISBNs
+* **Actions** section: status message + emphasized **Generate Labels** button
+  (status is not part of Files)
 * `GuiPreferences` persists inventory workbook, barcode folder, label folder,
   and label filename independently (legacy `output_workbook` migrates on load)
 * Inventory browse prefers the sample workbook folder when present; folder

@@ -24,6 +24,8 @@ Copy into a PR description or a filled
       and visual polish are UI-only and must not change domain review logic)
 - [ ] Successful generation ends on Ready to Print (`CompletionView`); Done
       returns Home without clearing Files settings; no new generation logic
+- [ ] Home screen presentation uses Files / Options / Actions sections with
+      header and version footer; workflow and generation unchanged
 - [ ] New work uses `WorkbookGenerationService` (or its collaborators),
       not deprecated `BatchProcessor` / `BarcodeGenerator`
 - [ ] Unexpected failures map to the existing exception hierarchy where

@@ -77,6 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Review wizard presentation polish: Progress / Book / Candidates sections,
   friendly amber guidance, **⭐ Recommended Match**, stronger selected cards,
   skipped-state banner
+- Home screen organization: Files / Options / Actions sections, application
+  header, muted version footer (`Version 1.4.0`)
 
 ### Changed
 
@@ -94,6 +96,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Generate Labels visible with a long status message
 - Review wizard layout and card/badge styling refined for readability
   (workflow unchanged)
+- Home screen grouped into Files / Options / Actions; status moved under
+  Actions; Generate Labels emphasized
+- Package version set to **1.4.0**
 - Print barcodes render at 600 DPI with taller bars and fill more of the
   label; barcode row allocation grows when fewer text fields are shown
 

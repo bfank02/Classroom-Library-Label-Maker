@@ -95,5 +95,7 @@ Phase 3 is printing only.
 - [x] Ready to Print completion experience (full-page summary; Done → Home)
 - [x] Review experience polish (section hierarchy, cards, badges, skipped
       presentation; presentation-only)
+- [x] Home screen organization & polish (Files / Options / Actions; header;
+      version footer)
 
 See also: [`Architecture.md`](Architecture.md), [`../TASKS.md`](../TASKS.md).

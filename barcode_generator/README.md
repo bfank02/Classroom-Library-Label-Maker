@@ -426,7 +426,11 @@ Both call `classroom_library_label_maker.gui:main`, which creates
 ### Current user workflow
 
 The main window collects generation inputs and runs the engine **in the
-background**. The top **Files** section has four rows:
+background**. Home is organized top to bottom:
+
+**Header** — product name + short tagline (not a splash screen).
+
+**Files**
 
 1. **Inventory Workbook** — Browse… (Excel `.xlsx` / `.xlsm`; dialog opens in
    the sample folder when `Sample Books.xlsx` is present)
@@ -439,11 +443,14 @@ background**. The top **Files** section has four rows:
 Generation receives `label_folder / label_filename` as a complete
 `output_path`. All four Files values are persisted in `gui_preferences.json`.
 
-Then:
+**Options** — label template (default **Avery 5160**), label contents, and
+**Look up missing ISBNs automatically**.
 
-5. **Label template** — combo (default **Avery 5160**)
-6. **Generate Labels** — enabled when all fields validate; starts
-   `WorkbookGenerationService` on a Qt worker thread
+**Actions** — status line (progress / validation / errors) and the primary
+**Generate Labels** button (emphasized; starts `WorkbookGenerationService` on
+a Qt worker thread).
+
+Muted **Version x.y.z** appears in the lower-right for support.
 
 When enrichment leaves ambiguous matches, **Review ISBN Matches** opens over
 `ReviewSession` with Progress / Book Information / Candidate Selection
