@@ -418,6 +418,7 @@ class WorkbookGenerationService:
                     author=book.author,
                     status=BookEnrichmentStatus.NOT_FOUND,
                     message="No usable ISBN found",
+                    candidates=result.candidates,
                 ),
             )
 
@@ -438,6 +439,7 @@ class WorkbookGenerationService:
                     author=book.author,
                     status=BookEnrichmentStatus.AMBIGUOUS,
                     message="Multiple catalog matches",
+                    candidates=result.candidates,
                 ),
             )
 
@@ -460,6 +462,7 @@ class WorkbookGenerationService:
                     author=book.author,
                     status=BookEnrichmentStatus.ERROR,
                     message=short or "Lookup failed",
+                    candidates=result.candidates,
                 ),
             )
 
@@ -478,6 +481,7 @@ class WorkbookGenerationService:
                     author=book.author,
                     status=BookEnrichmentStatus.NOT_FOUND,
                     message="No ISBN found",
+                    candidates=result.candidates,
                 ),
             )
 

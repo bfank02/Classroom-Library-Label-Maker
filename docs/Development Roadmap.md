@@ -56,14 +56,16 @@ Phase 3 is printing only.
 ## Phase 5 — Extensibility
 
 - [x] Book enrichment architecture (`BookEnrichmentService`,
-      `BookEnrichmentProvider`, `NullBookEnrichmentProvider`) — not wired into
-      generation yet; behavior unchanged from Version 1.0
-- [x] Google Books enrichment provider (`GoogleBooksEnrichmentProvider`) —
-      optional inject; not used during generation
+      `BookEnrichmentProvider`, `NullBookEnrichmentProvider`)
+- [x] Google Books enrichment provider (`GoogleBooksEnrichmentProvider`)
 - [x] In-memory enrichment cache on `BookEnrichmentService` (title/author key)
 - [x] Wire enrichment into generation (`lookup_missing_isbns`, GUI checkbox,
       progress stage, `EnrichmentSummary`)
 - [x] Enrichment review details (`ReviewItem` + ISBN Lookup Summary in GUI/CLI)
+- [x] Candidate preservation for interactive review (`ReviewCandidate` on
+      `BookEnrichmentResult` / `ReviewItem`; ambiguous peers retained; no
+      review dialog yet)
+- [ ] Interactive review UI (choose among preserved candidates; no extra API)
 - [ ] Additional catalog providers (Open Library, …)
 - [ ] Cover image downloads (`services/covers/`)
 - [ ] Inventory / checkout / reading-level workflows

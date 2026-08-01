@@ -378,12 +378,31 @@ or accepts an injected `BookEnrichmentService` for tests.
 * Ambiguous / not-found / error outcomes become warnings; generation continues.
 * `EnrichmentSummary` on `WorkbookGenerationResult` records counts (already
   had ISBN, looked up, found, ambiguous, not found, errors, cache hits/misses)
-  plus `review_items` (`ReviewItem` title/author/status/message) for books that
-  still need attention. GUI and CLI show an **ISBN Lookup Summary** with up to
-  five review titles when needed.
+  plus `review_items` (`ReviewItem` title/author/status/message, optional
+  `candidates`) for books that still need attention. GUI and CLI show an
+  **ISBN Lookup Summary** with up to five review titles when needed.
 * When `lookup_missing_isbns` is **False**, import skips blank ISBN rows and
   no enrichment stage runs (Version 1.0 behavior).
 * The teacher's inventory workbook is never modified.
+
+**Candidate preservation (Phase 4.1 — future interactive review)**
+
+Automatic enrichment already produces `AMBIGUOUS` / `NOT_FOUND` / `ERROR`
+outcomes. Phase 4.1 preserves catalog choices on those results so a later
+review UI can let teachers pick an ISBN **without additional Google Books
+requests**:
+
+* Immutable `ReviewCandidate` holds `isbn13`, `isbn10`, `title`, `author`,
+  `publisher`, `published_date`, and `confidence`.
+* `BookEnrichmentResult.candidates` is populated for `AMBIGUOUS` (ordered by
+  descending confidence). Successful `FOUND` lookups keep `candidates=()`.
+* `ReviewItem.candidates` carries the same tuple through
+  `EnrichmentSummary` for the generation result.
+* The in-memory enrichment cache stores the full result (including
+  candidates), so repeat title/author lookups reuse preserved peers.
+
+No review dialog is built in this phase; generation behavior is unchanged
+aside from attaching candidate data on review items.
 
 **In-memory enrichment cache**
 
@@ -432,8 +451,9 @@ Each candidate is scored with weighted title/author similarity
 (`0.65 * title + 0.35 * author` via `difflib` + token overlap). Selection:
 
 * `FOUND` — single confident match, or multiple editions of the same work
-  (prefer ISBN-13)
-* `AMBIGUOUS` — multiple distinct works with close high scores
+  (prefer ISBN-13); `candidates` left empty
+* `AMBIGUOUS` — multiple distinct works with close high scores; peer list
+  stored on `candidates` (descending confidence) for later review
 * `NOT_FOUND` — no candidate above the confidence floor
 * `ERROR` — network / parse failures
 
@@ -441,7 +461,8 @@ Each candidate is scored with weighted title/author similarity
 
 Populates `isbn` (ISBN-13 preferred), `title`, `author`, and `metadata`
 (`isbn13`, `isbn10`, `authors`, `normalized_title`, `confidence`,
-`google_volume_id`, `provider=google_books`, …). Never mutates the input
+`google_volume_id`, `provider=google_books`, …). On `AMBIGUOUS`, also maps
+scored peers to public `ReviewCandidate` values. Never mutates the input
 `Book`.
 
 **Testing**
@@ -453,10 +474,10 @@ Internet access.
 
 1. Implement `BookEnrichmentProvider.enrich(book) -> BookEnrichmentResult`
    under `services/lookups/` (keep HTTP details inside the adapter).
-2. Inject it: `BookEnrichmentService(provider=MyProvider(...))`.
-3. Wire the service into the generation pipeline in a later milestone — do
-   not change `WorkbookGenerationService` until enrichment is intentionally
-   enabled.
+2. Inject it: `BookEnrichmentService(provider=MyProvider(...))` (or change
+   `create_default_enrichment_service()`).
+3. For ambiguous outcomes, populate `BookEnrichmentResult.candidates` so
+   interactive review can reuse peers without a second catalog round-trip.
 
 `IsbnLookupService` remains a narrower ISBN-string lookup protocol; prefer
 `BookEnrichmentProvider` for new enrichment work.

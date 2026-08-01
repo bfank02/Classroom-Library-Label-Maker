@@ -151,16 +151,29 @@ recoverable diagnostics (e.g. missing barcode images).
 
 **Derived:** `needs_review_count` = `len(review_items)`.
 
+### `ReviewCandidate` — Experimental — External
+
+**Purpose:** One catalog match preserved during enrichment for a future
+interactive review UI (no extra Google Books requests at review time).
+
+**Fields:** `isbn13`, `isbn10`, `title`, `author`, `publisher`,
+`published_date`, `confidence`.
+
+Frozen dataclass. Serialized via `to_dict()`.
+
 ### `ReviewItem` — Experimental — External
 
 **Purpose:** One book that still needs teacher attention after automatic ISBN
 lookup (`AMBIGUOUS`, `NOT_FOUND`, or `ERROR`). Successful finds are omitted.
 
 **Fields:** `title`, `author`, `status` (`BookEnrichmentStatus`), `message`
-(short explanation).
+(short explanation), `candidates` (`tuple[ReviewCandidate, ...]`, populated
+for ambiguous matches; empty otherwise).
 
 GUI/CLI show an **ISBN Lookup Summary** (found count, needs-review count, up
 to five titles, then `...and X more.`) when `review_items` is non-empty.
+Candidate data is retained for a future review dialog (not shown in the
+summary text yet).
 
 ### `ApplicationSettings` — Stable — External
 
@@ -197,17 +210,20 @@ common catalog metadata; `metadata` holds additive key/value pairs without
 requiring a model redesign when new providers land.
 
 **Fields:** `isbn`, `status`, optional `title` / `author`, `message`,
-`metadata`.
+`metadata`, `candidates` (`tuple[ReviewCandidate, ...]`; set for
+`AMBIGUOUS`, empty for successful `FOUND`).
 
 | Method | Outputs |
 |--------|---------|
-| `to_dict()` | JSON-compatible `dict` (copies `metadata`) |
+| `to_dict()` | JSON-compatible `dict` (copies `metadata` and candidates) |
 
 **Notes**
 
 - Frozen dataclass (`frozen=True`, `slots=True`).
 - Providers must not mutate the input `Book`; return a new result instead.
 - Prefer this model over `IsbnLookupResult` for new enrichment pipelines.
+- Candidate lists are produced once during enrichment and reused via the
+  enrichment cache / `ReviewItem` for interactive review.
 
 ### `IsbnLookupResult` / `CoverImageResult` — Experimental — External
 

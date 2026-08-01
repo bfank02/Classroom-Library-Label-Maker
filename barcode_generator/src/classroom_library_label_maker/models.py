@@ -654,6 +654,44 @@ class GenerationCompletionState(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class ReviewCandidate:
+    """One catalog match preserved for interactive ISBN review.
+
+    Produced during enrichment (especially for ``AMBIGUOUS`` outcomes) so a
+    later review UI can present choices without additional API requests.
+
+    Attributes:
+        isbn13: ISBN-13 when available.
+        isbn10: ISBN-10 when available.
+        title: Catalog title.
+        author: Catalog author(s), typically comma-joined.
+        publisher: Publisher name when available.
+        published_date: Publication date string when available.
+        confidence: Match confidence in ``[0, 1]`` against the inventory book.
+    """
+
+    isbn13: str | None = None
+    isbn10: str | None = None
+    title: str = ""
+    author: str = ""
+    publisher: str | None = None
+    published_date: str | None = None
+    confidence: float = 0.0
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize this candidate to a JSON-compatible dictionary."""
+        return {
+            "isbn13": self.isbn13,
+            "isbn10": self.isbn10,
+            "title": self.title,
+            "author": self.author,
+            "publisher": self.publisher,
+            "published_date": self.published_date,
+            "confidence": self.confidence,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class ReviewItem:
     """A book that still needs teacher attention after ISBN enrichment.
 
@@ -663,12 +701,16 @@ class ReviewItem:
         status: Enrichment outcome that requires review (ambiguous / not found /
             error).
         message: Short, actionable explanation for UI and logs.
+        candidates: Catalog matches preserved for interactive review. Populated
+            for ambiguous outcomes; empty for successful finds and most other
+            statuses.
     """
 
     title: str
     author: str
     status: BookEnrichmentStatus
     message: str
+    candidates: tuple[ReviewCandidate, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize this item to a JSON-compatible dictionary."""
@@ -677,6 +719,7 @@ class ReviewItem:
             "author": self.author,
             "status": self.status.value,
             "message": self.message,
+            "candidates": [candidate.to_dict() for candidate in self.candidates],
         }
 
 
@@ -1008,6 +1051,8 @@ class BookEnrichmentResult:
         metadata: Extensible bag for optional fields (e.g. publisher, subjects).
             Nested values are not deep-frozen; callers should treat them as
             read-only.
+        candidates: Catalog matches preserved for interactive review. Set for
+            ``AMBIGUOUS`` outcomes; empty for successful ``FOUND`` lookups.
     """
 
     isbn: str
@@ -1016,6 +1061,7 @@ class BookEnrichmentResult:
     author: str | None = None
     message: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
+    candidates: tuple[ReviewCandidate, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize this result to a JSON-compatible dictionary."""
@@ -1026,13 +1072,15 @@ class BookEnrichmentResult:
             "author": self.author,
             "message": self.message,
             "metadata": dict(self.metadata),
+            "candidates": [candidate.to_dict() for candidate in self.candidates],
         }
 
     def __repr__(self) -> str:
         """Return a developer-friendly representation."""
         return (
             f"BookEnrichmentResult(isbn={self.isbn!r}, "
-            f"status={self.status!r}, title={self.title!r})"
+            f"status={self.status!r}, title={self.title!r}, "
+            f"candidates={len(self.candidates)})"
         )
 
 

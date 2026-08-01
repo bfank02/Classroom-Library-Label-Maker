@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enrichment review details: immutable `ReviewItem` list on
   `EnrichmentSummary`, shown in GUI/CLI ISBN Lookup Summary (up to five
   titles) and generation logs
+- Candidate preservation for future interactive review: immutable
+  `ReviewCandidate` on ambiguous `BookEnrichmentResult` / `ReviewItem`
+  (ordered by confidence; successful finds keep an empty candidate list;
+  cached results reuse peers without extra Google Books requests)
 - Cross-platform packaging: shared `scripts/build_release.py`, macOS
   `build_macos.sh`, updated Windows `build.bat`
 - Native macOS `.app` bundle support (Finder-launchable, bundled runtime)

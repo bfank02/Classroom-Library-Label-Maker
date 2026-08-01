@@ -5,7 +5,9 @@ Implements
 using the public Google Books Volumes API. HTTP and Google response shapes stay
 inside this module - callers only see :class:`BookEnrichmentResult`.
 
-Not wired into generation, CLI, or GUI. Inject explicitly::
+Used by
+:func:`~classroom_library_label_maker.services.book_enrichment_service.create_default_enrichment_service`
+when missing-ISBN lookup is enabled. Inject explicitly in tests::
 
     BookEnrichmentService(provider=GoogleBooksEnrichmentProvider())
 """
@@ -28,6 +30,7 @@ from classroom_library_label_maker.models import (
     Book,
     BookEnrichmentResult,
     BookEnrichmentStatus,
+    ReviewCandidate,
 )
 from classroom_library_label_maker.services.enrichment_normalize import (
     normalize_catalog_text,
@@ -332,15 +335,29 @@ def _prefer_edition(scored: Sequence[_ScoredCandidate]) -> _ScoredCandidate:
 
 def _select_match(
     scored: Sequence[_ScoredCandidate],
-) -> tuple[BookEnrichmentStatus, _ScoredCandidate | None, str]:
-    """Choose FOUND / AMBIGUOUS / NOT_FOUND from scored candidates."""
+) -> tuple[
+    BookEnrichmentStatus,
+    _ScoredCandidate | None,
+    str,
+    tuple[_ScoredCandidate, ...],
+]:
+    """Choose FOUND / AMBIGUOUS / NOT_FOUND from scored candidates.
+
+    Returns ``(status, primary_match, message, ambiguous_peers)``. Peers are
+    ordered by descending confidence and are non-empty only for ``AMBIGUOUS``.
+    """
     viable = sorted(
         (item for item in scored if item.confidence >= _CONSIDER_THRESHOLD),
         key=lambda item: item.confidence,
         reverse=True,
     )
     if not viable:
-        return BookEnrichmentStatus.NOT_FOUND, None, "No sufficiently close matches"
+        return (
+            BookEnrichmentStatus.NOT_FOUND,
+            None,
+            "No sufficiently close matches",
+            (),
+        )
 
     best = viable[0]
     peers = [
@@ -357,29 +374,54 @@ def _select_match(
                     BookEnrichmentStatus.FOUND,
                     chosen,
                     "Matched among multiple editions",
+                    (),
                 )
+        ordered_peers = tuple(
+            sorted(peers, key=lambda item: item.confidence, reverse=True)
+        )
         if best.confidence >= _FOUND_THRESHOLD:
             return (
                 BookEnrichmentStatus.AMBIGUOUS,
                 best,
                 "Multiple distinct close matches",
+                ordered_peers,
             )
         return (
             BookEnrichmentStatus.AMBIGUOUS,
             best,
             "Multiple weak close matches",
+            ordered_peers,
         )
 
     if best.confidence >= _FOUND_THRESHOLD:
-        return BookEnrichmentStatus.FOUND, best, "Confident single match"
+        return BookEnrichmentStatus.FOUND, best, "Confident single match", ()
 
-    return BookEnrichmentStatus.NOT_FOUND, None, "Best match below confidence threshold"
+    return (
+        BookEnrichmentStatus.NOT_FOUND,
+        None,
+        "Best match below confidence threshold",
+        (),
+    )
 
 
 def _format_authors(authors: Sequence[str]) -> str | None:
     if not authors:
         return None
     return ", ".join(authors)
+
+
+def _to_review_candidate(scored: _ScoredCandidate) -> ReviewCandidate:
+    """Map an internal scored volume to a public review candidate."""
+    candidate = scored.candidate
+    return ReviewCandidate(
+        isbn13=candidate.isbn13,
+        isbn10=candidate.isbn10,
+        title=candidate.title,
+        author=_format_authors(candidate.authors) or "",
+        publisher=candidate.publisher,
+        published_date=candidate.published_date,
+        confidence=round(scored.confidence, 4),
+    )
 
 
 def _result_from_candidate(
@@ -389,8 +431,15 @@ def _result_from_candidate(
     *,
     message: str,
     query: str | None = None,
+    ambiguous_peers: Sequence[_ScoredCandidate] = (),
 ) -> BookEnrichmentResult:
     """Build a :class:`BookEnrichmentResult` without mutating ``book``."""
+    review_candidates: tuple[ReviewCandidate, ...] = ()
+    if status is BookEnrichmentStatus.AMBIGUOUS and ambiguous_peers:
+        review_candidates = tuple(
+            _to_review_candidate(peer) for peer in ambiguous_peers
+        )
+
     if scored is None:
         return BookEnrichmentResult(
             isbn=book.isbn,
@@ -402,6 +451,7 @@ def _result_from_candidate(
                 "provider": "google_books",
                 "query": query,
             },
+            candidates=review_candidates,
         )
 
     candidate = scored.candidate
@@ -431,6 +481,7 @@ def _result_from_candidate(
             "query": query,
             "source_isbn": book.isbn,
         },
+        candidates=review_candidates,
     )
 
 
@@ -517,7 +568,7 @@ class GoogleBooksEnrichmentProvider:
                 continue
 
             scored = [_score_candidate(book, candidate) for candidate in candidates]
-            status, match, message = _select_match(scored)
+            status, match, message, peers = _select_match(scored)
 
             if status is BookEnrichmentStatus.NOT_FOUND:
                 last_not_found_message = message
@@ -529,6 +580,7 @@ class GoogleBooksEnrichmentProvider:
                 match,
                 message=message,
                 query=query,
+                ambiguous_peers=peers,
             )
 
         return BookEnrichmentResult(
