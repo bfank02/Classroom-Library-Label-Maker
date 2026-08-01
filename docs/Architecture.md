@@ -32,6 +32,8 @@ Architecture for **Classroom Library Label Maker**, with emphasis on the
 ```
 ExcelImportService
         ↓
+(optional) BookEnrichmentService   # lookup_missing_isbns
+        ↓
 BatchProcessingService
         ↓
 WorkbookWriter + LabelLayoutService
@@ -357,23 +359,29 @@ BookEnrichmentService
         ▼
 BookEnrichmentProvider   (protocol)
         │
-        ├─ NullBookEnrichmentProvider          (default — SKIPPED, no I/O)
-        └─ GoogleBooksEnrichmentProvider       (services/lookups/ — optional)
+        ├─ NullBookEnrichmentProvider          (explicit no-op)
+        └─ GoogleBooksEnrichmentProvider       (default when lookup enabled)
 ```
 
-**Phase 1–2.5 behavior**
+`WorkbookGenerationService` constructs enrichment via
+`create_default_enrichment_service()` when `lookup_missing_isbns` is True,
+or accepts an injected `BookEnrichmentService` for tests.
+**Phase 3 behavior (integrated enrichment)**
 
-* Default collaborator is `NullBookEnrichmentProvider`, which returns
-  `BookEnrichmentStatus.SKIPPED` and does not mutate the input `Book`.
-* `GoogleBooksEnrichmentProvider` implements the same protocol using the
-  Google Books Volumes API (title/author search). Inject explicitly; it is
-  **not** the default.
-* Enrichment is **not** wired into `WorkbookGenerationService`,
-  `BatchProcessingService`, the CLI, or the GUI. Generation output remains
-  identical to Version 1.0.
-* Result shape is the immutable `BookEnrichmentResult` value object
-  (`FOUND` / `NOT_FOUND` / `SKIPPED` / `AMBIGUOUS` / `ERROR`), with a
-  `metadata` dict for additive fields without model redesign.
+* `lookup_missing_isbns` (default **True**) gates the enrichment stage.
+* When enabled, `WorkbookGenerationService` depends only on
+  `BookEnrichmentService` (default factory uses Google Books internally —
+  the orchestrator never imports catalog SDKs).
+* Progress stage `ENRICHING` reports **"Looking up missing ISBNs..."**.
+* Books with blank ISBN cells are imported with a provisional placeholder
+  when lookup is enabled, enriched by title/author, then validated as usual.
+* Ambiguous / not-found / error outcomes become warnings; generation continues.
+* `EnrichmentSummary` on `WorkbookGenerationResult` records counts (already
+  had ISBN, looked up, found, ambiguous, not found, errors, cache hits/misses)
+  for GUI, CLI, and logs.
+* When `lookup_missing_isbns` is **False**, import skips blank ISBN rows and
+  no enrichment stage runs (Version 1.0 behavior).
+* The teacher's inventory workbook is never modified.
 
 **In-memory enrichment cache**
 
@@ -696,13 +704,15 @@ missing files become placeholders with warnings.
 `WorkbookGenerationService` is the end-to-end orchestrator:
 
 1. `ExcelImportService.import_books`
-2. `BatchProcessingService.process_books` (validate + generate/reuse barcodes)
-3. `WorkbookWriter.create_workbook`
-4. `LabelLayoutService.layout_books` on `writer.get_label_sheet_target()`
-5. `WorkbookWriter.save`
+2. Optional `BookEnrichmentService` (when `lookup_missing_isbns`)
+3. `BatchProcessingService.process_books` (validate + generate/reuse barcodes)
+4. `WorkbookWriter.create_workbook`
+5. `LabelLayoutService.layout_books` on `writer.get_label_sheet_target()`
+6. `WorkbookWriter.save`
 
-Returns immutable `WorkbookGenerationResult`. Does **not** print or show UI.
-Default output path: `{project_root}/output/library_labels.xlsx`.
+Returns immutable `WorkbookGenerationResult` (including `EnrichmentSummary`).
+Does **not** print or show UI. Default output path:
+`{project_root}/output/library_labels.xlsx`.
 
 ### Future label template extension points
 
@@ -746,6 +756,7 @@ Inventory Excel workbook
 WorkbookGenerationService.generate()
     │
     ├─ ExcelImportService.import_books()
+    ├─ BookEnrichmentService (optional; lookup_missing_isbns)
     ├─ BatchProcessingService.process_books()
     │     ├─ IsbnValidator
     │     └─ BarcodeGenerationService
@@ -754,15 +765,15 @@ WorkbookGenerationService.generate()
     └─ WorkbookWriter.save(output_path)
     │
     ▼
-WorkbookGenerationResult  +  output/*.xlsx  +  output/barcodes/*.png
+WorkbookGenerationResult (+ EnrichmentSummary)  +  output/*.xlsx  +  barcodes
 logs/application.log (rotating)
 ```
 
-**Implemented today:** import, validation, barcode generation, batch
-orchestration, label layout, label workbook **save**, CLI `generate` and
-desktop GUI via `WorkbookGenerationService`
+**Implemented today:** import, optional missing-ISBN enrichment, validation,
+barcode generation, batch orchestration, label layout, label workbook
+**save**, CLI `generate` and desktop GUI via `WorkbookGenerationService`
 (`python -m classroom_library_label_maker.gui`). GUI generation runs on a
-Qt worker thread with stage progress in the status line.
+Qt worker thread with stage progress (including ISBN lookup).
 
 **Not implemented:** GUI cancellation, **printing** / print preview, Excel VBA
 UI (Phase 2). CLI does not yet print progress events (hooks are ready).
@@ -869,11 +880,10 @@ by `WorkbookGenerationService`.
 2. **CLI progress output** — consume `GenerationProgressReporter` without
    changing the generation pipeline
 3. **CLI commands** — `validate`, `clean`, `diagnostics` already registered
-4. **ISBN / catalog enrichment** — `BookEnrichmentProvider` implementations
-   under `services/lookups/` injected into `BookEnrichmentService`.
-   `GoogleBooksEnrichmentProvider` is implemented; null provider remains the
-   default (not wired into generation). Narrower `IsbnLookupService` remains
-   for ISBN-string lookups.
+4. **ISBN / catalog enrichment** — wired into generation when
+   `lookup_missing_isbns` is True (`BookEnrichmentService` +
+   `GoogleBooksEnrichmentProvider` by default). Additional providers can
+   still be injected under `services/lookups/`.
 5. **Cover downloads** — `CoverDownloadService` under `services/covers/`
 6. **Rendering backends** — additional `BarcodeRenderer` implementations under
    `rendering/` (SVG, QR, Code128, alternate libraries)

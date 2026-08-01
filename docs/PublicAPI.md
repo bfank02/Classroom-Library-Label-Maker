@@ -13,6 +13,8 @@ The package root re-exports a narrow set of common types.
 ```
 ExcelImportService
         ↓
+(optional) BookEnrichmentService   # lookup_missing_isbns (default on)
+        ↓
 BatchProcessingService
         ↓
 WorkbookWriter + LabelLayoutService
@@ -26,9 +28,10 @@ Supporting stables: `IsbnValidator`, `BarcodeGenerationService`,
 `LabelTemplate` / `TemplateRegistry`, `WorkbookReader`, `WorkbookWriter`,
 `LabelSheetTarget`.
 
-**Implemented:** import, validate, generate barcodes, batch orchestration,
-label layout, label workbook **save**, CLI `generate` and desktop GUI via
-`WorkbookGenerationService`, with optional stage progress reporting.
+**Implemented:** import, optional missing-ISBN enrichment, validate, generate
+barcodes, batch orchestration, label layout, label workbook **save**, CLI
+`generate` and desktop GUI via `WorkbookGenerationService`, with stage
+progress reporting (including **"Looking up missing ISBNs..."**).
 
 **Not implemented:** **printing** / print preview, Excel VBA UI; GUI
 cancellation; CLI progress printing (reporter hooks exist).
@@ -135,12 +138,21 @@ recoverable diagnostics (e.g. missing barcode images).
 
 **Fields:** `books_imported`, `books_processed`, `labels_created`,
 `pages_created`, `barcodes_generated`, `barcodes_reused`, `output_path`,
-`elapsed_seconds`, `warnings`.
+`pdf_output_path`, `elapsed_seconds`, `warnings`, optional `enrichment`
+(`EnrichmentSummary`).
+
+### `EnrichmentSummary` — Experimental — External
+
+**Purpose:** Shared ISBN enrichment counts for one generation run (GUI/CLI/logs).
+
+**Fields:** `enabled`, `books_with_isbn`, `books_looked_up`, `isbns_found`,
+`ambiguous_matches`, `not_found`, `lookup_errors`, `cache_hits`,
+`cache_misses`.
 
 ### `ApplicationSettings` — Stable — External
 
 **Purpose:** Project paths, logging, barcode render geometry, workbook import,
-and label template selection for a run.
+label template selection, and enrichment options for a run.
 
 **Construction:** Prefer `config.load_application_settings(...)`.
 
@@ -152,6 +164,7 @@ and label template selection for a run.
 | `default_label_type` | **Deprecated** compatibility field; not used by layout |
 | `workbook_path`, `workbook_sheet_name`, `workbook_column_*`, `workbook_header_row` | Excel import |
 | `barcode_output_directory`, `barcode_module_*` / `quiet_zone` / `font_size` / `dpi` | Barcode output + render geometry |
+| `lookup_missing_isbns` | When True (default), look up blank ISBNs during generation |
 | `input_path` / `results_path` | Legacy CLI JSON paths |
 
 ### `BatchResults` — Internal / Deprecated
@@ -296,7 +309,7 @@ Package: `classroom_library_label_maker.services`
 | `ExcelImportService` | Stable | External | Workbook → `Book` import |
 | `LabelLayoutService` | Stable | External | Arrange books onto label sheets |
 | `WorkbookGenerationService` | Stable | External | End-to-end import → barcodes → layout → save (canonical runtime for CLI and desktop GUI) |
-| `BookEnrichmentService` | Experimental | External | Provider-agnostic book enrichment orchestration (not wired into generation yet) |
+| `BookEnrichmentService` | Experimental | External | Provider-agnostic book enrichment (used by generation when lookup enabled) |
 | `NullBookEnrichmentProvider` | Experimental | External | Default no-op provider (`SKIPPED`; preserves Version 1.0 behavior) |
 | `GoogleBooksEnrichmentProvider` | Experimental | External | Google Books title/author enrichment (optional; not default) |
 | `BatchProcessor` | Internal / Deprecated | Unused by CLI | Legacy JSON stub; do not use |
@@ -307,8 +320,9 @@ Package: `classroom_library_label_maker.services`
 Module: `classroom_library_label_maker.services.book_enrichment_service`
 
 **Purpose:** Delegate enrichment of a `Book` to a `BookEnrichmentProvider`.
-Defaults to `NullBookEnrichmentProvider`. Performs no HTTP. Not used by
-`WorkbookGenerationService` / CLI / GUI in this release.
+Defaults to `NullBookEnrichmentProvider` when constructed alone. Generation
+uses `create_default_enrichment_service()` (Google Books) when
+`lookup_missing_isbns` is True.
 
 | Method | Inputs | Outputs |
 |--------|--------|---------|
@@ -322,7 +336,7 @@ Defaults to `NullBookEnrichmentProvider`. Performs no HTTP. Not used by
 
 - In-memory cache only (no disk). Key = normalized title + author (not ISBN).
 - All result statuses are cached. Providers are not called on cache hit.
-- Not used by `WorkbookGenerationService` / CLI / GUI in this release.
+- Used by `WorkbookGenerationService` when `lookup_missing_isbns` is enabled.
 
 ### `NullBookEnrichmentProvider` — Experimental — External
 
@@ -544,23 +558,31 @@ Both are **immutable value objects** (`dataclass(frozen=True)`).
 
 Module: `classroom_library_label_maker.services.workbook_generation_service`
 
-**Purpose:** End-to-end orchestration: import inventory → process barcodes →
-layout labels → save label workbook. Does not print or display UI.
+**Purpose:** End-to-end orchestration: import inventory → optional ISBN
+enrichment → process barcodes → layout labels → save label workbook. Does not
+print or display UI. Does not import Google Books types (depends on
+`BookEnrichmentService` only).
 
 | Method | Inputs | Outputs / errors |
 |--------|--------|------------------|
-| `__init__(settings, *, importer=None, batch_processor=None, layout_service=None, writer=None, progress_reporter=None)` | Settings + optional collaborators / progress hook | service |
+| `__init__(settings, *, importer=None, enrichment=None, batch_processor=None, layout_service=None, writer=None, progress_reporter=None)` | Settings + optional collaborators / progress hook | service |
 | `generate(*, workbook_path=None, output_path=None, progress_reporter=None)` | Optional inventory / output / per-call progress override | `WorkbookGenerationResult`; may raise `ConfigurationError`, `FileSystemError`, `InvalidWorkbookError`, `LabelLayoutError`, `WorkbookGenerationError` |
 
 Default `output_path`: `{project_root}/output/library_labels.xlsx`.
 
+When `settings.lookup_missing_isbns` is True and `enrichment` is omitted, a
+default enrichment service is created. Set `lookup_missing_isbns=False` for
+Version 1.0 behavior (no enrichment stage).
+
 Optional progress uses Qt-free `GenerationProgressReporter` /
 `GenerationProgress` / `GenerationStage` from
-`classroom_library_label_maker.progress` (significant stage transitions only).
+`classroom_library_label_maker.progress` (includes `ENRICHING` /
+"Looking up missing ISBNs...").
 
 The CLI `generate` command and the desktop GUI (`gui.GuiController`) both
 invoke this service as thin adapters — same generation path, no duplicated
-engine logic.
+engine logic. GUI checkbox **Look up missing ISBNs automatically** maps to
+`lookup_missing_isbns`.
 
 ---
 

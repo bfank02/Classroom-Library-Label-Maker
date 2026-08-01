@@ -76,3 +76,9 @@ APP_ICNS_FILE_NAME = "app.icns"
 LOGO_FILE_NAME = "logo.png"
 QUICK_START_FILE_NAME = "Quick Start.md"
 GUI_PREFERENCES_FILE_NAME = "gui_preferences.json"
+
+# Provisional ISBN used when inventory rows omit ISBN and lookup is enabled.
+# Not a valid ISBN-13; enrichment replaces it on FOUND, otherwise validation
+# follows the existing warning path.
+MISSING_ISBN_PLACEHOLDER = "MISSING"
+

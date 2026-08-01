@@ -16,8 +16,8 @@ Copy into a PR description or a filled
       no third-party barcode types in orchestration)
 - [ ] Extension points used instead of hardwiring future UI/Excel concerns
 - [ ] Catalog / ISBN enrichment goes through `BookEnrichmentProvider` +
-      `BookEnrichmentService` (no HTTP or provider types in orchestration;
-      default remains `NullBookEnrichmentProvider` until intentionally wired)
+      `BookEnrichmentService` (no HTTP or provider types in
+      `WorkbookGenerationService`; gate with `lookup_missing_isbns`)
 - [ ] New work uses `WorkbookGenerationService` (or its collaborators),
       not deprecated `BatchProcessor` / `BarcodeGenerator`
 - [ ] Unexpected failures map to the existing exception hierarchy where

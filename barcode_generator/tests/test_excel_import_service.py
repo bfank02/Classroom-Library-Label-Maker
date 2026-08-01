@@ -21,9 +21,14 @@ WORKBOOKS = Path(__file__).resolve().parent / "assets" / "workbooks"
 
 @pytest.fixture
 def import_settings(app_settings: ApplicationSettings) -> ApplicationSettings:
-    """Settings pointed at the valid sample workbook."""
+    """Settings pointed at the valid sample workbook.
+
+    Disables ISBN lookup so import unit tests exercise Version 1.0 skip rules
+    for missing ISBN cells.
+    """
     app_settings.workbook_path = WORKBOOKS / "valid_books.xlsx"
     app_settings.workbook_sheet_name = "Books"
+    app_settings.lookup_missing_isbns = False
     return app_settings
 
 
@@ -168,3 +173,19 @@ def test_custom_column_mapping(import_settings: ApplicationSettings) -> None:
     import_settings.workbook_column_copies = "Copies"
     result = ExcelImportService(import_settings).import_books()
     assert result.imported_rows == 2
+
+
+def test_missing_isbn_imported_when_lookup_enabled(
+    import_settings: ApplicationSettings,
+) -> None:
+    """With lookup enabled, blank ISBN rows become provisional books."""
+    from classroom_library_label_maker.constants import MISSING_ISBN_PLACEHOLDER
+
+    import_settings.lookup_missing_isbns = True
+    result = ExcelImportService(import_settings).import_books(
+        WORKBOOKS / "malformed_rows.xlsx"
+    )
+
+    provisional = [book for book in result.books if book.isbn == MISSING_ISBN_PLACEHOLDER]
+    assert len(provisional) >= 1
+    assert "missing_isbn" not in {warning.code for warning in result.warnings}

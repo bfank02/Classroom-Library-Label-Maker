@@ -11,6 +11,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 import time
 
+from classroom_library_label_maker.constants import MISSING_ISBN_PLACEHOLDER
 from classroom_library_label_maker.exceptions import (
     ConfigurationError,
     FileSystemError,
@@ -249,11 +250,16 @@ class ExcelImportService:
         copies_raw = self._cell_at(cells, column_index["copies"])
 
         if not isbn:
-            return None, ImportWarning(
-                message=f"Row {row_number}: missing ISBN",
-                row_number=row_number,
-                code="missing_isbn",
-            )
+            if self._settings.lookup_missing_isbns:
+                # Provisional ISBN so title/author rows enter the pipeline for
+                # enrichment. Does not modify the teacher's inventory workbook.
+                isbn = MISSING_ISBN_PLACEHOLDER
+            else:
+                return None, ImportWarning(
+                    message=f"Row {row_number}: missing ISBN",
+                    row_number=row_number,
+                    code="missing_isbn",
+                )
         if not title:
             return None, ImportWarning(
                 message=f"Row {row_number}: missing Title",

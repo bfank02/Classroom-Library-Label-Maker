@@ -63,6 +63,18 @@ def cli_completion_lines(result: WorkbookGenerationResult) -> tuple[str, ...]:
     lines.append(f"Pages created: {result.pages_created}")
     lines.append(f"Barcodes generated: {result.barcodes_generated}")
     lines.append(f"Barcodes reused: {result.barcodes_reused}")
+    if result.enrichment is not None and result.enrichment.enabled:
+        enrichment = result.enrichment
+        lines.append("")
+        lines.append("ISBN enrichment:")
+        lines.append(f"  Books with ISBN: {enrichment.books_with_isbn}")
+        lines.append(f"  Books looked up: {enrichment.books_looked_up}")
+        lines.append(f"  ISBNs found: {enrichment.isbns_found}")
+        lines.append(f"  Ambiguous matches: {enrichment.ambiguous_matches}")
+        lines.append(f"  Not found: {enrichment.not_found}")
+        lines.append(f"  Lookup errors: {enrichment.lookup_errors}")
+        lines.append(f"  Cache hits: {enrichment.cache_hits}")
+        lines.append(f"  Cache misses: {enrichment.cache_misses}")
     lines.append("")
     lines.append(f"Label workbook: {result.output_path}")
     if result.pdf_output_path is not None:

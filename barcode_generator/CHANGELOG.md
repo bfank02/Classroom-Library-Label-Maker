@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `BookEnrichmentResult` (optional inject; not used during generation)
 - In-memory enrichment cache on `BookEnrichmentService` (normalized
   title+author key; all result statuses cached; discarded with the instance)
+- Integrated ISBN enrichment during generation (`lookup_missing_isbns`,
+  progress stage, GUI checkbox, `EnrichmentSummary` on
+  `WorkbookGenerationResult`)
 - Cross-platform packaging: shared `scripts/build_release.py`, macOS
   `build_macos.sh`, updated Windows `build.bat`
 - Native macOS `.app` bundle support (Finder-launchable, bundled runtime)

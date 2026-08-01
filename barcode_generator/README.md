@@ -9,8 +9,8 @@ same shared codebase.
 
 **Canonical pipeline:**
 `WorkbookGenerationService` (also the CLI `generate` runtime) =
-`ExcelImportService` → `BatchProcessingService` → `LabelLayoutService` →
-`WorkbookWriter.save`
+`ExcelImportService` → optional `BookEnrichmentService` →
+`BatchProcessingService` → `LabelLayoutService` → `WorkbookWriter.save`
 
 **Desktop GUI:** PySide6 main window collects inputs and invokes
 `WorkbookGenerationService` on a background Qt worker thread (same engine as
@@ -250,25 +250,24 @@ python -c "from classroom_library_label_maker.config import load_application_set
 - Optional `BatchCancellationToken` constructor hook for future cooperative
   cancel (accepted now, **not enforced** yet)
 
-### Book enrichment (optional; not used during generation)
+### Book enrichment (missing ISBNs during generation)
 
-`BookEnrichmentService` is the extension point for automatic ISBN / catalog
-lookup. It depends only on `BookEnrichmentProvider` and defaults to
-`NullBookEnrichmentProvider` (`SKIPPED`, no network I/O).
+`BookEnrichmentService` looks up missing ISBNs by title/author when
+`lookup_missing_isbns` is True (default). Generation injects the default
+Google Books provider via `create_default_enrichment_service()`; the
+orchestrator depends only on `BookEnrichmentService`.
 
-`GoogleBooksEnrichmentProvider` searches Google Books by title/author
-(confidence-scored; sequential queries). Inject it explicitly — it is **not**
-wired into `WorkbookGenerationService`, the CLI, or the GUI:
+GUI: checkbox **Look up missing ISBNs automatically** (checked by default).
+Uncheck for Version 1.0 behavior (blank ISBN rows skipped at import; no
+lookup stage).
 
-```powershell
-python -c "from classroom_library_label_maker.models import Book; from classroom_library_label_maker.services import BookEnrichmentService, GoogleBooksEnrichmentProvider; b=Book(isbn='9780064400558', title=\"Charlotte's Web\", author='E. B. White'); r=BookEnrichmentService(provider=GoogleBooksEnrichmentProvider()).enrich(b); print(r.status, r.isbn, r.title)"
-```
+Progress stage: **"Looking up missing ISBNs..."**. Results are summarized in
+`EnrichmentSummary` on `WorkbookGenerationResult` (consumed by GUI/CLI/logs).
 
-- Default path (null provider) leaves generation behavior unchanged
-- In-memory cache on the service (normalized title+author; all statuses;
-  discarded with the instance) — not in providers
-- Matching strategy and HTTP error handling:
-  [`docs/Architecture.md`](../docs/Architecture.md)
+- In-memory cache on the service (normalized title+author; all statuses)
+- Ambiguous / not-found / errors become warnings; generation continues
+- Teacher inventory workbook is never modified
+- Matching strategy: [`docs/Architecture.md`](../docs/Architecture.md)
 - Public surface: [`docs/PublicAPI.md`](../docs/PublicAPI.md)
 
 ### Excel import

@@ -233,3 +233,22 @@ def test_label_content_checkboxes_flow_into_settings(
     assert settings.label_content.show_author is False
     assert settings.label_content.show_barcode is True
     window.close()
+
+
+def test_lookup_missing_isbns_checkbox_flows_into_settings(
+    qapp, tmp_paths: dict[str, Path]
+) -> None:
+    window = MainWindow()
+    controller = GuiController(window)
+    controller.set_inventory_workbook(tmp_paths["inventory"])
+    controller.set_barcode_folder(tmp_paths["barcodes"])
+    controller.set_output_workbook(tmp_paths["output"])
+
+    assert window.lookup_missing_isbns_checkbox.isChecked()
+    settings = controller.build_application_settings()
+    assert settings.lookup_missing_isbns is True
+
+    window.lookup_missing_isbns_checkbox.setChecked(False)
+    settings = controller.build_application_settings()
+    assert settings.lookup_missing_isbns is False
+    window.close()

@@ -25,6 +25,7 @@ from PySide6.QtWidgets import QFileDialog
 
 from classroom_library_label_maker.config import load_application_settings
 from classroom_library_label_maker.exceptions import ApplicationError
+from classroom_library_label_maker.generation_summary import gui_completion_status
 from classroom_library_label_maker.gui.form_state import GenerationFormState
 from classroom_library_label_maker.gui.generation_worker import (
     GenerationJob,
@@ -46,7 +47,6 @@ from classroom_library_label_maker.label_templates import (
     TemplateRegistry,
     create_default_template_registry,
 )
-from classroom_library_label_maker.generation_summary import gui_completion_status
 from classroom_library_label_maker.logger import get_logger
 from classroom_library_label_maker.models import (
     ApplicationSettings,
@@ -171,6 +171,11 @@ class GuiController(QObject):
         self._state = self._state.with_label_content(content)
         self._refresh_ui()
 
+    def set_lookup_missing_isbns(self, enabled: bool) -> None:
+        """Update whether missing ISBNs are looked up during generation."""
+        self._state = self._state.with_lookup_missing_isbns(enabled)
+        self._refresh_ui()
+
     def on_label_content_changed(self) -> None:
         """Handle Show on labels checkbox changes."""
         if self._is_generating:
@@ -182,6 +187,14 @@ class GuiController(QObject):
             show_barcode=window.show_barcode_checkbox.isChecked(),
         )
         self.set_label_content(content)
+
+    def on_lookup_missing_isbns_changed(self) -> None:
+        """Handle Look up missing ISBNs checkbox changes."""
+        if self._is_generating:
+            return
+        self.set_lookup_missing_isbns(
+            self._window.lookup_missing_isbns_checkbox.isChecked()
+        )
 
     def browse_inventory_workbook(self) -> None:
         """Open a native file dialog for the inventory workbook."""
@@ -242,6 +255,7 @@ class GuiController(QObject):
             barcode_output_directory=barcodes,
             label_template_id=template_id,
             label_content=self._state.label_content,
+            lookup_missing_isbns=self._state.lookup_missing_isbns,
             overwrite=False,
         )
 
@@ -369,6 +383,7 @@ class GuiController(QObject):
         window.show_title_checkbox.setEnabled(enabled)
         window.show_author_checkbox.setEnabled(enabled)
         window.show_barcode_checkbox.setEnabled(enabled)
+        window.lookup_missing_isbns_checkbox.setEnabled(enabled)
         if enabled:
             window.generate_button.setEnabled(self._state.is_valid)
         else:
@@ -395,6 +410,9 @@ class GuiController(QObject):
         window.show_title_checkbox.toggled.connect(self.on_label_content_changed)
         window.show_author_checkbox.toggled.connect(self.on_label_content_changed)
         window.show_barcode_checkbox.toggled.connect(self.on_label_content_changed)
+        window.lookup_missing_isbns_checkbox.toggled.connect(
+            self.on_lookup_missing_isbns_changed
+        )
         window.generate_button.clicked.connect(self.on_generate_labels)
 
     def _refresh_ui(self) -> None:
@@ -415,6 +433,7 @@ class GuiController(QObject):
         )
         self._sync_template_combo()
         self._sync_content_checkboxes()
+        self._sync_lookup_missing_isbns_checkbox()
 
         if self._is_generating:
             self._set_inputs_enabled(False)
@@ -439,6 +458,14 @@ class GuiController(QObject):
                 checkbox.blockSignals(True)
                 checkbox.setChecked(checked)
                 checkbox.blockSignals(False)
+
+    def _sync_lookup_missing_isbns_checkbox(self) -> None:
+        checkbox = self._window.lookup_missing_isbns_checkbox
+        checked = self._state.lookup_missing_isbns
+        if checkbox.isChecked() != checked:
+            checkbox.blockSignals(True)
+            checkbox.setChecked(checked)
+            checkbox.blockSignals(False)
 
     def _sync_template_combo(self) -> None:
         combo = self._window.label_template_combo

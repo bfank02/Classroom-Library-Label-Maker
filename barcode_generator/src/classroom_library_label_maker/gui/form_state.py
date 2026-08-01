@@ -21,6 +21,7 @@ class GenerationFormState:
     output_workbook: Path | None = None
     label_template_id: str | None = None
     label_content: LabelContentOptions = LabelContentOptions()
+    lookup_missing_isbns: bool = True
 
     def with_inventory_workbook(self, path: Path | None) -> GenerationFormState:
         """Return a copy with ``inventory_workbook`` updated."""
@@ -41,6 +42,10 @@ class GenerationFormState:
     def with_label_content(self, content: LabelContentOptions) -> GenerationFormState:
         """Return a copy with ``label_content`` updated."""
         return replace(self, label_content=content)
+
+    def with_lookup_missing_isbns(self, enabled: bool) -> GenerationFormState:
+        """Return a copy with ``lookup_missing_isbns`` updated."""
+        return replace(self, lookup_missing_isbns=enabled)
 
     def validation_messages(self) -> tuple[str, ...]:
         """Return concise, actionable messages for each invalid required field."""

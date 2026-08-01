@@ -1,8 +1,11 @@
 """Workbook generation service — end-to-end label workbook creation.
 
-Coordinates import, batch barcode processing, label layout, and workbook
-save. Depends on :class:`WorkbookWriter` only for Excel output (never imports
-openpyxl). Does not print or display UI.
+Coordinates import, optional ISBN enrichment, batch barcode processing, label
+layout, and workbook save. Depends on :class:`WorkbookWriter` only for Excel
+output (never imports openpyxl). Does not print or display UI.
+
+Depends on :class:`BookEnrichmentService` for optional missing-ISBN lookup —
+never on catalog-specific providers.
 """
 
 from __future__ import annotations
@@ -22,38 +25,47 @@ from classroom_library_label_maker.logger import get_logger
 from classroom_library_label_maker.models import (
     ApplicationSettings,
     Book,
+    BookEnrichmentResult,
+    BookEnrichmentStatus,
     BookProcessingResult,
     BookProcessingStatus,
+    EnrichmentSummary,
     ImportWarning,
     LabelLayoutWarning,
     WorkbookGenerationResult,
     WorkbookGenerationWarning,
 )
+from classroom_library_label_maker.progress import (
+    GenerationProgress,
+    GenerationProgressReporter,
+    GenerationStage,
+)
 from classroom_library_label_maker.services.batch_processing_service import (
     BatchProcessingService,
+)
+from classroom_library_label_maker.services.book_enrichment_service import (
+    BookEnrichmentService,
+    book_needs_isbn_lookup,
+    create_default_enrichment_service,
 )
 from classroom_library_label_maker.services.excel_import_service import (
     ExcelImportService,
 )
+from classroom_library_label_maker.services.isbn_validator import IsbnValidator
 from classroom_library_label_maker.services.label_layout_service import (
     LabelLayoutService,
 )
-from classroom_library_label_maker.workbooks.openpyxl_workbook_writer import (
-    OpenPyxlWorkbookWriter,
-)
 from classroom_library_label_maker.workbooks.in_memory_label_sheet_target import (
     InMemoryLabelSheetTarget,
+)
+from classroom_library_label_maker.workbooks.openpyxl_workbook_writer import (
+    OpenPyxlWorkbookWriter,
 )
 from classroom_library_label_maker.workbooks.pdf_label_renderer import write_labels_pdf
 from classroom_library_label_maker.workbooks.tee_label_sheet_target import (
     TeeLabelSheetTarget,
 )
 from classroom_library_label_maker.workbooks.workbook_writer import WorkbookWriter
-from classroom_library_label_maker.progress import (
-    GenerationProgress,
-    GenerationProgressReporter,
-    GenerationStage,
-)
 
 _logger = get_logger("workbook_generation_service")
 
@@ -65,8 +77,11 @@ class WorkbookGenerationService:
 
     Canonical orchestration::
 
-        ExcelImportService → BatchProcessingService → LabelLayoutService
-        (via WorkbookWriter LabelSheetTarget) → WorkbookWriter.save
+        ExcelImportService
+            → (optional) BookEnrichmentService
+            → BatchProcessingService
+            → LabelLayoutService
+            → WorkbookWriter.save
     """
 
     def __init__(
@@ -74,6 +89,7 @@ class WorkbookGenerationService:
         settings: ApplicationSettings,
         *,
         importer: ExcelImportService | None = None,
+        enrichment: BookEnrichmentService | None = None,
         batch_processor: BatchProcessingService | None = None,
         layout_service: LabelLayoutService | None = None,
         writer: WorkbookWriter | None = None,
@@ -84,6 +100,9 @@ class WorkbookGenerationService:
         Args:
             settings: Application settings (workbook path, barcode dirs, template).
             importer: Optional import service override.
+            enrichment: Optional enrichment service. When omitted and
+                ``settings.lookup_missing_isbns`` is True, a default service is
+                created. When lookup is disabled, enrichment is skipped.
             batch_processor: Optional batch processing override.
             layout_service: Optional layout service override.
             writer: Optional workbook writer (defaults to
@@ -96,6 +115,14 @@ class WorkbookGenerationService:
         self._layout = layout_service or LabelLayoutService(settings)
         self._writer: WorkbookWriter = writer or OpenPyxlWorkbookWriter()
         self._progress = progress_reporter
+        self._isbn_validator = IsbnValidator()
+
+        if enrichment is not None:
+            self._enrichment: BookEnrichmentService | None = enrichment
+        elif settings.lookup_missing_isbns:
+            self._enrichment = create_default_enrichment_service()
+        else:
+            self._enrichment = None
 
     def generate(
         self,
@@ -104,7 +131,7 @@ class WorkbookGenerationService:
         output_path: Path | None = None,
         progress_reporter: GenerationProgressReporter | None = None,
     ) -> WorkbookGenerationResult:
-        """Import books, generate barcodes, layout labels, and save a workbook.
+        """Import books, optionally enrich ISBNs, generate barcodes, layout, save.
 
         Args:
             workbook_path: Optional inventory workbook override.
@@ -129,11 +156,14 @@ class WorkbookGenerationService:
         started = time.perf_counter()
         destination = self._resolve_output_path(output_path)
         warnings: list[WorkbookGenerationWarning] = []
+        enrichment_summary = EnrichmentSummary(enabled=False)
 
         _logger.info(
-            "Workbook generation started: inventory=%s output=%s",
+            "Workbook generation started: inventory=%s output=%s "
+            "lookup_missing_isbns=%s",
             workbook_path or self._settings.workbook_path,
             destination,
+            self._settings.lookup_missing_isbns,
         )
 
         try:
@@ -146,9 +176,27 @@ class WorkbookGenerationService:
             )
             warnings.extend(self._from_import_warnings(imported.warnings))
 
+            books_for_batch = list(imported.books)
+            if self._settings.lookup_missing_isbns and self._enrichment is not None:
+                self._report(reporter, GenerationStage.ENRICHING)
+                books_for_batch, enrichment_summary, enrich_warnings = (
+                    self._enrich_missing_isbns(books_for_batch, self._enrichment)
+                )
+                warnings.extend(enrich_warnings)
+                _logger.info(
+                    "ISBN enrichment complete: looked_up=%s found=%s "
+                    "ambiguous=%s not_found=%s errors=%s cache_hits=%s",
+                    enrichment_summary.books_looked_up,
+                    enrichment_summary.isbns_found,
+                    enrichment_summary.ambiguous_matches,
+                    enrichment_summary.not_found,
+                    enrichment_summary.lookup_errors,
+                    enrichment_summary.cache_hits,
+                )
+
             self._report(reporter, GenerationStage.VALIDATING)
             self._report(reporter, GenerationStage.GENERATING_BARCODES)
-            batch = self._batch.process_books(imported.books)
+            batch = self._batch.process_books(books_for_batch)
             _logger.info(
                 "Barcode generation complete: processed=%s generated=%s reused=%s",
                 batch.total_processed,
@@ -158,7 +206,7 @@ class WorkbookGenerationService:
             warnings.extend(self._from_batch_results(batch.results))
 
             barcode_paths = self._barcode_paths(batch.results)
-            books_for_layout = list(imported.books)
+            books_for_layout = list(books_for_batch)
 
             self._writer.create_workbook()
             memory_target = InMemoryLabelSheetTarget()
@@ -238,6 +286,7 @@ class WorkbookGenerationService:
             pdf_output_path=Path(pdf_saved) if pdf_saved is not None else None,
             elapsed_seconds=elapsed,
             warnings=tuple(warnings),
+            enrichment=enrichment_summary,
         )
         _logger.info(
             "Workbook generation complete: imported=%s labels=%s pages=%s "
@@ -249,6 +298,128 @@ class WorkbookGenerationService:
             result.elapsed_seconds,
         )
         return result
+
+    def _enrich_missing_isbns(
+        self,
+        books: list[Book],
+        enrichment: BookEnrichmentService,
+    ) -> tuple[list[Book], EnrichmentSummary, list[WorkbookGenerationWarning]]:
+        """Look up missing ISBNs; never abort the generation run."""
+        hits_before = enrichment.cache_hits
+        misses_before = enrichment.cache_misses
+
+        books_with_isbn = 0
+        looked_up = 0
+        found = 0
+        ambiguous = 0
+        not_found = 0
+        errors = 0
+        warnings: list[WorkbookGenerationWarning] = []
+        updated: list[Book] = []
+
+        for book in books:
+            if not book_needs_isbn_lookup(book):
+                books_with_isbn += 1
+                updated.append(book)
+                continue
+
+            looked_up += 1
+            result = enrichment.enrich(book)
+            next_book, warning = self._apply_enrichment_result(book, result)
+            updated.append(next_book)
+            if warning is not None:
+                warnings.append(warning)
+
+            if result.status is BookEnrichmentStatus.FOUND:
+                if next_book.isbn != book.isbn and self._isbn_validator.is_valid(
+                    next_book.isbn
+                ):
+                    found += 1
+                else:
+                    # FOUND without a usable ISBN - count as not found.
+                    not_found += 1
+            elif result.status is BookEnrichmentStatus.AMBIGUOUS:
+                ambiguous += 1
+            elif result.status is BookEnrichmentStatus.ERROR:
+                errors += 1
+            elif result.status in {
+                BookEnrichmentStatus.NOT_FOUND,
+                BookEnrichmentStatus.SKIPPED,
+            }:
+                not_found += 1
+
+        summary = EnrichmentSummary(
+            enabled=True,
+            books_with_isbn=books_with_isbn,
+            books_looked_up=looked_up,
+            isbns_found=found,
+            ambiguous_matches=ambiguous,
+            not_found=not_found,
+            lookup_errors=errors,
+            cache_hits=enrichment.cache_hits - hits_before,
+            cache_misses=enrichment.cache_misses - misses_before,
+        )
+        return updated, summary, warnings
+
+    def _apply_enrichment_result(
+        self,
+        book: Book,
+        result: BookEnrichmentResult,
+    ) -> tuple[Book, WorkbookGenerationWarning | None]:
+        """Apply a successful lookup; emit warnings for non-fatal outcomes."""
+        if result.status is BookEnrichmentStatus.FOUND:
+            candidate = (result.isbn or "").strip()
+            if candidate and self._isbn_validator.is_valid(candidate):
+                enriched = Book(
+                    isbn=candidate,
+                    title=book.title,
+                    author=book.author,
+                    copies=book.copies,
+                    genre=book.genre,
+                    reading_level=book.reading_level,
+                    location=book.location,
+                    condition=book.condition,
+                )
+                return enriched, None
+            return book, WorkbookGenerationWarning(
+                message=(
+                    f"Enrichment found no usable ISBN for "
+                    f"{book.title!r} by {book.author!r}"
+                ),
+                code="enrichment_not_found",
+                isbn=book.isbn,
+            )
+
+        if result.status is BookEnrichmentStatus.AMBIGUOUS:
+            return book, WorkbookGenerationWarning(
+                message=(
+                    f"Ambiguous ISBN match for {book.title!r} by {book.author!r}"
+                    + (f": {result.message}" if result.message else "")
+                ),
+                code="enrichment_ambiguous",
+                isbn=book.isbn,
+            )
+
+        if result.status is BookEnrichmentStatus.ERROR:
+            return book, WorkbookGenerationWarning(
+                message=(
+                    f"ISBN lookup error for {book.title!r} by {book.author!r}"
+                    + (f": {result.message}" if result.message else "")
+                ),
+                code="enrichment_error",
+                isbn=book.isbn,
+            )
+
+        if result.status is BookEnrichmentStatus.NOT_FOUND:
+            return book, WorkbookGenerationWarning(
+                message=(
+                    f"No ISBN found for {book.title!r} by {book.author!r}"
+                ),
+                code="enrichment_not_found",
+                isbn=book.isbn,
+            )
+
+        return book, None
 
     def _report(
         self,
@@ -322,7 +493,8 @@ class WorkbookGenerationService:
             if item.status == BookProcessingStatus.VALIDATION_FAILED:
                 warnings.append(
                     WorkbookGenerationWarning(
-                        message=item.message or f"ISBN validation failed for {item.isbn}",
+                        message=item.message
+                        or f"ISBN validation failed for {item.isbn}",
                         code="validation_failed",
                         isbn=item.isbn,
                     )

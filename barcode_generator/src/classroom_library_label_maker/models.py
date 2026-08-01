@@ -654,6 +654,49 @@ class GenerationCompletionState(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class EnrichmentSummary:
+    """Aggregate ISBN enrichment outcomes for one generation run.
+
+    Shared by GUI, CLI, and logs so adapters do not recount results.
+
+    Attributes:
+        enabled: Whether enrichment ran for this generation.
+        books_with_isbn: Books that already had an ISBN (not looked up).
+        books_looked_up: Books sent to the enrichment provider.
+        isbns_found: Lookups that returned a usable ISBN (``FOUND`` applied).
+        ambiguous_matches: Lookups that returned ``AMBIGUOUS``.
+        not_found: Lookups that returned ``NOT_FOUND``.
+        lookup_errors: Lookups that returned ``ERROR``.
+        cache_hits: In-memory enrichment cache hits during the run.
+        cache_misses: In-memory enrichment cache misses during the run.
+    """
+
+    enabled: bool = False
+    books_with_isbn: int = 0
+    books_looked_up: int = 0
+    isbns_found: int = 0
+    ambiguous_matches: int = 0
+    not_found: int = 0
+    lookup_errors: int = 0
+    cache_hits: int = 0
+    cache_misses: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize this summary to a JSON-compatible dictionary."""
+        return {
+            "enabled": self.enabled,
+            "books_with_isbn": self.books_with_isbn,
+            "books_looked_up": self.books_looked_up,
+            "isbns_found": self.isbns_found,
+            "ambiguous_matches": self.ambiguous_matches,
+            "not_found": self.not_found,
+            "lookup_errors": self.lookup_errors,
+            "cache_hits": self.cache_hits,
+            "cache_misses": self.cache_misses,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class WorkbookGenerationWarning:
     """Recoverable issue during end-to-end workbook generation.
 
@@ -698,7 +741,8 @@ class WorkbookGenerationResult:
         output_path: Path to the saved label workbook.
         pdf_output_path: Path to the print-ready label PDF (preferred for scanning).
         elapsed_seconds: Wall-clock duration of the full run.
-        warnings: Recoverable issues from import, batch, or layout.
+        warnings: Recoverable issues from import, enrichment, batch, or layout.
+        enrichment: Optional ISBN enrichment summary for this run.
     """
 
     books_imported: int = 0
@@ -711,6 +755,7 @@ class WorkbookGenerationResult:
     pdf_output_path: Path | None = None
     elapsed_seconds: float = 0.0
     warnings: tuple[WorkbookGenerationWarning, ...] = ()
+    enrichment: EnrichmentSummary | None = None
 
     @property
     def warning_count(self) -> int:
@@ -736,23 +781,26 @@ class WorkbookGenerationResult:
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize generation results to a JSON-compatible dictionary."""
+        summary: dict[str, Any] = {
+            "books_imported": self.books_imported,
+            "books_processed": self.books_processed,
+            "labels_created": self.labels_created,
+            "pages_created": self.pages_created,
+            "barcodes_generated": self.barcodes_generated,
+            "barcodes_reused": self.barcodes_reused,
+            "output_path": str(self.output_path) if self.output_path else None,
+            "pdf_output_path": (
+                str(self.pdf_output_path) if self.pdf_output_path else None
+            ),
+            "elapsed_seconds": self.elapsed_seconds,
+            "warning_count": self.warning_count,
+            "requires_review": self.requires_review,
+            "completion_state": self.completion_state.value,
+        }
+        if self.enrichment is not None:
+            summary["enrichment"] = self.enrichment.to_dict()
         return {
-            "summary": {
-                "books_imported": self.books_imported,
-                "books_processed": self.books_processed,
-                "labels_created": self.labels_created,
-                "pages_created": self.pages_created,
-                "barcodes_generated": self.barcodes_generated,
-                "barcodes_reused": self.barcodes_reused,
-                "output_path": str(self.output_path) if self.output_path else None,
-                "pdf_output_path": (
-                    str(self.pdf_output_path) if self.pdf_output_path else None
-                ),
-                "elapsed_seconds": self.elapsed_seconds,
-                "warning_count": self.warning_count,
-                "requires_review": self.requires_review,
-                "completion_state": self.completion_state.value,
-            },
+            "summary": summary,
             "warnings": [warning.to_dict() for warning in self.warnings],
         }
 
@@ -800,6 +848,9 @@ class ApplicationSettings:
         label_template_id: Single source of truth for the registered label
             template id (e.g. ``avery-5160``). Used by LabelLayoutService.
         label_content: Which title/author/barcode fields appear on labels.
+        lookup_missing_isbns: When True, look up missing ISBNs during generation
+            via :class:`~classroom_library_label_maker.services.book_enrichment_service.BookEnrichmentService`
+            before barcode validation.
     """
 
     barcode_output_directory: Path
@@ -828,6 +879,7 @@ class ApplicationSettings:
     workbook_header_row: int = DEFAULT_WORKBOOK_HEADER_ROW
     label_template_id: str = DEFAULT_LABEL_TEMPLATE_ID
     label_content: LabelContentOptions = field(default_factory=LabelContentOptions)
+    lookup_missing_isbns: bool = True
 
     def __post_init__(self) -> None:
         """Normalize path fields to :class:`~pathlib.Path` instances."""

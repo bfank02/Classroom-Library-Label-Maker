@@ -37,6 +37,7 @@ from classroom_library_label_maker.services.batch_processor import BatchProcesso
 from classroom_library_label_maker.services.book_enrichment_service import (
     BookEnrichmentService,
     NullBookEnrichmentProvider,
+    create_default_enrichment_service,
 )
 from classroom_library_label_maker.services.excel_import_service import (
     ExcelImportService,
@@ -68,4 +69,5 @@ __all__ = [
     "LabelLayoutService",
     "NullBookEnrichmentProvider",
     "WorkbookGenerationService",
+    "create_default_enrichment_service",
 ]

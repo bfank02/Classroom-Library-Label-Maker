@@ -12,14 +12,17 @@ An in-memory result cache lives on this service (not on providers) so
 duplicate title/author lookups within a single run share one provider call.
 The cache is discarded when the service instance is destroyed.
 
-This service is **not** wired into :class:`WorkbookGenerationService` or the
-GUI in this release — generation behavior remains identical to Version 1.0.
+This service is wired into :class:`WorkbookGenerationService` when
+``lookup_missing_isbns`` is enabled. Catalog providers remain injectable;
+the default production provider is Google Books via
+:func:`create_default_enrichment_service`.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 
+from classroom_library_label_maker.constants import MISSING_ISBN_PLACEHOLDER
 from classroom_library_label_maker.logger import get_logger
 from classroom_library_label_maker.models import (
     Book,
@@ -34,6 +37,14 @@ from classroom_library_label_maker.services.protocols import BookEnrichmentProvi
 _logger = get_logger("book_enrichment_service")
 
 
+def book_needs_isbn_lookup(book: Book) -> bool:
+    """Return True when ``book`` is missing an ISBN and should be enriched."""
+    raw = str(book.isbn).strip()
+    if not raw:
+        return True
+    return raw.casefold() == MISSING_ISBN_PLACEHOLDER.casefold()
+
+
 def enrichment_cache_key(book: Book) -> tuple[str, str]:
     """Return the deterministic in-memory cache key for ``book``.
 
@@ -44,6 +55,19 @@ def enrichment_cache_key(book: Book) -> tuple[str, str]:
         normalize_catalog_text(book.title),
         normalize_catalog_text(book.author),
     )
+
+
+def create_default_enrichment_service() -> BookEnrichmentService:
+    """Build the production enrichment service (Google Books provider).
+
+    Imported lazily so :class:`WorkbookGenerationService` can depend on
+    :class:`BookEnrichmentService` without referencing catalog adapters.
+    """
+    from classroom_library_label_maker.services.lookups.google_books import (
+        GoogleBooksEnrichmentProvider,
+    )
+
+    return BookEnrichmentService(provider=GoogleBooksEnrichmentProvider())
 
 
 class NullBookEnrichmentProvider:

@@ -10,7 +10,8 @@ Start here: [`docs/Quick Start.md`](docs/Quick%20Start.md)
    `ISBN`, `Title`, `Author`, `Copies`) — or open `samples/Sample Books.xlsx`.
 2. Run the app, choose your inventory workbook, a barcode folder, and where to
    save the **label workbook** (barcode and label paths are remembered after
-   the first selection).
+   the first selection). Optionally leave **Look up missing ISBNs
+   automatically** checked so blank ISBN cells are filled from title/author.
 3. Click **Generate Labels**, then open the label workbook in Excel and print
    on Avery 5160 sheets.
 

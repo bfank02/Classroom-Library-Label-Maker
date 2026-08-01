@@ -246,6 +246,7 @@ def load_application_settings(
     workbook_path: Path | str | None = None,
     workbook_sheet_name: str = DEFAULT_WORKBOOK_SHEET_NAME,
     label_content: LabelContentOptions | None = None,
+    lookup_missing_isbns: bool = True,
 ) -> ApplicationSettings:
     """Build :class:`ApplicationSettings` from the project tree and overrides.
 
@@ -264,6 +265,8 @@ def load_application_settings(
         workbook_path: Optional Excel workbook path for import.
         workbook_sheet_name: Worksheet name used by Excel import.
         label_content: Optional label field visibility options.
+        lookup_missing_isbns: When True, enrich books missing ISBNs during
+            generation (default True).
 
     Returns:
         Populated :class:`ApplicationSettings`.
@@ -306,6 +309,7 @@ def load_application_settings(
         workbook_header_row=DEFAULT_WORKBOOK_HEADER_ROW,
         label_template_id=label_template_id,
         label_content=label_content or LabelContentOptions(),
+        lookup_missing_isbns=lookup_missing_isbns,
     )
 
 
