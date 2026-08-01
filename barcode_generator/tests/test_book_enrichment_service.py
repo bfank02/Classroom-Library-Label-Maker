@@ -338,6 +338,37 @@ def test_all_result_statuses_are_cached(status: BookEnrichmentStatus) -> None:
     assert service.cache_misses == 1
 
 
+def test_rate_limit_errors_are_not_cached() -> None:
+    """Transient Google Books rate limits should not poison the cache."""
+
+    class RateLimitProvider:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def enrich(self, book: Book) -> BookEnrichmentResult:
+            self.calls += 1
+            return BookEnrichmentResult(
+                isbn=book.isbn,
+                status=BookEnrichmentStatus.ERROR,
+                message="rate limited",
+                metadata={"error_kind": "rate_limit"},
+            )
+
+    provider = RateLimitProvider()
+    service = BookEnrichmentService(provider=provider)
+    book = _sample_book()
+
+    first = service.enrich(book)
+    second = service.enrich(book)
+
+    assert first.status is BookEnrichmentStatus.ERROR
+    assert second.status is BookEnrichmentStatus.ERROR
+    assert provider.calls == 2
+    assert service.cache_hits == 0
+    assert service.cache_misses == 2
+    assert service.cache_size == 0
+
+
 def test_enrich_many_uses_cache_across_duplicates() -> None:
     """Batch enrichment should reuse cache entries within the same run."""
     provider = _CountingProvider(status=BookEnrichmentStatus.NOT_FOUND)

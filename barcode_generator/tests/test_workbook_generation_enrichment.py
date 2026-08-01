@@ -258,6 +258,48 @@ def test_generation_continues_after_not_found_and_error(
     assert result.output_path is not None
 
 
+def test_rate_limit_errors_are_not_queued_for_review(tmp_path: Path) -> None:
+    """Quota exhaustion should warn, not fill the review wizard."""
+    wb_path = tmp_path / "rate_limited.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Books"
+    ws.append(["ISBN", "Title", "Author", "Copies"])
+    ws.append(["", "Rate Limited", "Author A", 1])
+    ws.append(["", "Ambiguous Book", "Author B", 1])
+    wb.save(wb_path)
+
+    settings = _settings(tmp_path, workbook=wb_path, lookup=True)
+    provider = _ScriptedEnrichmentProvider(
+        {
+            "Rate Limited": BookEnrichmentResult(
+                isbn=MISSING_ISBN_PLACEHOLDER,
+                status=BookEnrichmentStatus.ERROR,
+                message="Google Books rate limit reached",
+                metadata={"error_kind": "rate_limit"},
+            ),
+            "Ambiguous Book": BookEnrichmentResult(
+                isbn=MISSING_ISBN_PLACEHOLDER,
+                status=BookEnrichmentStatus.AMBIGUOUS,
+                message="two hits",
+                candidates=(),
+            ),
+        }
+    )
+    result = WorkbookGenerationService(
+        settings,
+        enrichment=BookEnrichmentService(provider=provider),
+    ).generate(workbook_path=wb_path, output_path=tmp_path / "out.xlsx")
+
+    assert result.enrichment is not None
+    assert result.enrichment.lookup_errors == 1
+    assert result.enrichment.ambiguous_matches == 1
+    assert len(result.enrichment.review_items) == 1
+    assert result.enrichment.review_items[0].title == "Ambiguous Book"
+    assert any(w.code == "enrichment_error" for w in result.warnings)
+
+
 def test_cache_usage_during_generation(tmp_path: Path) -> None:
     wb_path = tmp_path / "dups.xlsx"
     wb = Workbook()

@@ -12,6 +12,7 @@ from classroom_library_label_maker.models import (
     BookEnrichmentStatus,
 )
 from classroom_library_label_maker.services.lookups.google_books import (
+    RATE_LIMIT_USER_MESSAGE,
     GoogleBooksEnrichmentProvider,
     GoogleBooksTransportError,
     author_similarity,
@@ -397,7 +398,7 @@ def test_live_fetch_retries_on_429(monkeypatch: pytest.MonkeyPatch) -> None:
         calls["n"] += 1
         if calls["n"] < 3:
             raise GoogleBooksTransportError(
-                "Google Books HTTP error: 429",
+                RATE_LIMIT_USER_MESSAGE,
                 kind="rate_limit",
             )
         return _payload(
@@ -414,6 +415,7 @@ def test_live_fetch_retries_on_429(monkeypatch: pytest.MonkeyPatch) -> None:
         min_request_interval_seconds=0,
         max_retries_on_429=4,
         rate_limit_backoff_seconds=0.5,
+        rate_limit_max_backoff_seconds=8.0,
         sleep=sleeps.append,
     )
     result = provider.enrich(_book())
@@ -433,7 +435,7 @@ def test_live_fetch_429_backoff_is_capped(monkeypatch: pytest.MonkeyPatch) -> No
         calls["n"] += 1
         if calls["n"] < 5:
             raise GoogleBooksTransportError(
-                "Google Books HTTP error: 429",
+                RATE_LIMIT_USER_MESSAGE,
                 kind="rate_limit",
             )
         return _payload(
@@ -456,6 +458,71 @@ def test_live_fetch_429_backoff_is_capped(monkeypatch: pytest.MonkeyPatch) -> No
     result = provider.enrich(_book())
     assert result.status is BookEnrichmentStatus.FOUND
     assert sleeps == [2.0, 3.0, 3.0, 3.0]
+
+
+def test_exhausted_429_uses_friendly_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from classroom_library_label_maker.services.lookups import google_books as gb
+
+    def always_429(url: str, *, timeout_seconds: float) -> dict[str, object]:
+        raise GoogleBooksTransportError(
+            RATE_LIMIT_USER_MESSAGE,
+            kind="rate_limit",
+        )
+
+    monkeypatch.setattr(gb, "_default_fetch_json", always_429)
+    provider = GoogleBooksEnrichmentProvider(
+        min_request_interval_seconds=0,
+        max_retries_on_429=1,
+        rate_limit_backoff_seconds=0.1,
+        rate_limit_max_backoff_seconds=0.1,
+        rate_limit_circuit_breaker_threshold=99,
+        sleep=lambda _s: None,
+    )
+    result = provider.enrich(_book())
+    assert result.status is BookEnrichmentStatus.ERROR
+    assert result.metadata["error_kind"] == "rate_limit"
+    assert "rate limit" in result.message.lower()
+    assert "429" not in result.message
+
+
+def test_rate_limit_circuit_skips_further_lookups(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from classroom_library_label_maker.services.lookups import google_books as gb
+    from classroom_library_label_maker.services.lookups.google_books import (
+        RATE_LIMIT_STOPPED_MESSAGE,
+    )
+
+    calls = {"n": 0}
+
+    def always_429(url: str, *, timeout_seconds: float) -> dict[str, object]:
+        calls["n"] += 1
+        raise GoogleBooksTransportError(
+            RATE_LIMIT_USER_MESSAGE,
+            kind="rate_limit",
+        )
+
+    monkeypatch.setattr(gb, "_default_fetch_json", always_429)
+    provider = GoogleBooksEnrichmentProvider(
+        min_request_interval_seconds=0,
+        max_retries_on_429=0,
+        rate_limit_backoff_seconds=0.1,
+        rate_limit_max_backoff_seconds=0.1,
+        rate_limit_circuit_breaker_threshold=2,
+        sleep=lambda _s: None,
+    )
+    first = provider.enrich(_book(title="One"))
+    second = provider.enrich(_book(title="Two"))
+    third = provider.enrich(_book(title="Three"))
+    assert first.status is BookEnrichmentStatus.ERROR
+    assert second.status is BookEnrichmentStatus.ERROR
+    assert third.status is BookEnrichmentStatus.ERROR
+    assert third.message == RATE_LIMIT_STOPPED_MESSAGE
+    assert third.metadata.get("circuit_open") is True
+    # First two books each make one attempt; third is short-circuited.
+    assert calls["n"] == 2
 
 
 def test_live_fetch_paces_requests(monkeypatch: pytest.MonkeyPatch) -> None:

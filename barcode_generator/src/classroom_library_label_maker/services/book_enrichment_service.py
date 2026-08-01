@@ -182,7 +182,14 @@ class BookEnrichmentService:
 
         self._cache_misses += 1
         result = self._provider.enrich(book)
-        self._cache[key] = result
+        # Do not cache transient rate limits — a later retry in the same run
+        # (or a duplicate title after cooldown) should hit the provider again.
+        if not (
+            result.status is BookEnrichmentStatus.ERROR
+            and isinstance(result.metadata, dict)
+            and result.metadata.get("error_kind") == "rate_limit"
+        ):
+            self._cache[key] = result
         _logger.debug(
             "Enrichment %s for isbn=%s status=%s (cache miss)",
             type(self._provider).__name__,

@@ -570,9 +570,12 @@ scored peers to public `ReviewCandidate` values. Never mutates the input
 
 **Rate limiting**
 
-Live HTTP calls are paced (~0.75s apart by default) and HTTP **429** responses
-retry with capped exponential backoff (defaults: up to 3 retries, max ~8s
-sleep). Optional `GOOGLE_BOOKS_API_KEY` (read by
+Live HTTP calls are paced (~1.25s apart by default) and HTTP **429** responses
+retry with capped exponential backoff (defaults: up to 6 retries, max ~65s
+sleep, honoring ``Retry-After`` when present). After a 429, pacing slows for
+the rest of the run; after several consecutive book-level rate-limit failures,
+remaining lookups short-circuit so the review wizard is not filled with empty
+429 cards. Optional `GOOGLE_BOOKS_API_KEY` (read by
 `create_default_enrichment_service`) improves quota for large inventories.
 Injectable `fetch_json` bypasses pacing for unit tests.
 

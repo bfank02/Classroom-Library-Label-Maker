@@ -467,18 +467,29 @@ class WorkbookGenerationService:
 
         if result.status is BookEnrichmentStatus.ERROR:
             short = (result.message or "Lookup failed").strip()
-            if len(short) > 80:
+            error_kind = ""
+            if isinstance(result.metadata, dict):
+                error_kind = str(result.metadata.get("error_kind") or "")
+            if error_kind == "rate_limit":
+                short = "Google Books rate limit — try again later or set API key"
+            elif len(short) > 80:
                 short = short[:77] + "..."
+            warning = WorkbookGenerationWarning(
+                message=(
+                    f"ISBN lookup error for {book.title!r} by {book.author!r}"
+                    + (f": {result.message}" if result.message else "")
+                ),
+                code="enrichment_error",
+                isbn=book.isbn,
+            )
+            # Rate-limit failures have no catalog choices; keep them out of the
+            # review wizard so teachers are not asked to click through dozens
+            # of empty cards after a quota exhaustion.
+            if error_kind == "rate_limit":
+                return book, warning, None
             return (
                 book,
-                WorkbookGenerationWarning(
-                    message=(
-                        f"ISBN lookup error for {book.title!r} by {book.author!r}"
-                        + (f": {result.message}" if result.message else "")
-                    ),
-                    code="enrichment_error",
-                    isbn=book.isbn,
-                ),
+                warning,
                 ReviewItem(
                     title=book.title,
                     author=book.author,

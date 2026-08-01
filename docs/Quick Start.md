@@ -21,8 +21,10 @@ A ready-made example is included: `samples/Sample Books.xlsx` (also under
 For a larger **manual QA / demo** inventory (~190 books with blank ISBNs,
 duplicates, and ambiguous titles), use
 `samples/Teacher Demo Library.xlsx`. With **Look up missing ISBNs** enabled,
-that run can take a few minutes — status advances as
-`Looking up missing ISBNs... (n of total)`.
+that run can take several minutes — status advances as
+`Looking up missing ISBNs... (n of total)`. For more reliable quota on large
+batches, set a free `GOOGLE_BOOKS_API_KEY` in your environment before launching
+the app.
 
 ## 2. Open the app
 
