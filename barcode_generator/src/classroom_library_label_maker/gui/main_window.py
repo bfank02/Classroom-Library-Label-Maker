@@ -1,4 +1,4 @@
-"""Primary application window — input collection layout only.
+"""Primary application window — Home inputs and Ready to Print completion.
 
 Widgets and layout live here. Form state, validation, and user actions are
 owned by :class:`~classroom_library_label_maker.gui.controller.GuiController`.
@@ -21,12 +21,17 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QPushButton,
     QSizePolicy,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from classroom_library_label_maker.constants import DEFAULT_LABEL_FILENAME
+from classroom_library_label_maker.gui.completion_view import CompletionView
 from classroom_library_label_maker.metadata import APP_NAME
+
+_HOME_PAGE = 0
+_COMPLETION_PAGE = 1
 
 
 class FilenameLineEdit(QLineEdit):
@@ -53,7 +58,7 @@ class FilenameLineEdit(QLineEdit):
 
 
 class MainWindow(QMainWindow):
-    """Top-level window for collecting generation inputs."""
+    """Top-level window for collecting generation inputs and completion."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -64,7 +69,39 @@ class MainWindow(QMainWindow):
 
         central = QWidget(self)
         central.setObjectName("centralWidget")
-        root = QVBoxLayout(central)
+        central_layout = QVBoxLayout(central)
+        central_layout.setContentsMargins(0, 0, 0, 0)
+        central_layout.setSpacing(0)
+
+        self.stack = QStackedWidget()
+        self.stack.setObjectName("mainStack")
+        self.home_page = self._build_home_page()
+        self.completion_view = CompletionView()
+        self.stack.addWidget(self.home_page)
+        self.stack.addWidget(self.completion_view)
+        central_layout.addWidget(self.stack)
+
+        self.setCentralWidget(central)
+        self._install_shortcuts()
+        self._set_tab_order()
+        self.show_home()
+
+    def is_showing_completion(self) -> bool:
+        """True when the Ready to Print page is visible."""
+        return self.stack.currentIndex() == _COMPLETION_PAGE
+
+    def show_home(self) -> None:
+        """Show the normal Files / options / Generate home screen."""
+        self.stack.setCurrentIndex(_HOME_PAGE)
+
+    def show_completion(self) -> None:
+        """Show the Ready to Print completion page (no Generate button)."""
+        self.stack.setCurrentIndex(_COMPLETION_PAGE)
+
+    def _build_home_page(self) -> QWidget:
+        home = QWidget()
+        home.setObjectName("homePage")
+        root = QVBoxLayout(home)
         root.setContentsMargins(28, 24, 28, 24)
         root.setSpacing(18)
 
@@ -266,10 +303,7 @@ class MainWindow(QMainWindow):
         button_row.addWidget(self.generate_button)
         button_row.addStretch(1)
         root.addLayout(button_row)
-
-        self.setCentralWidget(central)
-        self._install_shortcuts()
-        self._set_tab_order()
+        return home
 
     def _install_shortcuts(self) -> None:
         close_action = QAction(self)
@@ -360,3 +394,11 @@ class MainWindow(QMainWindow):
         QWidget.setTabOrder(self.show_title_checkbox, self.show_author_checkbox)
         QWidget.setTabOrder(self.show_author_checkbox, self.show_barcode_checkbox)
         QWidget.setTabOrder(self.show_barcode_checkbox, self.generate_button)
+        QWidget.setTabOrder(
+            self.completion_view.open_label_button,
+            self.completion_view.open_inventory_button,
+        )
+        QWidget.setTabOrder(
+            self.completion_view.open_inventory_button,
+            self.completion_view.done_button,
+        )

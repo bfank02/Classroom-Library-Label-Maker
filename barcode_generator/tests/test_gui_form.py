@@ -208,8 +208,9 @@ def test_generate_labels_uses_injected_service(
     assert calls == [
         (tmp_paths["inventory"].resolve(), tmp_paths["output"].resolve())
     ]
-    assert "1 label" in window.status_label.text().lower()
-    assert "done" in window.status_label.text().lower()
+    assert window.is_showing_completion()
+    details = window.completion_view.details_label.text().lower()
+    assert "1 label" in details
     window.close()
 
 

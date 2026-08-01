@@ -9,6 +9,7 @@ these helpers only format
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from classroom_library_label_maker.models import (
@@ -21,6 +22,71 @@ from classroom_library_label_maker.models import (
 _CLI_WARNING_DETAIL_LIMIT = 20
 # Max review items shown in GUI / CLI enrichment detail.
 _REVIEW_ITEM_DISPLAY_LIMIT = 5
+
+
+@dataclass(frozen=True, slots=True)
+class GuiCompletionSummary:
+    """Structured data for the Ready to Print completion screen.
+
+    Built from existing generation / review outcomes — no new business logic.
+    """
+
+    headline: str
+    detail_lines: tuple[str, ...]
+    label_workbook_path: Path | None
+    label_workbook_name: str
+    updated_inventory_path: Path | None
+    updated_inventory_name: str | None
+    requires_attention: bool
+
+
+def build_gui_completion_summary(
+    result: WorkbookGenerationResult,
+    *,
+    updated_inventory_path: Path | None = None,
+    books_reviewed: int = 0,
+) -> GuiCompletionSummary:
+    """Build presentation data for the Ready to Print completion view."""
+    details: list[str] = []
+    labels = result.labels_created
+    pages = result.pages_created
+    label_word = "label" if labels == 1 else "labels"
+    page_word = "page" if pages == 1 else "pages"
+    details.append(f"{labels} {label_word} created")
+    details.append(f"{pages} {page_word}")
+
+    enrichment = result.enrichment
+    if enrichment is not None and enrichment.enabled and enrichment.isbns_found > 0:
+        found = enrichment.isbns_found
+        isbn_word = "ISBN" if found == 1 else "ISBNs"
+        details.append(f"{found} {isbn_word} found automatically")
+
+    reviewed = max(0, int(books_reviewed))
+    if reviewed > 0:
+        book_word = "book" if reviewed == 1 else "books"
+        details.append(f"{reviewed} {book_word} reviewed")
+
+    if result.completion_state is GenerationCompletionState.SUCCESS_WITH_WARNINGS:
+        warning_word = "warning" if result.warning_count == 1 else "warnings"
+        details.append(
+            f"Saved with {result.warning_count} {warning_word} — "
+            "review before printing"
+        )
+
+    label_path = result.output_path
+    label_name = label_path.name if label_path is not None else "(label workbook)"
+    inventory_name = (
+        updated_inventory_path.name if updated_inventory_path is not None else None
+    )
+    return GuiCompletionSummary(
+        headline="✔ Ready to Print",
+        detail_lines=tuple(details),
+        label_workbook_path=label_path,
+        label_workbook_name=label_name,
+        updated_inventory_path=updated_inventory_path,
+        updated_inventory_name=inventory_name,
+        requires_attention=result.requires_review,
+    )
 
 
 def gui_completion_status(

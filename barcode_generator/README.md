@@ -456,9 +456,10 @@ Sample inventory: `assets/sample-data/Sample Books.xlsx` (also
 `samples/Sample Books.xlsx` at the repo root).
 
 While generating, Browse buttons, the filename field, the template combo, and
-Generate are disabled. The status line shows engine stage updates, then a clean
-success, success-with-warnings (review before printing), or friendly error
-message. Press **Esc** to close the window.
+Generate are disabled. The status line shows engine stage updates. On success,
+the Home form is replaced by a **✔ Ready to Print** page (open created files
+or **Done** to return Home with settings preserved). Failures stay on Home
+with a friendly status message. Press **Esc** to close the window.
 
 Icon loading prefers the platform-native icon (`app.icns` on macOS, `app.ico`
 on Windows), then `logo.png`.
@@ -469,7 +470,8 @@ on Windows), then `logo.png`.
 |--------|------|
 | `gui/app.py` | `QApplication` bootstrap + event loop + icon |
 | `gui/icons.py` | Application icon discovery (empty placeholders ignored) |
-| `gui/main_window.py` | Widgets / layout / accessibility / Esc to close |
+| `gui/main_window.py` | Home + Ready to Print stack / accessibility / Esc |
+| `gui/completion_view.py` | Ready to Print completion page widgets |
 | `gui/controller.py` | Form actions, validation, start/finish generation |
 | `gui/generation_worker.py` | `QObject` worker: run service, emit progress/completed/failed |
 | `gui/form_state.py` | Immutable selections + validation messages |

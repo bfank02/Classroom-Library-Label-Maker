@@ -7,8 +7,8 @@ Responsibilities:
 * update path labels and control enablement
 * lightweight form validation
 * construct :class:`ApplicationSettings` and start a :class:`GenerationWorker`
-* display engine progress / success / success-with-warnings / failure in the
-  status line
+* display engine progress / failure in the status line
+* present the Ready to Print completion page after successful generation
 
 Does **not** implement ISBN / import / barcode / layout logic or cancellation.
 ``WorkbookGenerationService`` remains Qt-unaware.
@@ -21,12 +21,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QObject, QThread, Slot
+from PySide6.QtCore import QObject, QThread, QUrl, Slot
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QDialog, QFileDialog
 
 from classroom_library_label_maker.config import load_application_settings
 from classroom_library_label_maker.exceptions import ApplicationError
-from classroom_library_label_maker.generation_summary import gui_completion_status
+from classroom_library_label_maker.generation_summary import (
+    build_gui_completion_summary,
+)
 from classroom_library_label_maker.gui.form_state import GenerationFormState
 from classroom_library_label_maker.gui.generation_worker import (
     GenerationJob,
@@ -81,6 +84,7 @@ if TYPE_CHECKING:
 OpenFileDialog = Callable[[], Path | None]
 OpenDirDialog = Callable[[], Path | None]
 SaveFileDialog = Callable[[], Path | None]
+OpenPathHandler = Callable[[Path], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,6 +144,7 @@ class GuiController(QObject):
         review_wizard_runner: ReviewWizardRunner | None = None,
         book_review_service: BookReviewService | None = None,
         inventory_update_service: InventoryUpdateService | None = None,
+        open_path: OpenPathHandler | None = None,
     ) -> None:
         super().__init__(window)
         self._window = window
@@ -168,6 +173,7 @@ class GuiController(QObject):
         self._inventory_update_service = (
             inventory_update_service or InventoryUpdateService()
         )
+        self._open_path = open_path or self._default_open_path
         self._save_updated_inventory_on_review = True
         self._last_review_result: ReviewSessionResult | None = None
         self._last_updated_inventory_path: Path | None = None
@@ -395,6 +401,9 @@ class GuiController(QObject):
         )
 
         self._is_generating = True
+        self._last_review_result = None
+        self._last_updated_inventory_path = None
+        self._window.show_home()
         self._set_inputs_enabled(False)
         self._set_status("Generating labels…", level="ok")
 
@@ -433,15 +442,51 @@ class GuiController(QObject):
             result.to_dict()["summary"],
         )
         inventory_path = self._run_interactive_review_if_needed(result)
-        level = "warning" if result.requires_review else "ok"
-        self._set_status(
-            gui_completion_status(
-                result,
-                updated_inventory_path=inventory_path,
-            ),
-            level=level,
+        self._show_ready_to_print(result, inventory_path)
+
+    def _show_ready_to_print(
+        self,
+        result: WorkbookGenerationResult,
+        inventory_path: Path | None,
+    ) -> None:
+        """Replace the home form with the Ready to Print completion page."""
+        books_reviewed = 0
+        if self._last_review_result is not None:
+            books_reviewed = self._last_review_result.total_reviewed
+        summary = build_gui_completion_summary(
+            result,
+            updated_inventory_path=inventory_path,
+            books_reviewed=books_reviewed,
         )
+        self._window.completion_view.populate(summary)
+        self._window.show_completion()
+        self._set_status("", level="ok")
         self._set_inputs_enabled(True)
+
+    def on_completion_done(self) -> None:
+        """Return to Home, clearing completion/progress while keeping settings."""
+        self._window.completion_view.clear()
+        self._window.show_home()
+        self._last_updated_inventory_path = None
+        self._refresh_ui()
+
+    def on_open_label_workbook(self) -> None:
+        """Open the generated label workbook with the OS default app."""
+        summary = self._window.completion_view.summary()
+        if summary is None or summary.label_workbook_path is None:
+            return
+        self._open_path(summary.label_workbook_path)
+
+    def on_open_updated_inventory(self) -> None:
+        """Open the updated inventory workbook when one was written."""
+        summary = self._window.completion_view.summary()
+        if summary is None or summary.updated_inventory_path is None:
+            return
+        self._open_path(summary.updated_inventory_path)
+
+    @staticmethod
+    def _default_open_path(path: Path) -> None:
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.resolve())))
 
     def _run_interactive_review_if_needed(
         self,
@@ -615,6 +660,12 @@ class GuiController(QObject):
             self.on_lookup_missing_isbns_changed
         )
         window.generate_button.clicked.connect(self.on_generate_labels)
+        completion = window.completion_view
+        completion.open_label_workbook_requested.connect(self.on_open_label_workbook)
+        completion.open_updated_inventory_requested.connect(
+            self.on_open_updated_inventory
+        )
+        completion.done_requested.connect(self.on_completion_done)
 
     def _refresh_ui(self) -> None:
         self._set_path_label(

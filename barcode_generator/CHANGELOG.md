@@ -71,6 +71,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   selection auto-advances after ~250 ms (timer restarts on reselection);
   Finish Review replaces Skip on the final item; Previous restores prior
   selection/skip from `ReviewSession`
+- Ready to Print completion page after successful generation
+  (`CompletionView` / `GuiCompletionSummary`): open created files; Done
+  returns Home with Files settings preserved
 
 ### Changed
 
@@ -84,6 +87,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for Label Folder preserves filename; stem selection on filename focus.
 - Review wizard buttons: Previous / Skip / Cancel (no Next); selected cards
   show border + checkmark
+- Successful GUI generation ends on a Ready to Print page instead of leaving
+  Generate Labels visible with a long status message
 - Print barcodes render at 600 DPI with taller bars and fill more of the
   label; barcode row allocation grows when fewer text fields are shown
 

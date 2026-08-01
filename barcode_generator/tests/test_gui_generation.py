@@ -130,10 +130,11 @@ def test_controller_invokes_generation_service_with_form_inputs(
             "output_path": tmp_paths["output"].resolve(),
         }
     ]
-    assert "2 labels" in window.status_label.text().lower()
-    assert "done" in window.status_label.text().lower()
-    assert str(tmp_paths["output"].resolve()) in window.status_label.text()
-    assert "traceback" not in window.status_label.text().lower()
+    assert window.is_showing_completion()
+    details = window.completion_view.details_label.text().lower()
+    assert "2 labels" in details
+    assert window.completion_view.label_file_name.text() == tmp_paths["output"].name
+    assert "traceback" not in window.completion_view.details_label.text().lower()
     window.close()
 
 
@@ -256,8 +257,8 @@ def test_gui_generation_matches_direct_service_path(
     assert sorted(p.name for p in barcodes_gui.glob("*.png")) == sorted(
         p.name for p in barcodes_direct.glob("*.png")
     )
-    assert "done" in window.status_label.text().lower()
-    assert "3 labels" in window.status_label.text().lower()
+    assert window.is_showing_completion()
+    assert "3 labels" in window.completion_view.details_label.text().lower()
     window.close()
 
 

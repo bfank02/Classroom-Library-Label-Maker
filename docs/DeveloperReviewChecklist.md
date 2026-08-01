@@ -22,6 +22,8 @@ Copy into a PR description or a filled
       (GUI must not own review indexes or call Google Books during review;
       presentation lives in `ReviewWizardDialog`; Skip/selection auto-advance
       is UI-only and must not change domain review logic)
+- [ ] Successful generation ends on Ready to Print (`CompletionView`); Done
+      returns Home without clearing Files settings; no new generation logic
 - [ ] New work uses `WorkbookGenerationService` (or its collaborators),
       not deprecated `BatchProcessor` / `BarcodeGenerator`
 - [ ] Unexpected failures map to the existing exception hierarchy where

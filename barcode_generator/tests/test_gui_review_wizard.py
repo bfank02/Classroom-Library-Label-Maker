@@ -422,7 +422,8 @@ def test_controller_skips_inventory_write_when_unchecked(
     controller.on_generate_labels()
     wait_until_generation_finished(controller)
     assert controller._last_updated_inventory_path is None
-    assert "Inventory workbook updated" not in window.status_label.text()
+    assert window.is_showing_completion()
+    assert window.completion_view.inventory_file_block.isHidden()
     window.close()
 
 

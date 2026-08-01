@@ -816,14 +816,16 @@ recorded. Cancel rejects without applying. No Next button.
 
 **Finish:** seals the session (`finish()`); `GuiController` then calls
 `BookReviewService.apply` and, when the save checkbox is checked,
-`InventoryUpdateService.write_updated_inventory`. Completion status lists
-both the label workbook and the updated inventory when written.
+`InventoryUpdateService.write_updated_inventory`. The GUI then shows the
+**Ready to Print** completion page (`CompletionView`) with created files and
+open/Done actions.
 
 ### `GuiController` review hook
 
 After a successful `GenerationWorker.completed` signal, the controller builds
 a session via `review_session_from_generation_result`. Empty queues skip the
-wizard and continue with the normal completion status line.
+wizard. Successful generation (with or without review) then shows the Ready
+to Print completion page instead of leaving Generate Labels on screen.
 
 ---
 

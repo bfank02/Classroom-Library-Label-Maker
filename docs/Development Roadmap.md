@@ -92,5 +92,6 @@ Phase 3 is printing only.
       independent persistence; stem selection on focus)
 - [x] Review wizard workflow refinement (Skip / selection auto-advance;
       Finish Review on final item; no Next button)
+- [x] Ready to Print completion experience (full-page summary; Done → Home)
 
 See also: [`Architecture.md`](Architecture.md), [`../TASKS.md`](../TASKS.md).

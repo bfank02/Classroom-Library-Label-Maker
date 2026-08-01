@@ -75,11 +75,16 @@ inventory workbook when review is complete** checked to write a new
 `Inventory (Updated ISBNs).xlsx` next to your original inventory (your
 original file is never changed).
 
-- Green status ending in **Ready to print** means the label workbook is ready.
-- Amber status saying **review before printing** means the file was created,
+When generation finishes, the main window shows a **✔ Ready to Print** page
+(not a dialog): label/page counts, optional ISBN and review totals, the
+created file names, and actions to **Open Label Workbook**, **Open Updated
+Inventory** (when written), or **Done**. **Done** returns to the Home screen
+with your Files settings preserved so you can generate again.
+
+- A clean Ready to Print page means the label workbook is ready.
+- If the summary mentions **review before printing**, the file was created
   but some labels need attention (for example a missing barcode).
-- When an updated inventory was written, the status also lists both saved
-  workbooks under **Generation Complete**.
+- Updated inventory appears under **Files Created** only when one was written.
 
 ## 4. Print from Excel
 
