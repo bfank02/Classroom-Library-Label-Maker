@@ -74,6 +74,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ready to Print completion page after successful generation
   (`CompletionView` / `GuiCompletionSummary`): open created files; Done
   returns Home with Files settings preserved
+- Review wizard presentation polish: Progress / Book / Candidates sections,
+  friendly amber guidance, **⭐ Recommended Match**, stronger selected cards,
+  skipped-state banner
 
 ### Changed
 
@@ -89,6 +92,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   show border + checkmark
 - Successful GUI generation ends on a Ready to Print page instead of leaving
   Generate Labels visible with a long status message
+- Review wizard layout and card/badge styling refined for readability
+  (workflow unchanged)
 - Print barcodes render at 600 DPI with taller bars and fill more of the
   label; barcode row allocation grows when fewer text fields are shown
 

@@ -476,17 +476,23 @@ BookReviewService.apply(finished session)
 Ready to Print completion page (GuiCompletionSummary / CompletionView)
 ```
 
-* `ReviewWizardDialog` shows progress (`Book X of Y` + bar), book title/
-  author/reason, selectable candidate cards (`"{confidence_label} Match"`,
-  ISBN, title, author, publisher · year), a **Recommended** badge on the
-  highest-confidence card, and a checkmark / selected border when chosen.
-* Streamlined workflow (Version 1.4 Phase 2): **Skip** records the decision
-  and advances immediately; selecting a candidate highlights at once and
-  auto-advances after ~250 ms (reselection cancels and restarts the timer).
-  Buttons are **Previous** / **Skip** / **Cancel**; on the final item after
-  a selection or skip, **Skip** is replaced by **Finish Review**. There is
-  no **Next** button. Returning with **Previous** restores the prior
-  selection or skipped state from `ReviewSession`.
+* `ReviewWizardDialog` is organized into Progress, Book Information, and
+  Candidate Selection sections with clearer spacing and typography
+  (Version 1.4 Phase 4 presentation polish).
+* Progress shows **Review ISBN Matches**, `Book X of Y`, a progress bar, and
+  `N Remaining`.
+* Book Information shows title, author, and amber teacher-facing guidance
+  (e.g. multiple matching editions) — not warning/error styling.
+* Candidate cards are the primary interaction: stronger selected border,
+  light tint, subtle elevation, and a short checkmark fade (~150 ms).
+  Recommended cards show **⭐ Recommended Match** with the confidence label
+  beneath (e.g. Very High Match).
+* Returning to a skipped book shows **This book will be skipped.**; choosing
+  a candidate clears that state automatically.
+* Streamlined workflow (Version 1.4 Phase 2) is unchanged: **Skip** advances
+  immediately; selection auto-advances after ~250 ms; buttons are
+  **Previous** / **Skip** / **Cancel**; **Finish Review** replaces Skip on
+  the final item after a decision. No **Next** button.
 * Buttons call `ReviewSession` (`previous` / `skip_current` /
   `select_candidate` / `next` for auto-advance / `finish`). Qt does not own
   the review index.

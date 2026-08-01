@@ -176,7 +176,7 @@ def test_previous_restores_skipped_state(qapp) -> None:
     assert session.current_index() == 0
     assert session.decision_for_current().skipped is True
     assert all(card.property("selected") is not True for card in dialog._cards)
-    assert "Skipped" in dialog.decision_status_label.text()
+    assert dialog.decision_status_label.text() == "This book will be skipped."
     dialog.close()
 
 

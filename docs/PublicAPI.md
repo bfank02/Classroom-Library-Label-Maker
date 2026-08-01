@@ -806,13 +806,19 @@ Presentation-only. Domain review state stays on `ReviewSession`.
 Module: `classroom_library_label_maker.gui.review_wizard`
 
 **Purpose:** Modal wizard after generation when enrichment left review items
-with attached books. Renders progress, book details, and candidate cards;
-forwards Previous / Skip / candidate clicks / Finish to the session.
+with attached books. Renders Progress / Book Information / Candidate
+Selection sections with polished cards and badges; forwards Previous / Skip /
+candidate clicks / Finish to the session.
 
-**Workflow (v1.4):** Skip advances immediately. Candidate selection highlights
-immediately and auto-advances after ~250 ms (timer restarts on reselection).
-**Finish Review** replaces Skip on the final item once a selection or skip is
-recorded. Cancel rejects without applying. No Next button.
+**Presentation (v1.4 Phase 4):** Clear section hierarchy, friendly amber
+guidance, **⭐ Recommended Match** with confidence beneath, stronger selected
+card styling, and **This book will be skipped.** when restoring a skip.
+
+**Workflow (v1.4 Phase 2):** Skip advances immediately. Candidate selection
+highlights immediately and auto-advances after ~250 ms (timer restarts on
+reselection). **Finish Review** replaces Skip on the final item once a
+selection or skip is recorded. Cancel rejects without applying. No Next
+button.
 
 **Finish:** seals the session (`finish()`); `GuiController` then calls
 `BookReviewService.apply` and, when the save checkbox is checked,

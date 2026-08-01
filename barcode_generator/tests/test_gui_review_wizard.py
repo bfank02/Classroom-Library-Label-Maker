@@ -106,10 +106,10 @@ def test_wizard_progress_and_navigation(qapp) -> None:
     assert dialog.progress_label.text() == "Book 1 of 2"
     assert dialog.progress_bar.value() == 1
     assert dialog.progress_bar.maximum() == 2
-    assert dialog.remaining_label.text() == "2 books remaining"
+    assert dialog.remaining_label.text() == "2 Remaining"
     assert dialog.title_label.text() == "Book One"
     assert "Author" in dialog.author_label.text()
-    assert dialog.reason_label.text() == "Multiple catalog matches"
+    assert "multiple matching editions" in dialog.reason_label.text().lower()
     assert "b45309" in dialog.reason_label.styleSheet()
     assert dialog.previous_button.isEnabled() is False
     assert dialog.skip_button.isVisible() is True
@@ -119,7 +119,7 @@ def test_wizard_progress_and_navigation(qapp) -> None:
 
     dialog._cards[0].clicked.emit(c1a)
     QApplication.processEvents()
-    assert dialog.remaining_label.text() == "1 book remaining"
+    assert dialog.remaining_label.text() == "1 Remaining"
     assert dialog.progress_label.text() == "Book 2 of 2"
     assert dialog.progress_bar.value() == 2
     assert dialog.title_label.text() == "Book Two"
@@ -146,7 +146,7 @@ def test_wizard_recommended_badge_on_highest_confidence(qapp) -> None:
 
     badges = dialog.findChildren(QLabel, "reviewRecommendedBadge")
     assert len(badges) == 1
-    assert badges[0].text() == "Recommended"
+    assert badges[0].text() == "⭐ Recommended Match"
     assert dialog._cards[0].candidate == c1a
     assert dialog._cards[0].findChild(QLabel, "reviewRecommendedBadge") is not None
     assert dialog._cards[1].findChild(QLabel, "reviewRecommendedBadge") is None

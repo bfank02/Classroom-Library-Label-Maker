@@ -93,5 +93,7 @@ Phase 3 is printing only.
 - [x] Review wizard workflow refinement (Skip / selection auto-advance;
       Finish Review on final item; no Next button)
 - [x] Ready to Print completion experience (full-page summary; Done → Home)
+- [x] Review experience polish (section hierarchy, cards, badges, skipped
+      presentation; presentation-only)
 
 See also: [`Architecture.md`](Architecture.md), [`../TASKS.md`](../TASKS.md).

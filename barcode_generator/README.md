@@ -446,10 +446,12 @@ Then:
    `WorkbookGenerationService` on a Qt worker thread
 
 When enrichment leaves ambiguous matches, **Review ISBN Matches** opens over
-`ReviewSession`: **Skip** advances immediately; selecting a candidate
-highlights (border + checkmark) and auto-advances after ~250 ms; **Previous**
-restores the prior selection or skip; **Finish Review** replaces Skip on the
-final item after a decision. Domain review logic is unchanged.
+`ReviewSession` with Progress / Book Information / Candidate Selection
+sections: **Skip** advances immediately; selecting a candidate highlights
+(stronger border, tint, checkmark) and auto-advances after ~250 ms;
+**Previous** restores the prior selection or “This book will be skipped.”;
+**Finish Review** replaces Skip on the final item after a decision. Domain
+review logic is unchanged.
 
 Teacher quick start: [`docs/Quick Start.md`](../docs/Quick%20Start.md).
 Sample inventory: `assets/sample-data/Sample Books.xlsx` (also
