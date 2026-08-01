@@ -78,7 +78,9 @@ Phase 3 is printing only.
       continue past metadata matches without ISBN; DEBUG diagnostics)
 - [x] Composite enrichment provider pipeline
       (`CompositeBookEnrichmentProvider`; Google Books only for now)
-- [ ] Additional catalog providers (Open Library, …)
+- [x] Open Library enrichment provider (secondary catalog after Google
+      `NOT_FOUND`; provider attribution on `BookEnrichmentResult`)
+- [ ] Additional catalog providers
 - [ ] Cover image downloads (`services/covers/`)
 - [ ] Inventory / checkout / reading-level workflows
 - [ ] Additional barcode symbologies and label types

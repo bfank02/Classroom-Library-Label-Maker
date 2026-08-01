@@ -113,13 +113,17 @@ def test_create_default_enrichment_service_injects_api_key() -> None:
     from classroom_library_label_maker.services.lookups.composite import (
         CompositeBookEnrichmentProvider,
     )
+    from classroom_library_label_maker.services.lookups.open_library import (
+        OpenLibraryEnrichmentProvider,
+    )
 
     service = create_default_enrichment_service(api_key="injected-key")
     provider = service.provider
     assert isinstance(provider, CompositeBookEnrichmentProvider)
-    assert len(provider.providers) == 1
+    assert len(provider.providers) == 2
     google = provider.providers[0]
     assert isinstance(google, GoogleBooksEnrichmentProvider)
+    assert isinstance(provider.providers[1], OpenLibraryEnrichmentProvider)
     assert google.uses_authentication is True
     assert (
         google.min_request_interval_seconds

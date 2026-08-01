@@ -8,11 +8,11 @@ and are injected into
 Available providers:
 
 * :class:`CompositeBookEnrichmentProvider` — sequential provider pipeline
-* :class:`GoogleBooksEnrichmentProvider` — Google Books Volumes API (title/author
-  search)
+* :class:`GoogleBooksEnrichmentProvider` — Google Books Volumes API (primary)
+* :class:`OpenLibraryEnrichmentProvider` — Open Library Search API (fallback)
 
-Production generation uses the composite pipeline (currently Google Books
-only) via :func:`create_default_enrichment_service`.
+Production generation uses the composite pipeline (Google Books, then Open
+Library) via :func:`create_default_enrichment_service`.
 """
 
 from __future__ import annotations
@@ -23,8 +23,12 @@ from classroom_library_label_maker.services.lookups.composite import (
 from classroom_library_label_maker.services.lookups.google_books import (
     GoogleBooksEnrichmentProvider,
 )
+from classroom_library_label_maker.services.lookups.open_library import (
+    OpenLibraryEnrichmentProvider,
+)
 
 __all__ = [
     "CompositeBookEnrichmentProvider",
     "GoogleBooksEnrichmentProvider",
+    "OpenLibraryEnrichmentProvider",
 ]

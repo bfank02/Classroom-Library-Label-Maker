@@ -13,8 +13,9 @@ Experimental enrichment / interactive review:
 
 * :class:`BookEnrichmentService`
 * :class:`NullBookEnrichmentProvider`
-* :class:`CompositeBookEnrichmentProvider` / :class:`GoogleBooksEnrichmentProvider`
-  (``services.lookups``)
+* :class:`CompositeBookEnrichmentProvider` /
+  :class:`GoogleBooksEnrichmentProvider` /
+  :class:`OpenLibraryEnrichmentProvider` (``services.lookups``)
 * :class:`ReviewSession` / :class:`BookReviewService` (UI-independent review)
 * :class:`InventoryUpdateService` (updated inventory workbook after review)
 
@@ -64,6 +65,7 @@ from classroom_library_label_maker.services.label_layout_service import (
 from classroom_library_label_maker.services.lookups import (
     CompositeBookEnrichmentProvider,
     GoogleBooksEnrichmentProvider,
+    OpenLibraryEnrichmentProvider,
 )
 from classroom_library_label_maker.services.workbook_generation_service import (
     WorkbookGenerationService,
@@ -84,6 +86,7 @@ __all__ = [
     "IsbnValidator",
     "LabelLayoutService",
     "NullBookEnrichmentProvider",
+    "OpenLibraryEnrichmentProvider",
     "ReviewSession",
     "WorkbookGenerationService",
     "create_default_enrichment_service",

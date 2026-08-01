@@ -263,10 +263,11 @@ def test_create_default_uses_composite_with_google_books() -> None:
     service = create_default_enrichment_service(api_key="test-key")
     provider = service.provider
     assert isinstance(provider, CompositeBookEnrichmentProvider)
-    assert len(provider.providers) == 1
+    assert len(provider.providers) == 2
     inner = provider.providers[0]
     assert isinstance(inner, GoogleBooksEnrichmentProvider)
     assert inner.uses_authentication is True
+    assert provider.providers[1].provider_name == "Open Library"
 
 
 def test_debug_diagnostics_show_continuation(

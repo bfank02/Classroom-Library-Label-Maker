@@ -371,8 +371,10 @@ BookEnrichmentProvider   (protocol)
         │
         ├─ NullBookEnrichmentProvider              (explicit no-op)
         ├─ CompositeBookEnrichmentProvider         (default pipeline)
-        │      └─ GoogleBooksEnrichmentProvider    (current sole backend)
-        └─ GoogleBooksEnrichmentProvider           (also injectable alone)
+        │      ├─ GoogleBooksEnrichmentProvider    (primary catalog)
+        │      └─ OpenLibraryEnrichmentProvider    (fallback catalog)
+        └─ GoogleBooksEnrichmentProvider /
+           OpenLibraryEnrichmentProvider           (also injectable alone)
 ```
 
 `WorkbookGenerationService` constructs enrichment via
@@ -383,8 +385,9 @@ or accepts an injected `BookEnrichmentService` for tests.
 
 * `lookup_missing_isbns` (default **True**) gates the enrichment stage.
 * When enabled, `WorkbookGenerationService` depends only on
-  `BookEnrichmentService` (default factory uses a composite provider
-  wrapping Google Books — the orchestrator never imports catalog SDKs).
+  `BookEnrichmentService` (default factory uses a composite provider —
+  Google Books then Open Library; the orchestrator never imports catalog
+  SDKs).
 * Progress stage `ENRICHING` reports **"Looking up missing ISBNs..."**, then
   updates with **"(n of total)"** as each missing-ISBN book is looked up.
 * Books with blank ISBN cells are imported with a provisional placeholder
@@ -544,7 +547,7 @@ chains an ordered collection of other providers via dependency injection:
 CompositeBookEnrichmentProvider(
     (
         GoogleBooksEnrichmentProvider(...),
-        # OpenLibraryEnrichmentProvider(...),  # future
+        OpenLibraryEnrichmentProvider(...),
     )
 )
 ```
@@ -568,9 +571,16 @@ If every provider returns a non-resolving status, the composite returns
 `NOT_FOUND`. Caching remains solely on `BookEnrichmentService`; the
 composite behaves like any other provider from the service's perspective.
 
-Production wiring (`create_default_enrichment_service`) currently injects
-Google Books alone inside the composite so additional catalogs can be
-appended later without changing generation, GUI, or the enrichment service.
+Production wiring (`create_default_enrichment_service`) injects **Google
+Books first**, then **Open Library**. Google remains the preferred catalog;
+Open Library improves coverage for titles Google cannot identify. Teachers
+never see which provider supplied a result.
+
+**Provider attribution**
+
+`BookEnrichmentResult.provider_name` records the catalog that produced the
+outcome (`"Google Books"`, `"Open Library"`, …) for logs, diagnostics,
+benchmarks, and future analytics — not for the normal teacher UI.
 
 **DEBUG diagnostics**
 
@@ -672,6 +682,35 @@ HTTP **401/403** drop the key for the remainder of the run and retry once in
 anonymous mode (invalid keys are not retried repeatedly). Rate-limit and auth
 failures are not queued in the review wizard. Injectable `fetch_json` bypasses
 pacing for unit tests.
+
+### Open Library provider (`services/lookups/open_library.py`)
+
+`OpenLibraryEnrichmentProvider` is the secondary catalog. Responsibilities:
+
+* HTTP requests to the Open Library Search API
+* Parsing search JSON into a provider-local candidate model (`title`,
+  `authors`, `isbn13`, `isbn10`, `publisher`, `publish_year`, `work_key`)
+* Scoring candidates with the same confidence helpers / thresholds as Google
+  Books (reuse of public matching helpers; no speculative shared framework yet)
+
+**Query strategy**
+
+1. `title` + `author` field search
+2. `title`-only fallback
+
+No author-only searches. ISBN-13 is preferred; ISBN-10 is used only when no
+ISBN-13 is present. Metadata matches without a usable ISBN continue to the
+next strategy. Transport failures map to `ERROR`.
+
+**DEBUG diagnostics**
+
+When the `open_library` logger is at DEBUG, each lookup logs the search
+query label, candidate count, top confidence scores, accept/reject
+reasoning, and the final decision. HTTP payloads and credentials are never
+logged.
+
+Open Library improves coverage — it does **not** replace Google Books as the
+preferred catalog.
 
 Never log API keys or URLs that contain them. Production builds should obtain
 the key from environment/configuration — never embed it in source or packages.

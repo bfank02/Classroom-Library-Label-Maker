@@ -85,7 +85,7 @@ barcode_generator/
 │       │   ├── barcode_generator.py    # Deprecated CLI helper
 │       │   ├── batch_processor.py      # Deprecated CLI adapter
 │       │   ├── protocols.py            # Enrichment / lookup / cover / progress contracts
-│       │   ├── lookups/                # Composite + Google Books (+ future)
+│       │   ├── lookups/                # Composite, Google Books, Open Library
 │       │   └── covers/                 # Future cover downloads
 │       ├── rendering/                  # Barcode image rendering (protocol + backends)
 │       │   ├── renderer.py
@@ -254,11 +254,11 @@ python -c "from classroom_library_label_maker.config import load_application_set
 
 `BookEnrichmentService` looks up missing ISBNs by title/author when
 `lookup_missing_isbns` is True (default). Generation injects the default
-composite pipeline (Google Books today) via
+composite pipeline (Google Books, then Open Library) via
 `create_default_enrichment_service(api_key=settings.google_books_api_key)`;
-the orchestrator depends only on `BookEnrichmentService`. The API key is
-resolved once in `config.load_google_books_auth_config()` (never read inside
-the provider).
+the orchestrator depends only on `BookEnrichmentService`. The Google Books
+API key is resolved once in `config.load_google_books_auth_config()` (never
+read inside providers). Open Library requires no key.
 
 GUI: checkbox **Look up missing ISBNs automatically** (checked by default).
 Uncheck for Version 1.0 behavior (blank ISBN rows skipped at import; no
@@ -306,10 +306,12 @@ When some books still need attention, the completion message includes an
 
 `CompositeBookEnrichmentProvider` evaluates catalog providers sequentially in
 injection order (`FOUND` / `AMBIGUOUS` stop; `NOT_FOUND` / `ERROR` continue).
-Production currently wraps Google Books only so additional providers can be
-appended later without changing `BookEnrichmentService` or generation.
-Caching stays on the service. Enable DEBUG on `composite_enrichment` for
-per-provider continuation logs (never includes API keys).
+Production order: **Google Books** (preferred), then **Open Library**
+(coverage fallback). Teachers never see which catalog supplied a match.
+`BookEnrichmentResult.provider_name` carries attribution for logs,
+benchmarks, and diagnostics only. Caching stays on the service. Enable DEBUG
+on `composite_enrichment` for per-provider continuation logs (never includes
+API keys).
 
 **Google Books search flow (developer notes)**
 
@@ -320,6 +322,13 @@ still run. Confidence thresholds and ambiguity detection are unchanged.
 Enable DEBUG logging on the `google_books` logger to see per-query
 diagnostics (query text, result counts, top candidates, continuation, final
 decision). Diagnostics never include API keys.
+
+**Open Library search flow (developer notes)**
+
+Secondary catalog consulted after Google `NOT_FOUND`. Queries: title+author,
+then title-only. Prefer ISBN-13; fall back to ISBN-10. Same confidence
+philosophy as Google Books. Enable DEBUG on `open_library` for search
+diagnostics (never logs HTTP payloads).
 
 ### Excel import
 

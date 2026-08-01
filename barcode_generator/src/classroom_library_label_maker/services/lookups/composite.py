@@ -134,4 +134,5 @@ class CompositeBookEnrichmentProvider:
             status=BookEnrichmentStatus.NOT_FOUND,
             message=last_message,
             metadata={"provider": "composite"},
+            provider_name=None,
         )

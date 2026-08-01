@@ -6,7 +6,7 @@ records via pluggable :class:`BookEnrichmentProvider` implementations.
 Phase 1 ships :class:`NullBookEnrichmentProvider`, which leaves books
 unchanged and returns ``SKIPPED``. Production generation injects a
 :class:`~classroom_library_label_maker.services.lookups.composite.CompositeBookEnrichmentProvider`
-(currently wrapping Google Books only) via
+(Google Books, then Open Library) via
 :func:`create_default_enrichment_service`.
 
 An in-memory result cache lives on this service (not on providers) so
@@ -67,10 +67,8 @@ def create_default_enrichment_service(
     Imported lazily so :class:`WorkbookGenerationService` can depend on
     :class:`BookEnrichmentService` without referencing catalog adapters.
 
-    Phase 5.2 ships Google Books alone inside
-    :class:`~classroom_library_label_maker.services.lookups.composite.CompositeBookEnrichmentProvider`
-    so additional catalog providers can be appended later without changing
-    the service or generation wiring.
+    The default pipeline is Google Books first, then Open Library as a
+    secondary catalog for titles Google returns as ``NOT_FOUND``.
 
     Args:
         api_key: Optional Google Books API key already resolved by application
@@ -83,10 +81,16 @@ def create_default_enrichment_service(
     from classroom_library_label_maker.services.lookups.google_books import (
         GoogleBooksEnrichmentProvider,
     )
+    from classroom_library_label_maker.services.lookups.open_library import (
+        OpenLibraryEnrichmentProvider,
+    )
 
     return BookEnrichmentService(
         provider=CompositeBookEnrichmentProvider(
-            (GoogleBooksEnrichmentProvider(api_key=api_key),)
+            (
+                GoogleBooksEnrichmentProvider(api_key=api_key),
+                OpenLibraryEnrichmentProvider(),
+            )
         ),
     )
 

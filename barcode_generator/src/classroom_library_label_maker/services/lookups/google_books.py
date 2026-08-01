@@ -660,6 +660,7 @@ def _result_from_candidate(
                 "query": query,
             },
             candidates=review_candidates,
+            provider_name=GoogleBooksEnrichmentProvider.provider_name,
         )
 
     candidate = scored.candidate
@@ -690,6 +691,7 @@ def _result_from_candidate(
             "source_isbn": book.isbn,
         },
         candidates=review_candidates,
+        provider_name=GoogleBooksEnrichmentProvider.provider_name,
     )
 
 
@@ -846,6 +848,7 @@ class GoogleBooksEnrichmentProvider:
                 status=BookEnrichmentStatus.ERROR,
                 message="Cannot enrich a book with an empty title",
                 metadata={"provider": "google_books"},
+                provider_name=self.provider_name,
             )
 
         if self._rate_limit_circuit_open and self._fetch_json is None:
@@ -858,6 +861,7 @@ class GoogleBooksEnrichmentProvider:
                     "error_kind": "rate_limit",
                     "circuit_open": True,
                 },
+                provider_name=self.provider_name,
             )
 
         queries = _build_queries(title, author)
@@ -903,6 +907,7 @@ class GoogleBooksEnrichmentProvider:
                         "error_kind": exc.kind,
                         "query": query,
                     },
+                    provider_name=self.provider_name,
                 )
 
             self._record_successful_request()
@@ -1027,6 +1032,7 @@ class GoogleBooksEnrichmentProvider:
             status=BookEnrichmentStatus.NOT_FOUND,
             message=last_not_found_message,
             metadata={"provider": "google_books"},
+            provider_name=self.provider_name,
         )
 
     def _search(self, query: str) -> Mapping[str, Any]:
