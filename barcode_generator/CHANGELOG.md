@@ -36,8 +36,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ReviewDecision` / `ReviewSessionResult`, and `BookReviewService`
   (no GUI, no workbook writes, no extra catalog requests)
 - Interactive review wizard (`ReviewWizardDialog`): thin Qt UI over
-  `ReviewSession` after generation; persists save-inventory preference
-  only (inventory write deferred)
+  `ReviewSession` after generation
+- Updated inventory workbook after review: `InventoryUpdateService` +
+  `OpenPyxlInventoryWorkbookUpdater` write `Inventory (Updated ISBNs).xlsx`
+  (unique suffix on collision); original inventory never overwritten;
+  completion summary lists both saved workbooks
 - Cross-platform packaging: shared `scripts/build_release.py`, macOS
   `build_macos.sh`, updated Windows `build.bat`
 - Native macOS `.app` bundle support (Finder-launchable, bundled runtime)

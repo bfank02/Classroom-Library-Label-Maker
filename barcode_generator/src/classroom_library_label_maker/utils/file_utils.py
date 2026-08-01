@@ -64,3 +64,31 @@ def file_exists(path: Path) -> bool:
         ``True`` if ``path`` is an existing file.
     """
     return path.is_file()
+
+
+def unique_path(path: Path) -> Path:
+    """Return ``path``, or a non-colliding sibling when the file already exists.
+
+    Collision examples for ``Report.xlsx``::
+
+        Report.xlsx
+        Report (1).xlsx
+        Report (2).xlsx
+
+    Args:
+        path: Desired destination path.
+
+    Returns:
+        A path that does not currently exist as a file.
+    """
+    if not path.exists():
+        return path
+    stem = path.stem
+    suffix = path.suffix
+    parent = path.parent
+    index = 1
+    while True:
+        candidate = parent / f"{stem} ({index}){suffix}"
+        if not candidate.exists():
+            return candidate
+        index += 1

@@ -13,9 +13,11 @@ Start here: [`docs/Quick Start.md`](docs/Quick%20Start.md)
    the first selection). Optionally leave **Look up missing ISBNs
    automatically** checked so blank ISBN cells are filled from title/author.
 3. Click **Generate Labels**. If some books still need ISBN choices, a
-   **Review ISBN Matches** wizard lets you pick or skip catalog matches
-   before the usual completion summary. Then open the label workbook in
-   Excel and print on Avery 5160 sheets.
+   **Review ISBN Matches** wizard lets you pick or skip catalog matches.
+   Optionally leave **Save updated inventory workbook** checked to create
+   `Inventory (Updated ISBNs).xlsx` beside your original (the original file
+   is never overwritten). Then open the label workbook in Excel and print
+   on Avery 5160 sheets.
 
 ## Layout
 

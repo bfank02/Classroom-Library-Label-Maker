@@ -37,13 +37,16 @@ workbook** path are remembered for next time. Change them anytime with Browse.
 Click **Generate Labels**.
 
 If books still need ISBN choices, the **Review ISBN Matches** wizard appears
-so you can pick a catalog match or skip. A checkbox remembers whether you want
-the inventory workbook updated later (saving the inventory is not implemented
-yet).
+so you can pick a catalog match or skip. Leave **Save updated inventory
+workbook when review is complete** checked to write a new
+`Inventory (Updated ISBNs).xlsx` next to your original inventory (your
+original file is never changed).
 
 - Green status ending in **Ready to print** means the label workbook is ready.
 - Amber status saying **review before printing** means the file was created,
   but some labels need attention (for example a missing barcode).
+- When an updated inventory was written, the status also lists both saved
+  workbooks under **Generation Complete**.
 
 ## 4. Print from Excel
 

@@ -70,7 +70,8 @@ Phase 3 is printing only.
 - [x] Interactive review service (`ReviewSession`, `ReviewDecision`,
       `ReviewSessionResult`, `BookReviewService`) — no GUI yet
 - [x] Interactive review wizard (`ReviewWizardDialog` over `ReviewSession`)
-- [ ] Persist selected ISBNs back to the inventory workbook after review
+- [x] Persist selected / auto-enriched ISBNs to an updated inventory workbook
+      copy after review (`InventoryUpdateService`; original never overwritten)
 - [ ] Additional catalog providers (Open Library, …)
 - [ ] Cover image downloads (`services/covers/`)
 - [ ] Inventory / checkout / reading-level workflows

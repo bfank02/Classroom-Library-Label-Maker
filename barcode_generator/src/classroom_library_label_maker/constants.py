@@ -77,6 +77,10 @@ LOGO_FILE_NAME = "logo.png"
 QUICK_START_FILE_NAME = "Quick Start.md"
 GUI_PREFERENCES_FILE_NAME = "gui_preferences.json"
 
+# Default name for a copy of the inventory with review/enrichment ISBN updates.
+# Never overwrite the teacher's original workbook.
+UPDATED_INVENTORY_FILE_NAME = "Inventory (Updated ISBNs).xlsx"
+
 # Provisional ISBN used when inventory rows omit ISBN and lookup is enabled.
 # Not a valid ISBN-13; enrichment replaces it on FOUND, otherwise validation
 # follows the existing warning path.

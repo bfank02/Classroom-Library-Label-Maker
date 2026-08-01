@@ -139,7 +139,8 @@ recoverable diagnostics (e.g. missing barcode images).
 **Fields:** `books_imported`, `books_processed`, `labels_created`,
 `pages_created`, `barcodes_generated`, `barcodes_reused`, `output_path`,
 `pdf_output_path`, `elapsed_seconds`, `warnings`, optional `enrichment`
-(`EnrichmentSummary`).
+(`EnrichmentSummary`), `books` (post-enrichment, import order),
+`source_rows` (matching 1-based Excel rows for inventory updates).
 
 ### `EnrichmentSummary` — Experimental — External
 
@@ -379,6 +380,7 @@ Package: `classroom_library_label_maker.services`
 | `GoogleBooksEnrichmentProvider` | Experimental | External | Google Books title/author enrichment (optional; not default) |
 | `ReviewSession` | Experimental | External | UI-independent interactive review queue / decisions |
 | `BookReviewService` | Experimental | External | Apply finished review decisions → updated `Book`s |
+| `InventoryUpdateService` | Experimental | External | Write updated inventory workbook copy after review |
 | `BatchProcessor` | Internal / Deprecated | Unused by CLI | Legacy JSON stub; do not use |
 | `BarcodeGenerator` | Internal / Deprecated | Unused by CLI | Legacy stub; superseded by `BarcodeGenerationService` |
 
@@ -437,6 +439,24 @@ providers.
 
 Selecting a candidate → new `Book` with ISBN-13 (else ISBN-10); title/author
 and other fields preserved. Skipping → original book unchanged.
+
+### `InventoryUpdateService` — Experimental — External
+
+Module: `classroom_library_label_maker.services.inventory_update_service`
+
+**Purpose:** After review, merge applied decisions into post-enrichment books
+and write a **new** inventory workbook via `InventoryWorkbookUpdater`. Never
+overwrites the original file. Default destination:
+`Inventory (Updated ISBNs).xlsx` beside the source (uses `unique_path` on
+collision).
+
+| Method | Inputs | Outputs |
+|--------|--------|---------|
+| `write_updated_inventory(...)` | source path, settings, books, source_rows, session, review result | written `Path` |
+
+Auto-enriched and review-accepted ISBNs are written; missing-placeholder /
+skipped rows are left alone. OpenPyxl stays in
+`OpenPyxlInventoryWorkbookUpdater`.
 
 ### `NullBookEnrichmentProvider` — Experimental — External
 
@@ -717,8 +737,9 @@ with attached books. Renders progress, book details, and candidate cards;
 forwards Previous / Next / Skip / candidate clicks / Finish to the session.
 
 **Finish:** seals the session (`finish()`); `GuiController` then calls
-`BookReviewService.apply`. Inventory workbook writing is **not** performed;
-the save-inventory checkbox updates `GuiPreferences` only.
+`BookReviewService.apply` and, when the save checkbox is checked,
+`InventoryUpdateService.write_updated_inventory`. Completion status lists
+both the label workbook and the updated inventory when written.
 
 ### `GuiController` review hook
 

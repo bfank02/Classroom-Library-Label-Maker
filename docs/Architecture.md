@@ -161,6 +161,7 @@ barcode_generator/src/classroom_library_label_maker/
 │   ├── batch_processing_service.py
 │   ├── book_enrichment_service.py    # Enrichment orchestration (null provider default)
 │   ├── book_review_service.py        # ReviewSession + BookReviewService
+│   ├── inventory_update_service.py   # Updated inventory workbook after review
 │   ├── excel_import_service.py
 │   ├── label_layout_service.py
 │   ├── workbook_generation_service.py
@@ -177,6 +178,8 @@ barcode_generator/src/classroom_library_label_maker/
 │   ├── openpyxl_workbook_reader.py     OpenPyxlWorkbookReader
 │   ├── workbook_writer.py              WorkbookWriter protocol
 │   ├── openpyxl_workbook_writer.py     OpenPyxlWorkbookWriter
+│   ├── inventory_workbook_updater.py   InventoryWorkbookUpdater protocol
+│   ├── openpyxl_inventory_workbook_updater.py  ISBN save-as updates
 │   ├── workbook_presentation.py        Print-ready view / page setup
 │   ├── label_sheet_target.py           LabelSheetTarget + LabelPlacement
 │   ├── in_memory_label_sheet_target.py InMemoryLabelSheetTarget
@@ -470,10 +473,38 @@ existing completion status (ISBN Lookup Summary, etc.)
   `select_candidate` / `finish`). Qt does not own the review index.
 * Single **Very High** candidate is pre-selected (teacher may still Skip).
 * Checkbox **Save updated inventory workbook when review is complete**
-  (default on) is persisted in `GuiPreferences`; workbook writing is deferred.
+  (default on) is persisted in `GuiPreferences`. When checked on Finish,
+  `InventoryUpdateService` writes a new workbook
+  (`Inventory (Updated ISBNs).xlsx`, unique suffix on collision) beside the
+  original — never overwriting the teacher's file. Auto-enriched and
+  review-accepted ISBNs are written; skipped rows stay unchanged.
+* Completion status includes a **Generation Complete** block listing the
+  label workbook and updated inventory when written.
 * No review items → wizard is skipped; success flow unchanged.
 
+**Inventory workbook update (Phase 4.4)**
+
+```
+ReviewSession + BookReviewService
+        │ merged books (import order)
+        ▼
+InventoryUpdateService
+        │
+        ▼
+InventoryWorkbookUpdater (OpenPyxlInventoryWorkbookUpdater)
+        │ save-as copy
+        ▼
+Inventory (Updated ISBNs).xlsx
+```
+
+* `WorkbookGenerationResult.books` / `source_rows` carry post-enrichment books
+  and Excel row numbers so the updater can patch ISBN cells without
+  re-importing or changing generation behavior.
+* OpenPyxl stays in the workbook adapter; the service only builds update
+  pairs and chooses a unique destination path (`utils.file_utils.unique_path`).
+
 **In-memory enrichment cache**
+
 
 
 

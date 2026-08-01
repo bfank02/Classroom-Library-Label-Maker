@@ -8,6 +8,8 @@ Public API
 ----------
 * :class:`WorkbookReader` / :class:`OpenPyxlWorkbookReader` — workbook reading
 * :class:`WorkbookWriter` / :class:`OpenPyxlWorkbookWriter` — workbook create/save
+* :class:`InventoryWorkbookUpdater` /
+  :class:`OpenPyxlInventoryWorkbookUpdater` — inventory ISBN save-as updates
 * :class:`LabelSheetTarget` / :class:`LabelPlacement` — label placement contract
 * :mod:`workbook_presentation` — print-ready view/page-setup helpers
 * :class:`InMemoryLabelSheetTarget` / :class:`InMemoryWorkbookWriter` — tests
@@ -22,9 +24,15 @@ from classroom_library_label_maker.workbooks.in_memory_label_sheet_target import
 from classroom_library_label_maker.workbooks.in_memory_workbook_writer import (
     InMemoryWorkbookWriter,
 )
+from classroom_library_label_maker.workbooks.inventory_workbook_updater import (
+    InventoryWorkbookUpdater,
+)
 from classroom_library_label_maker.workbooks.label_sheet_target import (
     LabelPlacement,
     LabelSheetTarget,
+)
+from classroom_library_label_maker.workbooks.openpyxl_inventory_workbook_updater import (
+    OpenPyxlInventoryWorkbookUpdater,
 )
 from classroom_library_label_maker.workbooks.openpyxl_label_sheet_target import (
     OpenPyxlLabelSheetTarget,
@@ -41,8 +49,10 @@ from classroom_library_label_maker.workbooks.workbook_writer import WorkbookWrit
 __all__ = [
     "InMemoryLabelSheetTarget",
     "InMemoryWorkbookWriter",
+    "InventoryWorkbookUpdater",
     "LabelPlacement",
     "LabelSheetTarget",
+    "OpenPyxlInventoryWorkbookUpdater",
     "OpenPyxlLabelSheetTarget",
     "OpenPyxlWorkbookReader",
     "OpenPyxlWorkbookWriter",

@@ -176,6 +176,11 @@ class ReviewWizardDialog(QDialog):
         self.progress_bar.setMinimum(0)
         root.addWidget(self.progress_bar)
 
+        self.remaining_label = QLabel()
+        self.remaining_label.setObjectName("reviewRemainingLabel")
+        self.remaining_label.setAccessibleName("Books remaining")
+        root.addWidget(self.remaining_label)
+
         self.title_label = QLabel()
         self.title_label.setObjectName("reviewBookTitle")
         self.title_label.setWordWrap(True)
@@ -190,6 +195,7 @@ class ReviewWizardDialog(QDialog):
         self.reason_label = QLabel()
         self.reason_label.setObjectName("reviewReasonLabel")
         self.reason_label.setWordWrap(True)
+        self.reason_label.setStyleSheet("color: #b45309;")
         root.addWidget(self.reason_label)
 
         candidates_caption = QLabel("Catalog matches")
@@ -219,8 +225,8 @@ class ReviewWizardDialog(QDialog):
         self.save_inventory_checkbox.setObjectName("reviewSaveInventoryCheckbox")
         self.save_inventory_checkbox.setChecked(save_updated_inventory)
         self.save_inventory_checkbox.setToolTip(
-            "Remembered for a future release that writes the inventory. "
-            "No workbook is written in this version."
+            "Write a new inventory workbook with accepted and automatically "
+            "found ISBNs. Your original inventory file is never overwritten."
         )
         root.addWidget(self.save_inventory_checkbox)
 
@@ -242,7 +248,7 @@ class ReviewWizardDialog(QDialog):
         self.skip_button.clicked.connect(self._on_skip)
         nav.addWidget(self.skip_button)
 
-        self.finish_button = QPushButton("Finish")
+        self.finish_button = QPushButton("Finish Review")
         self.finish_button.setObjectName("reviewFinishButton")
         self.finish_button.setDefault(True)
         self.finish_button.clicked.connect(self._on_finish)
@@ -287,8 +293,14 @@ class ReviewWizardDialog(QDialog):
             return
         assert isinstance(candidate, ReviewCandidate)
         self._session.select_candidate(candidate)
+        self._update_remaining_label()
         self._refresh_selection_styles()
         self._update_nav_enabled()
+
+    def _update_remaining_label(self) -> None:
+        remaining = self._session.remaining_count()
+        remaining_word = "book" if remaining == 1 else "books"
+        self.remaining_label.setText(f"{remaining} {remaining_word} remaining")
 
     def _refresh(self) -> None:
         self._refreshing = True
@@ -302,12 +314,14 @@ class ReviewWizardDialog(QDialog):
             self.progress_label.setText(f"Book {human} of {total}")
             self.progress_bar.setMaximum(max(total, 1))
             self.progress_bar.setValue(human)
+            self._update_remaining_label()
 
             if item is None or book is None:
                 self.title_label.setText("")
                 self.author_label.setText("")
                 self.reason_label.setText("")
                 self._rebuild_cards(())
+                self._update_nav_enabled()
                 return
 
             self.title_label.setText(book.title)
@@ -376,7 +390,16 @@ class ReviewWizardDialog(QDialog):
     def _update_nav_enabled(self) -> None:
         index = self._session.current_index()
         total = self._session.item_count()
+        has_decision = self._session.has_decision_for_current()
         self.previous_button.setEnabled(index > 0)
-        self.next_button.setEnabled(index < total - 1)
-        self.skip_button.setEnabled(total > 0)
+        self.next_button.setEnabled(index < total - 1 and has_decision)
+        self.skip_button.setEnabled(total > 0 and not self._session.is_finished())
         self.finish_button.setEnabled(True)
+        skipped = sum(1 for decision in self._session.decisions() if decision.skipped)
+        if skipped > 0:
+            skip_word = "skip" if skipped == 1 else "skips"
+            self.finish_button.setText(
+                f"Finish Review ({skipped} {skip_word})"
+            )
+        else:
+            self.finish_button.setText("Finish Review")

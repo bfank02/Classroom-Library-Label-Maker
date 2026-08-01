@@ -288,6 +288,8 @@ class WorkbookGenerationService:
             elapsed_seconds=elapsed,
             warnings=tuple(warnings),
             enrichment=enrichment_summary,
+            books=tuple(books_for_batch),
+            source_rows=tuple(imported.source_rows),
         )
         _logger.info(
             "Workbook generation complete: imported=%s labels=%s pages=%s "

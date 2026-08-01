@@ -9,6 +9,8 @@ these helpers only format
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from classroom_library_label_maker.models import (
     EnrichmentSummary,
     GenerationCompletionState,
@@ -21,11 +23,17 @@ _CLI_WARNING_DETAIL_LIMIT = 20
 _REVIEW_ITEM_DISPLAY_LIMIT = 5
 
 
-def gui_completion_status(result: WorkbookGenerationResult) -> str:
+def gui_completion_status(
+    result: WorkbookGenerationResult,
+    *,
+    updated_inventory_path: Path | None = None,
+) -> str:
     """Return a concise status-line message for a completed generation run.
 
     When enrichment produced review items, appends an ISBN Lookup Summary
-    (found count, needs-review count, up to five book titles).
+    (found count, needs-review count, up to five book titles). When an
+    updated inventory workbook was written after review, appends a short
+    Generation Complete block with both saved paths.
     """
     counts = _label_page_phrase(result)
     output = result.output_path if result.output_path is not None else "(unknown)"
@@ -47,13 +55,24 @@ def gui_completion_status(result: WorkbookGenerationResult) -> str:
     else:
         base = f"Done — {counts}. Saved to {output}. Ready to print."
 
+    parts = [base]
     enrichment_block = _isbn_lookup_summary_lines(result.enrichment)
     if enrichment_block:
-        return base + "\n\n" + "\n".join(enrichment_block)
-    return base
+        parts.append("\n".join(enrichment_block))
+    inventory_block = _saved_files_summary(
+        label_workbook=result.output_path,
+        updated_inventory=updated_inventory_path,
+    )
+    if inventory_block:
+        parts.append("\n".join(inventory_block))
+    return "\n\n".join(parts)
 
 
-def cli_completion_lines(result: WorkbookGenerationResult) -> tuple[str, ...]:
+def cli_completion_lines(
+    result: WorkbookGenerationResult,
+    *,
+    updated_inventory_path: Path | None = None,
+) -> tuple[str, ...]:
     """Return stdout lines for a completed generation run (including warnings)."""
     lines: list[str] = []
     if result.completion_state is GenerationCompletionState.SUCCESS_WITH_WARNINGS:
@@ -91,6 +110,8 @@ def cli_completion_lines(result: WorkbookGenerationResult) -> tuple[str, ...]:
     if result.pdf_output_path is not None:
         lines.append(f"Print-ready PDF: {result.pdf_output_path}")
         lines.append("Print the PDF (not Excel) for scannable barcodes.")
+    if updated_inventory_path is not None:
+        lines.append(f"Updated inventory workbook: {updated_inventory_path}")
     lines.append("")
     lines.append(f"Elapsed time: {result.elapsed_seconds:.3f}s")
 
@@ -105,6 +126,28 @@ def cli_completion_lines(result: WorkbookGenerationResult) -> tuple[str, ...]:
             lines.append(f"  … and {remaining} more")
 
     return tuple(lines)
+
+
+def _saved_files_summary(
+    *,
+    label_workbook: Path | None,
+    updated_inventory: Path | None,
+) -> list[str]:
+    """Teacher-facing block when an updated inventory workbook was written."""
+    if updated_inventory is None:
+        return []
+    label_name = (
+        label_workbook.name if label_workbook is not None else "(label workbook)"
+    )
+    return [
+        "Generation Complete",
+        "✓ Label workbook created",
+        "✓ Inventory workbook updated",
+        "",
+        "Saved:",
+        f"• {label_name}",
+        f"• {updated_inventory.name}",
+    ]
 
 
 def _isbn_lookup_summary_lines(

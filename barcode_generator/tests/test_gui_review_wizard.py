@@ -98,7 +98,7 @@ def _two_book_session() -> tuple[ReviewSession, ReviewCandidate, ReviewCandidate
 
 
 def test_wizard_progress_and_navigation(qapp) -> None:
-    session, _, _ = _two_book_session()
+    session, c1a, _ = _two_book_session()
     dialog = ReviewWizardDialog(session)
     dialog.show()
     QApplication.processEvents()
@@ -106,11 +106,19 @@ def test_wizard_progress_and_navigation(qapp) -> None:
     assert dialog.progress_label.text() == "Book 1 of 2"
     assert dialog.progress_bar.value() == 1
     assert dialog.progress_bar.maximum() == 2
+    assert dialog.remaining_label.text() == "2 books remaining"
     assert dialog.title_label.text() == "Book One"
     assert "Author" in dialog.author_label.text()
     assert dialog.reason_label.text() == "Multiple catalog matches"
+    assert "b45309" in dialog.reason_label.styleSheet()
     assert dialog.previous_button.isEnabled() is False
+    assert dialog.next_button.isEnabled() is False
+    assert dialog.finish_button.text() == "Finish Review"
+
+    dialog._cards[0].clicked.emit(c1a)
+    QApplication.processEvents()
     assert dialog.next_button.isEnabled() is True
+    assert dialog.remaining_label.text() == "1 book remaining"
 
     dialog.next_button.click()
     QApplication.processEvents()
@@ -119,6 +127,10 @@ def test_wizard_progress_and_navigation(qapp) -> None:
     assert dialog.title_label.text() == "Book Two"
     assert dialog.previous_button.isEnabled() is True
     assert dialog.next_button.isEnabled() is False
+
+    dialog.skip_button.click()
+    QApplication.processEvents()
+    assert "1 skip" in dialog.finish_button.text()
 
     dialog.previous_button.click()
     QApplication.processEvents()
@@ -335,6 +347,98 @@ def test_controller_skips_wizard_when_no_review_items(
     wait_until_generation_finished(controller)
     assert called["count"] == 0
     window.close()
+
+
+
+
+def test_controller_skips_inventory_write_when_unchecked(
+    qapp, tmp_path: Path
+) -> None:
+    book = _book("Needs Review")
+    candidate = _candidate("9786666666666", confidence_score=0.93)
+    item = _item(book, (candidate,))
+    generation_result = WorkbookGenerationResult(
+        books_imported=1,
+        books_processed=1,
+        labels_created=1,
+        pages_created=1,
+        barcodes_generated=1,
+        output_path=tmp_path / "Library Labels.xlsx",
+        enrichment=EnrichmentSummary(
+            enabled=True,
+            books_looked_up=1,
+            ambiguous_matches=1,
+            review_items=(item,),
+        ),
+        books=(book,),
+        source_rows=(2,),
+    )
+
+    class _Service:
+        def __init__(self, settings) -> None:
+            self.settings = settings
+
+        def generate(self, **kwargs: object) -> WorkbookGenerationResult:
+            return generation_result
+
+    def runner(session: ReviewSession, save_pref: bool) -> ReviewWizardOutcome:
+        session.select_candidate(candidate)
+        session.finish()
+        return ReviewWizardOutcome(
+            session=session,
+            save_updated_inventory=False,
+            review_result=BookReviewService().apply(session),
+        )
+
+    class _FailingInventory:
+        def write_updated_inventory(self, **kwargs: object) -> Path:
+            raise AssertionError("inventory should not be written")
+
+    window = MainWindow()
+    prefs = tmp_path / "prefs.json"
+    controller = GuiController(
+        window,
+        generation_service_factory=_Service,
+        preferences_path=prefs,
+        review_wizard_runner=runner,
+        inventory_update_service=_FailingInventory(),  # type: ignore[arg-type]
+    )
+    (tmp_path / "barcodes").mkdir()
+    inventory = tmp_path / "inventory.xlsx"
+    inventory.write_text("x", encoding="utf-8")
+    controller._state = (
+        controller._state.with_inventory_workbook(inventory)
+        .with_barcode_folder(tmp_path / "barcodes")
+        .with_output_workbook(tmp_path / "Library Labels.xlsx")
+    )
+    controller._refresh_ui()
+    controller.on_generate_labels()
+    wait_until_generation_finished(controller)
+    assert controller._last_updated_inventory_path is None
+    assert "Inventory workbook updated" not in window.status_label.text()
+    window.close()
+
+
+def test_gui_completion_includes_updated_inventory_summary() -> None:
+    from classroom_library_label_maker.generation_summary import gui_completion_status
+
+    result = WorkbookGenerationResult(
+        books_imported=1,
+        books_processed=1,
+        labels_created=1,
+        pages_created=1,
+        barcodes_generated=1,
+        output_path=Path("Library Labels.xlsx"),
+    )
+    text = gui_completion_status(
+        result,
+        updated_inventory_path=Path("Inventory (Updated ISBNs).xlsx"),
+    )
+    assert "Generation Complete" in text
+    assert "✓ Label workbook created" in text
+    assert "✓ Inventory workbook updated" in text
+    assert "Library Labels.xlsx" in text
+    assert "Inventory (Updated ISBNs).xlsx" in text
 
 
 def test_gui_preferences_round_trip_save_inventory_flag(tmp_path: Path) -> None:

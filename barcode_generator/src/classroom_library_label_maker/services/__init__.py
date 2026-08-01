@@ -15,6 +15,7 @@ Experimental enrichment / interactive review:
 * :class:`NullBookEnrichmentProvider`
 * :class:`GoogleBooksEnrichmentProvider` (``services.lookups``)
 * :class:`ReviewSession` / :class:`BookReviewService` (UI-independent review)
+* :class:`InventoryUpdateService` (updated inventory workbook after review)
 
 Deprecated / unused by the CLI (kept for transitional imports only):
 
@@ -49,6 +50,9 @@ from classroom_library_label_maker.services.book_review_service import (
 from classroom_library_label_maker.services.excel_import_service import (
     ExcelImportService,
 )
+from classroom_library_label_maker.services.inventory_update_service import (
+    InventoryUpdateService,
+)
 from classroom_library_label_maker.services.isbn_validator import (
     ISBNValidator,
     IsbnValidator,
@@ -73,6 +77,7 @@ __all__ = [
     "ExcelImportService",
     "GoogleBooksEnrichmentProvider",
     "ISBNValidator",
+    "InventoryUpdateService",
     "IsbnValidator",
     "LabelLayoutService",
     "NullBookEnrichmentProvider",

@@ -62,6 +62,9 @@ from classroom_library_label_maker.services.book_review_service import (
     ReviewSession,
     review_session_from_generation_result,
 )
+from classroom_library_label_maker.services.inventory_update_service import (
+    InventoryUpdateService,
+)
 from classroom_library_label_maker.user_paths import (
     barcode_folder_dialog_start_directory,
     inventory_dialog_start_directory,
@@ -130,6 +133,7 @@ class GuiController(QObject):
         preferences_path: Path | None = None,
         review_wizard_runner: ReviewWizardRunner | None = None,
         book_review_service: BookReviewService | None = None,
+        inventory_update_service: InventoryUpdateService | None = None,
     ) -> None:
         super().__init__(window)
         self._window = window
@@ -150,8 +154,12 @@ class GuiController(QObject):
             review_wizard_runner or self._default_run_review_wizard
         )
         self._book_review_service = book_review_service or BookReviewService()
+        self._inventory_update_service = (
+            inventory_update_service or InventoryUpdateService()
+        )
         self._save_updated_inventory_on_review = True
         self._last_review_result: ReviewSessionResult | None = None
+        self._last_updated_inventory_path: Path | None = None
         self._state = GenerationFormState()
         self._is_generating = False
         self._active_thread: QThread | None = None
@@ -369,26 +377,38 @@ class GuiController(QObject):
             "Generation complete: %s",
             result.to_dict()["summary"],
         )
-        self._run_interactive_review_if_needed(result)
+        inventory_path = self._run_interactive_review_if_needed(result)
         level = "warning" if result.requires_review else "ok"
-        self._set_status(gui_completion_status(result), level=level)
+        self._set_status(
+            gui_completion_status(
+                result,
+                updated_inventory_path=inventory_path,
+            ),
+            level=level,
+        )
         self._set_inputs_enabled(True)
 
     def _run_interactive_review_if_needed(
         self,
         result: WorkbookGenerationResult,
-    ) -> None:
-        """Present the review wizard when enrichment left items for teachers."""
+    ) -> Path | None:
+        """Present the review wizard when enrichment left items for teachers.
+
+        Returns:
+            Path to an updated inventory workbook when one was written;
+            otherwise ``None``.
+        """
+        self._last_updated_inventory_path = None
         session = review_session_from_generation_result(result)
         if session is None:
-            return
+            return None
         outcome = self._review_wizard_runner(
             session,
             self._save_updated_inventory_on_review,
         )
         if outcome is None:
             self._logger.info("ISBN review wizard dismissed without Finish")
-            return
+            return None
         self._last_review_result = outcome.review_result
         self._save_updated_inventory_on_review = outcome.save_updated_inventory
         self._persist_preferences()
@@ -400,6 +420,47 @@ class GuiController(QObject):
             outcome.review_result.unresolved_count,
             outcome.save_updated_inventory,
         )
+        if not outcome.save_updated_inventory:
+            return None
+        return self._write_updated_inventory(result, outcome)
+
+    def _write_updated_inventory(
+        self,
+        result: WorkbookGenerationResult,
+        outcome: ReviewWizardOutcome,
+    ) -> Path | None:
+        """Write a non-destructive inventory copy with accepted ISBN updates."""
+        source = self._state.inventory_workbook
+        if source is None:
+            self._logger.warning(
+                "Cannot write updated inventory: no inventory workbook selected"
+            )
+            return None
+        if not result.books or not result.source_rows:
+            self._logger.warning(
+                "Cannot write updated inventory: generation result has no "
+                "book/source_row data"
+            )
+            return None
+        try:
+            settings = self.build_application_settings()
+            written = self._inventory_update_service.write_updated_inventory(
+                source_path=source,
+                settings=settings,
+                books=result.books,
+                source_rows=result.source_rows,
+                session=outcome.session,
+                review_result=outcome.review_result,
+            )
+        except Exception as exc:
+            self._logger.error(
+                "Failed to write updated inventory workbook: %s",
+                exc,
+                exc_info=True,
+            )
+            return None
+        self._last_updated_inventory_path = written
+        return written
 
     def _default_run_review_wizard(
         self,

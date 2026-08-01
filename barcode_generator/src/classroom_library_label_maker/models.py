@@ -931,6 +931,8 @@ class WorkbookGenerationResult:
         elapsed_seconds: Wall-clock duration of the full run.
         warnings: Recoverable issues from import, enrichment, batch, or layout.
         enrichment: Optional ISBN enrichment summary for this run.
+        books: Post-enrichment books in import order (for inventory updates).
+        source_rows: Matching 1-based Excel row numbers from import.
     """
 
     books_imported: int = 0
@@ -944,6 +946,8 @@ class WorkbookGenerationResult:
     elapsed_seconds: float = 0.0
     warnings: tuple[WorkbookGenerationWarning, ...] = ()
     enrichment: EnrichmentSummary | None = None
+    books: tuple[Book, ...] = ()
+    source_rows: tuple[int, ...] = ()
 
     @property
     def warning_count(self) -> int:
@@ -987,6 +991,8 @@ class WorkbookGenerationResult:
         }
         if self.enrichment is not None:
             summary["enrichment"] = self.enrichment.to_dict()
+        summary["book_count"] = len(self.books)
+        summary["source_row_count"] = len(self.source_rows)
         return {
             "summary": summary,
             "warnings": [warning.to_dict() for warning in self.warnings],

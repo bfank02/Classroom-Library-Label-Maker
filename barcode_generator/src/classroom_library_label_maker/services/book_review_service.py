@@ -58,6 +58,33 @@ def review_session_from_enrichment(
     return ReviewSession.from_pairs(pairs)
 
 
+def books_with_review_applied(
+    books: Sequence[Book],
+    session: ReviewSession,
+    review_result: ReviewSessionResult,
+) -> tuple[Book, ...]:
+    """Return ``books`` with review-queue entries replaced by applied outcomes.
+
+    Non-reviewed books (including automatically enriched FOUND rows) are kept
+    as-is. Matching uses object identity against ``session.books()``.
+    """
+    if len(session.books()) != len(review_result.updated_books):
+        raise ValueError(
+            "review result books must align with the session queue "
+            f"(session={len(session.books())}, "
+            f"result={len(review_result.updated_books)})"
+        )
+    replacements = {
+        id(original): updated
+        for original, updated in zip(
+            session.books(),
+            review_result.updated_books,
+            strict=True,
+        )
+    }
+    return tuple(replacements.get(id(book), book) for book in books)
+
+
 class ReviewSession:
     """Stateful interactive review queue owned by the domain, not the GUI.
 
