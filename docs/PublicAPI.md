@@ -379,7 +379,8 @@ Package: `classroom_library_label_maker.services`
 | `WorkbookGenerationService` | Stable | External | End-to-end import → barcodes → layout → save (canonical runtime for CLI and desktop GUI) |
 | `BookEnrichmentService` | Experimental | External | Provider-agnostic book enrichment (used by generation when lookup enabled) |
 | `NullBookEnrichmentProvider` | Experimental | External | Default no-op provider (`SKIPPED`; preserves Version 1.0 behavior) |
-| `GoogleBooksEnrichmentProvider` | Experimental | External | Google Books title/author enrichment (optional; not default) |
+| `CompositeBookEnrichmentProvider` | Experimental | External | Sequential enrichment provider pipeline |
+| `GoogleBooksEnrichmentProvider` | Experimental | External | Google Books title/author enrichment (default catalog backend) |
 | `ReviewSession` | Experimental | External | UI-independent interactive review queue / decisions |
 | `BookReviewService` | Experimental | External | Apply finished review decisions → updated `Book`s |
 | `InventoryUpdateService` | Experimental | External | Write updated inventory workbook copy after review |
@@ -392,8 +393,8 @@ Module: `classroom_library_label_maker.services.book_enrichment_service`
 
 **Purpose:** Delegate enrichment of a `Book` to a `BookEnrichmentProvider`.
 Defaults to `NullBookEnrichmentProvider` when constructed alone. Generation
-uses `create_default_enrichment_service()` (Google Books) when
-`lookup_missing_isbns` is True.
+uses `create_default_enrichment_service()` (composite pipeline wrapping
+Google Books) when `lookup_missing_isbns` is True.
 
 | Method | Inputs | Outputs |
 |--------|--------|---------|
@@ -466,6 +467,37 @@ skipped rows are left alone. OpenPyxl stays in
 existing title/author. Preserves Version 1.0 generation semantics when used
 as the default collaborator.
 
+### `CompositeBookEnrichmentProvider` — Experimental — External
+
+Module: `classroom_library_label_maker.services.lookups.composite`
+(also re-exported from `classroom_library_label_maker.services`)
+
+**Purpose:** Chain multiple `BookEnrichmentProvider` implementations in
+injection order. The rest of the application sees a single provider.
+
+| Method / ctor | Inputs | Outputs |
+|---------------|--------|---------|
+| `__init__(providers)` | Ordered `Sequence[BookEnrichmentProvider]` (non-empty) | composite provider |
+| `enrich(book)` | `Book` | First `FOUND` / `AMBIGUOUS`, else `NOT_FOUND` after all providers |
+| `providers` (property) | — | injected providers in priority order |
+
+**Flow:** `FOUND` / `AMBIGUOUS` return immediately; `NOT_FOUND` / `ERROR` /
+`SKIPPED` continue to the next provider. Sequential only — no parallel
+requests and no reordering. Does not cache (caching stays on
+`BookEnrichmentService`). Depends only on the protocol; never special-cases
+concrete catalog types.
+
+**Notes**
+
+- Production default via `create_default_enrichment_service(api_key=…)` wraps
+  Google Books alone so future catalogs can be appended without changing
+  generation or the enrichment service.
+- Optional `provider_name` on child providers improves DEBUG labels.
+- DEBUG logs provider label, result, and continuation (never credentials).
+
+**External use:** Yes when callers explicitly inject it into
+`BookEnrichmentService`.
+
 ### `GoogleBooksEnrichmentProvider` — Experimental — External
 
 Module: `classroom_library_label_maker.services.lookups.google_books`
@@ -491,11 +523,11 @@ matches without a usable ISBN continue to the next strategy.
 - Transport failures map to `ERROR` (no leaked exceptions).
 - HTTP 401/403 with a key falls back to anonymous for the rest of the run.
 - `fetch_json` is for tests / custom transports; production uses urllib.
-- Used by generation when `lookup_missing_isbns` is enabled via
+- Used by generation inside `CompositeBookEnrichmentProvider` via
   `create_default_enrichment_service(api_key=…)`.
 
 **External use:** Yes when callers explicitly inject it into
-`BookEnrichmentService`.
+`BookEnrichmentService` (or into the composite pipeline).
 
 ---
 

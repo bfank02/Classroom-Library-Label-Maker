@@ -76,6 +76,8 @@ Phase 3 is printing only.
       validation, authenticated pacing, anonymous fallback on 401/403)
 - [x] Improved Google Books search strategy (most-specific-first queries;
       continue past metadata matches without ISBN; DEBUG diagnostics)
+- [x] Composite enrichment provider pipeline
+      (`CompositeBookEnrichmentProvider`; Google Books only for now)
 - [ ] Additional catalog providers (Open Library, …)
 - [ ] Cover image downloads (`services/covers/`)
 - [ ] Inventory / checkout / reading-level workflows

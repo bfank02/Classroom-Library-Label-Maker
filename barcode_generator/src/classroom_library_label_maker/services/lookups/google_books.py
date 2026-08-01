@@ -708,6 +708,8 @@ class GoogleBooksEnrichmentProvider:
     exceptions are not leaked.
     """
 
+    provider_name = "Google Books"
+
     def __init__(
         self,
         *,

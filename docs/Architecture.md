@@ -369,8 +369,10 @@ BookEnrichmentService
         ▼
 BookEnrichmentProvider   (protocol)
         │
-        ├─ NullBookEnrichmentProvider          (explicit no-op)
-        └─ GoogleBooksEnrichmentProvider       (default when lookup enabled)
+        ├─ NullBookEnrichmentProvider              (explicit no-op)
+        ├─ CompositeBookEnrichmentProvider         (default pipeline)
+        │      └─ GoogleBooksEnrichmentProvider    (current sole backend)
+        └─ GoogleBooksEnrichmentProvider           (also injectable alone)
 ```
 
 `WorkbookGenerationService` constructs enrichment via
@@ -381,8 +383,8 @@ or accepts an injected `BookEnrichmentService` for tests.
 
 * `lookup_missing_isbns` (default **True**) gates the enrichment stage.
 * When enabled, `WorkbookGenerationService` depends only on
-  `BookEnrichmentService` (default factory uses Google Books internally —
-  the orchestrator never imports catalog SDKs).
+  `BookEnrichmentService` (default factory uses a composite provider
+  wrapping Google Books — the orchestrator never imports catalog SDKs).
 * Progress stage `ENRICHING` reports **"Looking up missing ISBNs..."**, then
   updates with **"(n of total)"** as each missing-ISBN book is looked up.
 * Books with blank ISBN cells are imported with a provisional placeholder
@@ -520,8 +522,8 @@ There is no persistent storage; destroying the service discards the cache.
 
 * **Why on the service, not providers:** caching is an orchestration concern.
   Providers stay focused on lookups. One cache covers every
-  `BookEnrichmentProvider` (null, Google Books, future Open Library, …)
-  without duplicated logic or provider-specific HTTP caches.
+  `BookEnrichmentProvider` (null, composite, Google Books, future Open
+  Library, …) without duplicated logic or provider-specific HTTP caches.
 * **Cache key:** `(normalize_catalog_text(title), normalize_catalog_text(author))`
   via shared `services/enrichment_normalize.py` (same rules as Google Books
   matching). ISBN is **not** part of the key so rows missing ISBNs still
@@ -532,6 +534,50 @@ There is no persistent storage; destroying the service discards the cache.
   `AMBIGUOUS`, `ERROR`, `SKIPPED`) to avoid repeat work for failures too.
 * **Diagnostics:** `cache_hits`, `cache_misses`, and `cache_size` are
   available for tests/logging only — not user-facing.
+
+### Composite enrichment pipeline (`services/lookups/composite.py`)
+
+`CompositeBookEnrichmentProvider` implements `BookEnrichmentProvider` and
+chains an ordered collection of other providers via dependency injection:
+
+```python
+CompositeBookEnrichmentProvider(
+    (
+        GoogleBooksEnrichmentProvider(...),
+        # OpenLibraryEnrichmentProvider(...),  # future
+    )
+)
+```
+
+The composite depends only on the `BookEnrichmentProvider` protocol — it
+never imports or special-cases concrete catalog types. Injection order is
+lookup priority; providers are never reordered and are never queried in
+parallel.
+
+**Per-provider flow**
+
+| Result | Action |
+|--------|--------|
+| `FOUND` | Return immediately |
+| `AMBIGUOUS` | Return immediately |
+| `NOT_FOUND` | Continue to next provider |
+| `ERROR` | Continue to next provider |
+| `SKIPPED` | Continue to next provider |
+
+If every provider returns a non-resolving status, the composite returns
+`NOT_FOUND`. Caching remains solely on `BookEnrichmentService`; the
+composite behaves like any other provider from the service's perspective.
+
+Production wiring (`create_default_enrichment_service`) currently injects
+Google Books alone inside the composite so additional catalogs can be
+appended later without changing generation, GUI, or the enrichment service.
+
+**DEBUG diagnostics**
+
+When the `composite_enrichment` logger is at DEBUG, each lookup logs the
+provider label (optional `provider_name`, else class name), result status,
+and whether the pipeline continued or returned. Credentials and API keys
+are never logged.
 
 ### Google Books provider (`services/lookups/google_books.py`)
 

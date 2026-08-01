@@ -7,19 +7,24 @@ and are injected into
 
 Available providers:
 
+* :class:`CompositeBookEnrichmentProvider` — sequential provider pipeline
 * :class:`GoogleBooksEnrichmentProvider` — Google Books Volumes API (title/author
-  search). Not wired into generation / CLI / GUI by default.
+  search)
 
-The default enrichment collaborator remains
-:class:`~classroom_library_label_maker.services.book_enrichment_service.NullBookEnrichmentProvider`.
+Production generation uses the composite pipeline (currently Google Books
+only) via :func:`create_default_enrichment_service`.
 """
 
 from __future__ import annotations
 
+from classroom_library_label_maker.services.lookups.composite import (
+    CompositeBookEnrichmentProvider,
+)
 from classroom_library_label_maker.services.lookups.google_books import (
     GoogleBooksEnrichmentProvider,
 )
 
 __all__ = [
+    "CompositeBookEnrichmentProvider",
     "GoogleBooksEnrichmentProvider",
 ]

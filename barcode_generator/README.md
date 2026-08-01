@@ -85,7 +85,7 @@ barcode_generator/
 │       │   ├── barcode_generator.py    # Deprecated CLI helper
 │       │   ├── batch_processor.py      # Deprecated CLI adapter
 │       │   ├── protocols.py            # Enrichment / lookup / cover / progress contracts
-│       │   ├── lookups/                # GoogleBooksEnrichmentProvider (+ future)
+│       │   ├── lookups/                # Composite + Google Books (+ future)
 │       │   └── covers/                 # Future cover downloads
 │       ├── rendering/                  # Barcode image rendering (protocol + backends)
 │       │   ├── renderer.py
@@ -254,7 +254,7 @@ python -c "from classroom_library_label_maker.config import load_application_set
 
 `BookEnrichmentService` looks up missing ISBNs by title/author when
 `lookup_missing_isbns` is True (default). Generation injects the default
-Google Books provider via
+composite pipeline (Google Books today) via
 `create_default_enrichment_service(api_key=settings.google_books_api_key)`;
 the orchestrator depends only on `BookEnrichmentService`. The API key is
 resolved once in `config.load_google_books_auth_config()` (never read inside
@@ -301,6 +301,15 @@ When some books still need attention, the completion message includes an
 - Teacher inventory workbook is never modified
 - Matching strategy: [`docs/Architecture.md`](../docs/Architecture.md)
 - Public surface: [`docs/PublicAPI.md`](../docs/PublicAPI.md)
+
+**Provider pipeline (developer notes)**
+
+`CompositeBookEnrichmentProvider` evaluates catalog providers sequentially in
+injection order (`FOUND` / `AMBIGUOUS` stop; `NOT_FOUND` / `ERROR` continue).
+Production currently wraps Google Books only so additional providers can be
+appended later without changing `BookEnrichmentService` or generation.
+Caching stays on the service. Enable DEBUG on `composite_enrichment` for
+per-provider continuation logs (never includes API keys).
 
 **Google Books search flow (developer notes)**
 

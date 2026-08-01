@@ -73,9 +73,16 @@ def run_benchmark(workbook_path: Path) -> None:
     enrichment = create_default_enrichment_service(
         api_key=settings.google_books_api_key,
     )
-    provider = enrichment.provider
+    outer = enrichment.provider
+    from classroom_library_label_maker.services.lookups.composite import (
+        CompositeBookEnrichmentProvider,
+    )
+
+    if not isinstance(outer, CompositeBookEnrichmentProvider):
+        raise TypeError("Expected CompositeBookEnrichmentProvider")
+    provider = outer.providers[0]
     if not isinstance(provider, GoogleBooksEnrichmentProvider):
-        raise TypeError("Expected GoogleBooksEnrichmentProvider")
+        raise TypeError("Expected GoogleBooksEnrichmentProvider inside composite")
 
     print("Google Books enrichment engineering benchmark")
     print("(timing only — no assertions; not for CI)")

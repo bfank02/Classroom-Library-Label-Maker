@@ -59,6 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Label content checkboxes in the GUI (Title, Author, ISBN, Barcode) so
   teachers can choose what appears on each printed label
 - ``LabelContentOptions`` shared by settings, layout, and Excel placement
+- `CompositeBookEnrichmentProvider`: sequential `BookEnrichmentProvider`
+  pipeline (`FOUND`/`AMBIGUOUS` stop; `NOT_FOUND`/`ERROR` continue)
 
 ### Changed
 
@@ -66,6 +68,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`intitle:… inauthor:surname` → surname form → free text); continue past
   confident metadata matches that lack a usable ISBN; DEBUG per-query
   diagnostics (no API keys). Confidence thresholds unchanged.
+- Default enrichment wiring uses `CompositeBookEnrichmentProvider` (Google
+  Books only for now) so additional catalog providers can be appended
+  without changing `BookEnrichmentService` or generation.
 - Print barcodes render at 600 DPI with taller bars and fill more of the
   label; barcode row allocation grows when fewer text fields are shown
 
