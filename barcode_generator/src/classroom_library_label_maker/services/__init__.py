@@ -43,6 +43,8 @@ from classroom_library_label_maker.services.book_enrichment_service import (
 from classroom_library_label_maker.services.book_review_service import (
     BookReviewService,
     ReviewSession,
+    review_session_from_enrichment,
+    review_session_from_generation_result,
 )
 from classroom_library_label_maker.services.excel_import_service import (
     ExcelImportService,
@@ -77,4 +79,6 @@ __all__ = [
     "ReviewSession",
     "WorkbookGenerationService",
     "create_default_enrichment_service",
+    "review_session_from_enrichment",
+    "review_session_from_generation_result",
 ]

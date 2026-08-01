@@ -69,7 +69,8 @@ Phase 3 is printing only.
       `confidence_label` / `confidence_label_for_score`; no GUI yet)
 - [x] Interactive review service (`ReviewSession`, `ReviewDecision`,
       `ReviewSessionResult`, `BookReviewService`) — no GUI yet
-- [ ] Interactive review UI (thin presentation over `ReviewSession`)
+- [x] Interactive review wizard (`ReviewWizardDialog` over `ReviewSession`)
+- [ ] Persist selected ISBNs back to the inventory workbook after review
 - [ ] Additional catalog providers (Open Library, …)
 - [ ] Cover image downloads (`services/covers/`)
 - [ ] Inventory / checkout / reading-level workflows

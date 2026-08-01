@@ -151,6 +151,7 @@ barcode_generator/src/classroom_library_label_maker/
 │   ├── app.py           QApplication bootstrap + event loop
 │   ├── main_window.py   Input form (paths, template, Generate)
 │   ├── controller.py    Form state actions + start/finish generation
+│   ├── review_wizard.py ReviewWizardDialog (thin over ReviewSession)
 │   ├── generation_worker.py  QObject worker (service call + progress forward)
 │   ├── icons.py         Application icon discovery (placeholder-safe)
 │   └── form_state.py    Immutable selections + validation messages
@@ -209,6 +210,7 @@ Root package `__init__` exports a narrow public API (models + exceptions +
 | `progress` | Qt-free generation stage events for GUI/CLI adapters |
 | `gui` | Desktop presentation (PySide6); thin adapter only |
 | `gui.generation_worker` | Background `QObject` that runs the generation service |
+| `gui.review_wizard` | `ReviewWizardDialog` over `ReviewSession` |
 | `gui.form_state` | Immutable GUI selections + field validation messages |
 | `metadata` | Single source of truth for product identity |
 | `models` | Domain dataclasses and `BarcodeStatus` enum |
@@ -423,7 +425,7 @@ After enrichment, teachers can resolve ambiguous matches without further
 catalog requests. The workflow is fully UI-independent:
 
 ```
-GUI (future)  →  ReviewSession  →  BookReviewService  →  updated Book objects
+GUI (ReviewWizardDialog)  →  ReviewSession  →  BookReviewService  →  updated Book objects
 ```
 
 * `ReviewSession` owns queue state: current item/book, navigation
@@ -439,9 +441,40 @@ GUI (future)  →  ReviewSession  →  BookReviewService  →  updated Book obje
   the chosen ISBN (ISBN-13 preferred) and preserves title, author, and
   other fields. Skipping leaves the original book unchanged.
 * No workbook writes, no Google Books / provider calls, no Qt types.
-  Generation (`WorkbookGenerationService`) is unchanged in this phase.
+  Generation (`WorkbookGenerationService`) attaches the original `Book` on
+  each `ReviewItem` so the GUI can seed a session without re-querying.
+
+**Interactive review wizard (Phase 4.3 — GUI presentation)**
+
+```
+GenerationWorker.completed
+        │
+        ▼
+GuiController._on_generation_completed
+        │  if review items with books →
+        ▼
+ReviewWizardDialog  (Qt)  ──actions──►  ReviewSession  (domain)
+        │ Finish
+        ▼
+BookReviewService.apply(finished session)
+        │
+        ▼
+existing completion status (ISBN Lookup Summary, etc.)
+```
+
+* `ReviewWizardDialog` shows progress (`Book X of Y` + bar), book title/
+  author/reason, selectable candidate cards (`"{confidence_label} Match"`,
+  ISBN, title, author, publisher · year), and a **Recommended** badge on the
+  highest-confidence card.
+* Buttons call `ReviewSession` (`previous` / `next` / `skip_current` /
+  `select_candidate` / `finish`). Qt does not own the review index.
+* Single **Very High** candidate is pre-selected (teacher may still Skip).
+* Checkbox **Save updated inventory workbook when review is complete**
+  (default on) is persisted in `GuiPreferences`; workbook writing is deferred.
+* No review items → wizard is skipped; success flow unchanged.
 
 **In-memory enrichment cache**
+
 
 
 `BookEnrichmentService` keeps a process-local dict of

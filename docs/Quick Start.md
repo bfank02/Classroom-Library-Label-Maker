@@ -36,6 +36,11 @@ workbook** path are remembered for next time. Change them anytime with Browse.
 
 Click **Generate Labels**.
 
+If books still need ISBN choices, the **Review ISBN Matches** wizard appears
+so you can pick a catalog match or skip. A checkbox remembers whether you want
+the inventory workbook updated later (saving the inventory is not implemented
+yet).
+
 - Green status ending in **Ready to print** means the label workbook is ready.
 - Amber status saying **review before printing** means the file was created,
   but some labels need attention (for example a missing barcode).

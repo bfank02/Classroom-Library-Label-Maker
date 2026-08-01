@@ -183,11 +183,14 @@ lookup (`AMBIGUOUS`, `NOT_FOUND`, or `ERROR`). Successful finds are omitted.
 
 **Fields:** `title`, `author`, `status` (`BookEnrichmentStatus`), `message`
 (short explanation), `candidates` (`tuple[ReviewCandidate, ...]`, populated
-for ambiguous matches; empty otherwise).
+for ambiguous matches; empty otherwise), optional `book` (original
+inventory `Book` when produced by generation — used to seed
+`ReviewSession`).
 
 GUI/CLI show an **ISBN Lookup Summary** (found count, needs-review count, up
 to five titles, then `...and X more.`) when `review_items` is non-empty.
-Candidate data is retained for interactive review (dialog not built yet).
+After generation, the desktop app opens `ReviewWizardDialog` when items
+carry books for interactive review.
 
 ### `ReviewDecision` — Experimental — External
 
@@ -696,6 +699,32 @@ engine.
 | `GenerationStage` | StrEnum milestones (`importing`, `validating`, …) |
 | `GenerationProgress` | Frozen event (`stage`, `message`); `for_stage(stage)` |
 | `GenerationProgressReporter` | Protocol: `on_progress(progress)` |
+
+---
+
+## Desktop GUI
+
+Package: `classroom_library_label_maker.gui`
+
+Presentation-only. Domain review state stays on `ReviewSession`.
+
+### `ReviewWizardDialog` — Experimental — External
+
+Module: `classroom_library_label_maker.gui.review_wizard`
+
+**Purpose:** Modal wizard after generation when enrichment left review items
+with attached books. Renders progress, book details, and candidate cards;
+forwards Previous / Next / Skip / candidate clicks / Finish to the session.
+
+**Finish:** seals the session (`finish()`); `GuiController` then calls
+`BookReviewService.apply`. Inventory workbook writing is **not** performed;
+the save-inventory checkbox updates `GuiPreferences` only.
+
+### `GuiController` review hook
+
+After a successful `GenerationWorker.completed` signal, the controller builds
+a session via `review_session_from_generation_result`. Empty queues skip the
+wizard and continue with the normal completion status line.
 
 ---
 

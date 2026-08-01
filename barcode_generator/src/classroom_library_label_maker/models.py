@@ -742,6 +742,8 @@ class ReviewItem:
         candidates: Catalog matches preserved for interactive review. Populated
             for ambiguous outcomes; empty for successful finds and most other
             statuses.
+        book: Original in-memory :class:`Book` when produced by generation
+            (used to seed ``ReviewSession``).
     """
 
     title: str
@@ -749,16 +751,21 @@ class ReviewItem:
     status: BookEnrichmentStatus
     message: str
     candidates: tuple[ReviewCandidate, ...] = ()
+    book: Book | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize this item to a JSON-compatible dictionary."""
-        return {
+        payload: dict[str, Any] = {
             "title": self.title,
             "author": self.author,
             "status": self.status.value,
             "message": self.message,
             "candidates": [candidate.to_dict() for candidate in self.candidates],
         }
+        if self.book is not None:
+            payload["book"] = self.book.to_dict()
+        return payload
+
 
 
 @dataclass(frozen=True, slots=True)

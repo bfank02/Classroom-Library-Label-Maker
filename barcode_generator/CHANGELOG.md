@@ -35,6 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Interactive review business layer: `ReviewSession`, immutable
   `ReviewDecision` / `ReviewSessionResult`, and `BookReviewService`
   (no GUI, no workbook writes, no extra catalog requests)
+- Interactive review wizard (`ReviewWizardDialog`): thin Qt UI over
+  `ReviewSession` after generation; persists save-inventory preference
+  only (inventory write deferred)
 - Cross-platform packaging: shared `scripts/build_release.py`, macOS
   `build_macos.sh`, updated Windows `build.bat`
 - Native macOS `.app` bundle support (Finder-launchable, bundled runtime)

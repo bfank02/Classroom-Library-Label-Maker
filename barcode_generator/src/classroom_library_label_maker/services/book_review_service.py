@@ -22,11 +22,40 @@ from collections.abc import Sequence
 
 from classroom_library_label_maker.models import (
     Book,
+    EnrichmentSummary,
     ReviewCandidate,
     ReviewDecision,
     ReviewItem,
     ReviewSessionResult,
+    WorkbookGenerationResult,
 )
+
+
+def review_session_from_generation_result(
+    result: WorkbookGenerationResult,
+) -> ReviewSession | None:
+    """Build a :class:`ReviewSession` from enrichment review items that carry books.
+
+    Returns ``None`` when there is nothing to review (no enrichment summary,
+    empty queue, or items without attached ``book`` references).
+    """
+    return review_session_from_enrichment(result.enrichment)
+
+
+def review_session_from_enrichment(
+    summary: EnrichmentSummary | None,
+) -> ReviewSession | None:
+    """Build a :class:`ReviewSession` from an :class:`EnrichmentSummary`."""
+    if summary is None or not summary.review_items:
+        return None
+    pairs = [
+        (item.book, item)
+        for item in summary.review_items
+        if item.book is not None
+    ]
+    if not pairs:
+        return None
+    return ReviewSession.from_pairs(pairs)
 
 
 class ReviewSession:

@@ -12,8 +12,10 @@ Start here: [`docs/Quick Start.md`](docs/Quick%20Start.md)
    save the **label workbook** (barcode and label paths are remembered after
    the first selection). Optionally leave **Look up missing ISBNs
    automatically** checked so blank ISBN cells are filled from title/author.
-3. Click **Generate Labels**, then open the label workbook in Excel and print
-   on Avery 5160 sheets.
+3. Click **Generate Labels**. If some books still need ISBN choices, a
+   **Review ISBN Matches** wizard lets you pick or skip catalog matches
+   before the usual completion summary. Then open the label workbook in
+   Excel and print on Avery 5160 sheets.
 
 ## Layout
 
