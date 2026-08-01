@@ -42,6 +42,8 @@ from classroom_library_label_maker.gui_preferences import (
     load_gui_preferences,
     save_gui_preferences,
     usable_barcode_folder,
+    usable_inventory_workbook,
+    usable_label_folder,
     usable_output_workbook,
 )
 from classroom_library_label_maker.label_templates import (
@@ -65,10 +67,12 @@ from classroom_library_label_maker.services.book_review_service import (
 from classroom_library_label_maker.services.inventory_update_service import (
     InventoryUpdateService,
 )
+from classroom_library_label_maker.constants import DEFAULT_LABEL_FILENAME
 from classroom_library_label_maker.user_paths import (
     barcode_folder_dialog_start_directory,
+    default_label_filename,
     inventory_dialog_start_directory,
-    label_workbook_save_dialog_defaults,
+    label_folder_dialog_start_directory,
 )
 
 if TYPE_CHECKING:
@@ -101,6 +105,7 @@ __all__ = [
     "ReviewWizardRunner",
     "WorkbookGenerator",
     "ensure_excel_workbook_suffix",
+    "normalize_label_filename",
     "template_display_name",
 ]
 
@@ -128,6 +133,7 @@ class GuiController(QObject):
         template_registry: TemplateRegistry | None = None,
         open_inventory_dialog: OpenFileDialog | None = None,
         open_barcode_folder_dialog: OpenDirDialog | None = None,
+        open_label_folder_dialog: OpenDirDialog | None = None,
         save_output_dialog: SaveFileDialog | None = None,
         generation_service_factory: GenerationServiceFactory | None = None,
         preferences_path: Path | None = None,
@@ -145,7 +151,12 @@ class GuiController(QObject):
         self._open_barcode_folder_dialog = (
             open_barcode_folder_dialog or self._default_open_barcode_folder
         )
-        self._save_output_dialog = save_output_dialog or self._default_save_output
+        # Prefer the label-folder dialog; keep save_output_dialog for older
+        # call sites that inject a full workbook path via browse_output_workbook.
+        self._open_label_folder_dialog = (
+            open_label_folder_dialog or self._default_open_label_folder
+        )
+        self._save_output_dialog = save_output_dialog
         self._generation_service_factory = (
             generation_service_factory or _default_generation_service
         )
@@ -181,10 +192,11 @@ class GuiController(QObject):
         return self._is_generating
 
     def set_inventory_workbook(self, path: Path | None) -> None:
-        """Update the inventory workbook selection and refresh the UI."""
+        """Update the inventory workbook selection, remember it, and refresh."""
         self._state = self._state.with_inventory_workbook(
             path.resolve() if path is not None else None
         )
+        self._persist_preferences()
         self._refresh_ui()
 
     def set_barcode_folder(self, path: Path | None) -> None:
@@ -195,11 +207,30 @@ class GuiController(QObject):
         self._persist_preferences()
         self._refresh_ui()
 
-    def set_output_workbook(self, path: Path | None) -> None:
-        """Update the output workbook path, remember it, and refresh the UI."""
-        self._state = self._state.with_output_workbook(
+    def set_label_folder(self, path: Path | None) -> None:
+        """Update the label folder only; preserve the current filename."""
+        self._state = self._state.with_label_folder(
             path.resolve() if path is not None else None
         )
+        self._persist_preferences()
+        self._refresh_ui()
+
+    def set_label_filename(self, filename: str) -> None:
+        """Update the label filename (normalized) and remember it."""
+        cleaned = normalize_label_filename(filename)
+        self._state = self._state.with_label_filename(
+            cleaned if cleaned else DEFAULT_LABEL_FILENAME
+        )
+        self._persist_preferences()
+        self._refresh_ui()
+
+    def set_output_workbook(self, path: Path | None) -> None:
+        """Update folder + filename from a full path (tests / migration)."""
+        if path is None:
+            self._state = self._state.with_output_workbook(None)
+        else:
+            resolved = path.resolve()
+            self._state = self._state.with_output_workbook(resolved)
         self._persist_preferences()
         self._refresh_ui()
 
@@ -255,13 +286,37 @@ class GuiController(QObject):
         if selected is not None:
             self.set_barcode_folder(selected)
 
-    def browse_output_workbook(self) -> None:
-        """Open a native save dialog for the label workbook."""
+    def browse_label_folder(self) -> None:
+        """Open a native folder dialog for the label workbook folder.
+
+        Preserves the filename already entered in the Files section.
+        """
         if self._is_generating:
             return
-        selected = self._save_output_dialog()
+        selected = self._open_label_folder_dialog()
         if selected is not None:
-            self.set_output_workbook(selected)
+            self.set_label_folder(selected)
+
+    def browse_output_workbook(self) -> None:
+        """Browse for label output.
+
+        Uses an injected full-path save dialog when provided (tests); otherwise
+        opens the label-folder dialog and preserves the current filename.
+        """
+        if self._is_generating:
+            return
+        if self._save_output_dialog is not None:
+            selected = self._save_output_dialog()
+            if selected is not None:
+                self.set_output_workbook(selected)
+            return
+        self.browse_label_folder()
+
+    def on_filename_editing_finished(self) -> None:
+        """Normalize and apply the label filename when editing finishes."""
+        if self._is_generating:
+            return
+        self.set_label_filename(self._window.filename_edit.text())
 
     def on_template_changed(self, index: int) -> None:
         """Handle label-template combo selection changes."""
@@ -523,6 +578,7 @@ class GuiController(QObject):
         window.inventory_browse_button.setEnabled(enabled)
         window.barcode_browse_button.setEnabled(enabled)
         window.output_browse_button.setEnabled(enabled)
+        window.filename_edit.setEnabled(enabled)
         window.label_template_combo.setEnabled(enabled)
         window.show_title_checkbox.setEnabled(enabled)
         window.show_author_checkbox.setEnabled(enabled)
@@ -550,6 +606,7 @@ class GuiController(QObject):
         window.inventory_browse_button.clicked.connect(self.browse_inventory_workbook)
         window.barcode_browse_button.clicked.connect(self.browse_barcode_folder)
         window.output_browse_button.clicked.connect(self.browse_output_workbook)
+        window.filename_edit.editingFinished.connect(self.on_filename_editing_finished)
         window.label_template_combo.currentIndexChanged.connect(self.on_template_changed)
         window.show_title_checkbox.toggled.connect(self.on_label_content_changed)
         window.show_author_checkbox.toggled.connect(self.on_label_content_changed)
@@ -572,9 +629,10 @@ class GuiController(QObject):
         )
         self._set_path_label(
             self._window.output_path_label,
-            self._state.output_workbook,
-            empty="No file selected",
+            self._state.label_folder,
+            empty="No folder selected",
         )
+        self._sync_filename_edit()
         self._sync_template_combo()
         self._sync_content_checkboxes()
         self._sync_lookup_missing_isbns_checkbox()
@@ -590,6 +648,13 @@ class GuiController(QObject):
         else:
             self._set_status("Ready to generate labels.", level="ok")
 
+    def _sync_filename_edit(self) -> None:
+        edit = self._window.filename_edit
+        desired = self._state.label_filename or DEFAULT_LABEL_FILENAME
+        if edit.text() != desired:
+            edit.blockSignals(True)
+            edit.setText(desired)
+            edit.blockSignals(False)
     def _sync_content_checkboxes(self) -> None:
         content = self._state.label_content
         window = self._window
@@ -663,25 +728,39 @@ class GuiController(QObject):
         return default_gui_preferences_path()
 
     def _restore_preferences(self) -> None:
-        """Seed barcode folder, label workbook, and review prefs from disk."""
+        """Seed Files paths and review prefs from disk."""
         preferences = load_gui_preferences(path=self._preferences_file())
+        inventory = usable_inventory_workbook(preferences.inventory_workbook)
         barcode = usable_barcode_folder(preferences.barcode_folder)
-        output = usable_output_workbook(preferences.output_workbook)
+        label_folder = usable_label_folder(preferences.label_folder)
+        if label_folder is None and preferences.output_workbook is not None:
+            legacy = usable_output_workbook(preferences.output_workbook)
+            if legacy is not None:
+                label_folder = legacy.parent
+        filename = default_label_filename(
+            last_label_filename=preferences.label_filename,
+            last_output_workbook=preferences.output_workbook,
+        )
+        if inventory is not None:
+            self._state = self._state.with_inventory_workbook(inventory)
         if barcode is not None:
             self._state = self._state.with_barcode_folder(barcode)
-        if output is not None:
-            self._state = self._state.with_output_workbook(output)
+        if label_folder is not None:
+            self._state = self._state.with_label_folder(label_folder)
+        self._state = self._state.with_label_filename(filename)
         self._save_updated_inventory_on_review = (
             preferences.save_updated_inventory_on_review
         )
 
     def _persist_preferences(self) -> None:
-        """Write current barcode / label paths and review prefs for next launch."""
+        """Write current Files paths and review prefs for next launch."""
         try:
             save_gui_preferences(
                 GuiPreferences(
+                    inventory_workbook=self._state.inventory_workbook,
                     barcode_folder=self._state.barcode_folder,
-                    output_workbook=self._state.output_workbook,
+                    label_folder=self._state.label_folder,
+                    label_filename=self._state.label_filename,
                     save_updated_inventory_on_review=(
                         self._save_updated_inventory_on_review
                     ),
@@ -695,7 +774,9 @@ class GuiController(QObject):
         path, _filter = QFileDialog.getOpenFileName(
             self._window,
             "Choose Inventory Workbook",
-            inventory_dialog_start_directory(),
+            inventory_dialog_start_directory(
+                last_inventory_workbook=self._state.inventory_workbook,
+            ),
             "Excel workbooks (*.xlsx *.xlsm);;All files (*.*)",
         )
         return Path(path) if path else None
@@ -710,22 +791,25 @@ class GuiController(QObject):
         )
         return Path(path) if path else None
 
-    def _default_save_output(self) -> Path | None:
-        start_dir, suggested_name = label_workbook_save_dialog_defaults(
-            last_output_workbook=self._state.output_workbook,
-        )
-        path, selected_filter = QFileDialog.getSaveFileName(
+    def _default_open_label_folder(self) -> Path | None:
+        path = QFileDialog.getExistingDirectory(
             self._window,
-            "Save Label Workbook",
-            str(Path(start_dir) / suggested_name),
-            "Excel workbook (*.xlsx);;Excel macro-enabled workbook (*.xlsm)",
+            "Choose Label Folder",
+            label_folder_dialog_start_directory(
+                last_label_folder=self._state.label_folder,
+                last_output_workbook=self._state.output_workbook,
+            ),
         )
-        if not path:
-            return None
-        return ensure_excel_workbook_suffix(
-            Path(path),
-            preferred_filter=selected_filter,
-        )
+        return Path(path) if path else None
+
+
+def normalize_label_filename(filename: str) -> str:
+    """Return a basename with a supported Excel suffix when possible."""
+    cleaned = filename.strip()
+    if not cleaned:
+        return ""
+    cleaned = Path(cleaned).name
+    return ensure_excel_workbook_suffix(Path(cleaned)).name
 
 
 def ensure_excel_workbook_suffix(

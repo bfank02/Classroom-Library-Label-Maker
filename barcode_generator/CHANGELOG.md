@@ -65,6 +65,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Google Books `NOT_FOUND`
 - `BookEnrichmentResult.provider_name` for catalog attribution (diagnostics /
   benchmarks; not shown in the teacher UI)
+- Files section UX: separate Label Folder + editable Label File Name;
+  four independent persisted path preferences
 
 ### Changed
 
@@ -74,6 +76,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   diagnostics (no API keys). Confidence thresholds unchanged.
 - Default enrichment wiring uses `CompositeBookEnrichmentProvider` with
   Google Books first and Open Library second.
+- GUI Files section redesign: output path = label folder + filename; Browse
+  for Label Folder preserves filename; stem selection on filename focus.
 - Print barcodes render at 600 DPI with taller bars and fill more of the
   label; barcode row allocation grows when fewer text fields are shown
 

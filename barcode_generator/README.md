@@ -426,26 +426,33 @@ Both call `classroom_library_label_maker.gui:main`, which creates
 ### Current user workflow
 
 The main window collects generation inputs and runs the engine **in the
-background**:
+background**. The top **Files** section has four rows:
 
-1. **Inventory workbook** — Browse… (Excel `.xlsx` / `.xlsm`; dialog opens in
+1. **Inventory Workbook** — Browse… (Excel `.xlsx` / `.xlsm`; dialog opens in
    the sample folder when `Sample Books.xlsx` is present)
-2. **Barcode folder** — Browse… (starts in Documents)
-3. **Label workbook** — Browse… (save dialog defaults to
-   `Documents/library_labels.xlsx`; extension preserved / applied
-   automatically)
-4. **Label template** — combo (default **Avery 5160**)
-5. **Generate Labels** — enabled when all fields validate; starts
+2. **Barcode Folder** — Browse… (starts in Documents)
+3. **Label Folder** — Browse… (folder only; preserves the current file name)
+4. **Label File Name** — editable field (default `library_labels.xlsx`; stem
+   selected on focus so renaming feels like Finder / Explorer; extension
+   normalized with `ensure_excel_workbook_suffix` / `normalize_label_filename`)
+
+Generation receives `label_folder / label_filename` as a complete
+`output_path`. All four Files values are persisted in `gui_preferences.json`.
+
+Then:
+
+5. **Label template** — combo (default **Avery 5160**)
+6. **Generate Labels** — enabled when all fields validate; starts
    `WorkbookGenerationService` on a Qt worker thread
 
 Teacher quick start: [`docs/Quick Start.md`](../docs/Quick%20Start.md).
 Sample inventory: `assets/sample-data/Sample Books.xlsx` (also
 `samples/Sample Books.xlsx` at the repo root).
 
-While generating, Browse buttons, the template combo, and Generate are
-disabled. The status line shows engine stage updates, then a clean success,
-success-with-warnings (review before printing), or friendly error message.
-Press **Esc** to close the window.
+While generating, Browse buttons, the filename field, the template combo, and
+Generate are disabled. The status line shows engine stage updates, then a clean
+success, success-with-warnings (review before printing), or friendly error
+message. Press **Esc** to close the window.
 
 Icon loading prefers the platform-native icon (`app.icns` on macOS, `app.ico`
 on Windows), then `logo.png`.

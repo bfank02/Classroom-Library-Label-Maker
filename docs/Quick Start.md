@@ -47,17 +47,20 @@ key is not reaching the app.
 
 ## 2. Open the app
 
-Launch Classroom Library Label Maker, then choose:
+Launch Classroom Library Label Maker, then use the **Files** section:
 
-1. **Inventory workbook** — your book list (or the sample file).
-2. **Barcode folder** — any empty folder where barcode images can be saved.
-3. **Label workbook** — where to save the printable labels file (default name
-   `library_labels.xlsx`).
-4. **Label template** — leave **Avery 5160** selected unless you use a
+1. **Inventory Workbook** — your book list (or the sample file).
+2. **Barcode Folder** — any empty folder where barcode images can be saved.
+3. **Label Folder** — the folder where the printable labels file is saved.
+4. **Label File Name** — the workbook name (default `library_labels.xlsx`).
+   Click the field to rename; the `.xlsx` extension stays visible.
+5. **Label template** — leave **Avery 5160** selected unless you use a
    different sheet.
 
-After the first successful selection, the **barcode folder** and **label
-workbook** path are remembered for next time. Change them anytime with Browse.
+After the first successful selection, the inventory workbook, barcode folder,
+label folder, and label file name are remembered for next time. Change a folder
+anytime with Browse (Browse for Label Folder keeps your file name). Edit the
+file name directly without opening a dialog.
 
 ## 3. Generate labels
 

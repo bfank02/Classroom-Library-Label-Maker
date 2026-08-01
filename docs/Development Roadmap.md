@@ -86,4 +86,9 @@ Phase 3 is printing only.
 - [ ] Additional barcode symbologies and label types
 - [ ] Automatic updates
 
+## Version 1.4 — Desktop UX
+
+- [x] Files section refinement (Label Folder + editable Label File Name;
+      independent persistence; stem selection on focus)
+
 See also: [`Architecture.md`](Architecture.md), [`../TASKS.md`](../TASKS.md).

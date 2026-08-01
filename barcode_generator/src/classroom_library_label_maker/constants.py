@@ -82,6 +82,7 @@ APP_ICNS_FILE_NAME = "app.icns"
 LOGO_FILE_NAME = "logo.png"
 QUICK_START_FILE_NAME = "Quick Start.md"
 GUI_PREFERENCES_FILE_NAME = "gui_preferences.json"
+DEFAULT_LABEL_FILENAME = "library_labels.xlsx"
 
 # Default name for a copy of the inventory with review/enrichment ISBN updates.
 # Never overwrite the teacher's original workbook.

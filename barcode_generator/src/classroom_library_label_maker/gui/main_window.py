@@ -6,14 +6,18 @@ owned by :class:`~classroom_library_label_maker.gui.controller.GuiController`.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QFocusEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QPushButton,
     QSizePolicy,
@@ -21,7 +25,31 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from classroom_library_label_maker.constants import DEFAULT_LABEL_FILENAME
 from classroom_library_label_maker.metadata import APP_NAME
+
+
+class FilenameLineEdit(QLineEdit):
+    """Line edit that selects the basename (without extension) on focus.
+
+    Mimics Finder / Explorer rename behavior: the stem is selected so typing
+    replaces the name while leaving a visible ``.xlsx`` / ``.xlsm`` suffix.
+    """
+
+    def focusInEvent(self, event: QFocusEvent) -> None:
+        super().focusInEvent(event)
+        self.select_filename_stem()
+
+    def select_filename_stem(self) -> None:
+        """Select only the filename stem, leaving the extension unselected."""
+        text = self.text()
+        if not text:
+            return
+        suffix = Path(text).suffix
+        if suffix.lower() in {".xlsx", ".xlsm"} and len(text) > len(suffix):
+            self.setSelection(0, len(text) - len(suffix))
+        else:
+            self.selectAll()
 
 
 class MainWindow(QMainWindow):
@@ -30,8 +58,8 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle(APP_NAME)
-        self.setMinimumSize(560, 440)
-        self.resize(720, 520)
+        self.setMinimumSize(560, 480)
+        self.resize(720, 560)
         self.setAccessibleName(APP_NAME)
 
         central = QWidget(self)
@@ -39,6 +67,17 @@ class MainWindow(QMainWindow):
         root = QVBoxLayout(central)
         root.setContentsMargins(28, 24, 28, 24)
         root.setSpacing(18)
+
+        files_group = QGroupBox("Files")
+        files_group.setObjectName("filesGroup")
+        files_group.setAccessibleName("Files")
+        files_group.setAccessibleDescription(
+            "Choose your inventory workbook, barcode folder, label folder, "
+            "and label file name."
+        )
+        files_layout = QVBoxLayout(files_group)
+        files_layout.setContentsMargins(12, 16, 12, 12)
+        files_layout.setSpacing(0)
 
         form = QFormLayout()
         form.setContentsMargins(0, 0, 0, 0)
@@ -59,7 +98,7 @@ class MainWindow(QMainWindow):
             self.inventory_path_label,
         ) = self._add_path_row(
             form,
-            mnemonic="&Inventory workbook:",
+            mnemonic="&Inventory Workbook:",
             browse_name="inventoryBrowseButton",
             path_name="inventoryPathLabel",
             browse_accessible="Browse for inventory workbook",
@@ -73,7 +112,7 @@ class MainWindow(QMainWindow):
             self.barcode_path_label,
         ) = self._add_path_row(
             form,
-            mnemonic="&Barcode folder:",
+            mnemonic="&Barcode Folder:",
             browse_name="barcodeBrowseButton",
             path_name="barcodePathLabel",
             browse_accessible="Browse for barcode folder",
@@ -87,13 +126,31 @@ class MainWindow(QMainWindow):
             self.output_path_label,
         ) = self._add_path_row(
             form,
-            mnemonic="Label &workbook:",
+            mnemonic="&Label Folder:",
             browse_name="outputBrowseButton",
             path_name="outputPathLabel",
-            browse_accessible="Browse for label workbook",
-            browse_tooltip="Choose where to save the printable label workbook.",
-            path_accessible="Selected label workbook",
-            empty_text="No file selected",
+            browse_accessible="Browse for label folder",
+            browse_tooltip="Choose the folder where the label workbook is saved.",
+            path_accessible="Selected label folder",
+            empty_text="No folder selected",
+        )
+        (
+            self.filename_label,
+            self.filename_edit,
+        ) = self._add_filename_row(form)
+
+        files_layout.addLayout(form)
+        root.addWidget(files_group)
+
+        options_form = QFormLayout()
+        options_form.setContentsMargins(0, 0, 0, 0)
+        options_form.setHorizontalSpacing(16)
+        options_form.setVerticalSpacing(14)
+        options_form.setFieldGrowthPolicy(
+            QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow
+        )
+        options_form.setLabelAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
         )
 
         self.template_label = QLabel("Label &template:")
@@ -114,7 +171,7 @@ class MainWindow(QMainWindow):
             "Label sheet layout used when placing barcodes."
         )
         self.template_label.setBuddy(self.label_template_combo)
-        form.addRow(self.template_label, self.label_template_combo)
+        options_form.addRow(self.template_label, self.label_template_combo)
 
         self.content_label = QLabel("Show on &labels:")
         self.content_label.setObjectName("labelContentLabel")
@@ -153,7 +210,7 @@ class MainWindow(QMainWindow):
         content_layout.addStretch(1)
 
         self.content_label.setBuddy(self.show_title_checkbox)
-        form.addRow(self.content_label, content_field)
+        options_form.addRow(self.content_label, content_field)
 
         self.lookup_missing_isbns_checkbox = QCheckBox(
             "Look up missing ISBNs automatically"
@@ -169,9 +226,9 @@ class MainWindow(QMainWindow):
         self.lookup_missing_isbns_checkbox.setAccessibleName(
             "Look up missing ISBNs automatically"
         )
-        form.addRow("", self.lookup_missing_isbns_checkbox)
+        options_form.addRow("", self.lookup_missing_isbns_checkbox)
 
-        root.addLayout(form)
+        root.addLayout(options_form)
 
         self.status_label = QLabel("")
         self.status_label.setObjectName("statusLabel")
@@ -203,8 +260,8 @@ class MainWindow(QMainWindow):
         )
         self.generate_button.setAccessibleName("Generate Labels")
         self.generate_button.setAccessibleDescription(
-            "Starts label generation using the selected workbook, folder, "
-            "output path, and template."
+            "Starts label generation using the selected workbook, folders, "
+            "file name, and template."
         )
         button_row.addWidget(self.generate_button)
         button_row.addStretch(1)
@@ -244,6 +301,7 @@ class MainWindow(QMainWindow):
         browse = QPushButton("Browse…")
         browse.setObjectName(browse_name)
         browse.setMinimumHeight(28)
+        browse.setMinimumWidth(96)
         browse.setToolTip(browse_tooltip)
         browse.setAccessibleName(browse_accessible)
         browse.setAccessibleDescription(browse_tooltip)
@@ -272,10 +330,32 @@ class MainWindow(QMainWindow):
         form.addRow(label, field)
         return label, browse, path
 
+    def _add_filename_row(self, form: QFormLayout) -> tuple[QLabel, FilenameLineEdit]:
+        label = QLabel("Label File &Name:")
+        label.setObjectName("labelFilenameLabel")
+        edit = FilenameLineEdit(DEFAULT_LABEL_FILENAME)
+        edit.setObjectName("labelFilenameEdit")
+        edit.setMinimumHeight(28)
+        edit.setMinimumWidth(200)
+        edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        edit.setToolTip(
+            "Name of the label workbook file. The folder above is where it is saved."
+        )
+        edit.setAccessibleName("Label File Name")
+        edit.setAccessibleDescription(
+            "Editable filename for the label workbook. Extension is usually "
+            ".xlsx. Click to rename; the extension stays visible."
+        )
+        edit.setClearButtonEnabled(False)
+        label.setBuddy(edit)
+        form.addRow(label, edit)
+        return label, edit
+
     def _set_tab_order(self) -> None:
         QWidget.setTabOrder(self.inventory_browse_button, self.barcode_browse_button)
         QWidget.setTabOrder(self.barcode_browse_button, self.output_browse_button)
-        QWidget.setTabOrder(self.output_browse_button, self.label_template_combo)
+        QWidget.setTabOrder(self.output_browse_button, self.filename_edit)
+        QWidget.setTabOrder(self.filename_edit, self.label_template_combo)
         QWidget.setTabOrder(self.label_template_combo, self.show_title_checkbox)
         QWidget.setTabOrder(self.show_title_checkbox, self.show_author_checkbox)
         QWidget.setTabOrder(self.show_author_checkbox, self.show_barcode_checkbox)

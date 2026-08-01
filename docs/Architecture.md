@@ -1080,10 +1080,16 @@ MainWindow
 UX notes:
 
 * Window title is the product name; Esc closes the window
-* Save dialog defaults to `Documents/library_labels.xlsx` and applies/preserves
-  Excel extensions; inventory browse prefers the sample workbook folder when
-  present
-* Terminology: **inventory workbook** (input) and **label workbook** (output)
+* **Files** section: Inventory Workbook, Barcode Folder, Label Folder (Browse
+  preserves filename), and editable Label File Name (stem selected on focus;
+  `.xlsx` / `.xlsm` normalized). Generation still receives a full
+  `output_path` (`label_folder / label_filename`)
+* `GuiPreferences` persists inventory workbook, barcode folder, label folder,
+  and label filename independently (legacy `output_workbook` migrates on load)
+* Inventory browse prefers the sample workbook folder when present; folder
+  dialogs prefer Documents / last-used paths
+* Terminology: **inventory workbook** (input) and **label workbook** (output
+  file in the chosen label folder)
 * Status wording is concise and actionable (no Python tracebacks)
 * Completed runs use three presentation states from
   `WorkbookGenerationResult.completion_state`: clean success, success with

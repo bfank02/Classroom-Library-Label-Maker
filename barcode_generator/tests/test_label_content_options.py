@@ -81,7 +81,8 @@ def test_form_state_requires_at_least_one_content_field(
     state = GenerationFormState(
         inventory_workbook=inventory,
         barcode_folder=barcodes,
-        output_workbook=output,
+        label_folder=output.parent,
+        label_filename=output.name,
         label_template_id=DEFAULT_LABEL_TEMPLATE_ID,
         label_content=LabelContentOptions(
             show_title=False,
