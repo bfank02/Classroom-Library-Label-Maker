@@ -109,7 +109,7 @@ barcode_generator/
 │
 ├── tests/
 │   ├── conftest.py
-│   ├── benchmarks/             # Manual ISBN timing (not CI)
+│   ├── benchmarks/             # Manual ISBN / enrichment timings (not CI)
 │   ├── golden/                 # Optional golden PNGs + helpers
 │   ├── assets/workbooks/       # Sample .xlsx files for import tests
 │   ├── integration/                # Reserved for E2E tests
@@ -254,23 +254,38 @@ python -c "from classroom_library_label_maker.config import load_application_set
 
 `BookEnrichmentService` looks up missing ISBNs by title/author when
 `lookup_missing_isbns` is True (default). Generation injects the default
-Google Books provider via `create_default_enrichment_service()`; the
-orchestrator depends only on `BookEnrichmentService`.
+Google Books provider via
+`create_default_enrichment_service(api_key=settings.google_books_api_key)`;
+the orchestrator depends only on `BookEnrichmentService`. The API key is
+resolved once in `config.load_google_books_auth_config()` (never read inside
+the provider).
 
 GUI: checkbox **Look up missing ISBNs automatically** (checked by default).
 Uncheck for Version 1.0 behavior (blank ISBN rows skipped at import; no
 lookup stage).
 
+**Google Books authentication**
+
+```bash
+export GOOGLE_BOOKS_API_KEY="your-restricted-books-api-key"
+```
+
+* Missing / unset → anonymous mode (slower pacing, still supported)
+* Empty / whitespace → disabled (invalid configuration); anonymous requests
+* Non-empty → authenticated mode (~0.40s pacing); appends `key=` on requests
+* Startup logs authentication state once (never logs the key)
+* Rejected keys (401/403) fall back to anonymous for the rest of the run
+
 Progress stage: **"Looking up missing ISBNs..."**, then **"(n of total)"** as
-each book is looked up. Large inventories (e.g. the teacher demo) can take
-several minutes because Google Books requests are paced (~1.25s apart) and
-back off on rate limits; set `GOOGLE_BOOKS_API_KEY` for higher quota. Results
-are summarized in
+each book is looked up. Large inventories (e.g. the teacher demo) are much
+faster with a key, but still paced and will back off on HTTP 429. Results are
+summarized in
 `EnrichmentSummary` on `WorkbookGenerationResult` (consumed by GUI/CLI/logs).
 When some books still need attention, the completion message includes an
 **ISBN Lookup Summary** with found/needs-review counts and up to five titles.
 
-- In-memory cache on the service (normalized title+author; all statuses)
+- In-memory cache on the service (normalized title+author; all statuses except
+  transient rate-limit errors)
 - Ambiguous / not-found / errors become warnings; generation continues
 - Teacher inventory workbook is never modified
 - Matching strategy: [`docs/Architecture.md`](../docs/Architecture.md)
@@ -512,26 +527,26 @@ python -m pytest
 python -m pytest tests\integration -v
 ```
 
-### ISBN validator benchmarks (manual only)
+### Performance benchmarks (manual only)
 
-`tests/benchmarks/` holds **engineering performance timings** for
-`IsbnValidator`. They exist to spot accidental slowdowns during refactors, not
-to enforce hard SLAs.
+`tests/benchmarks/` holds **engineering performance timings**. They exist to
+spot accidental slowdowns during refactors, not to enforce hard SLAs. They are
+**not** CI gates.
 
-**Why they exist**
-
-- Give developers a quick local signal when changing normalization/validation.
-- Produce comparable timings across machines/commits without coupling CI to
-  wall-clock variance.
-
-**How to run**
+**ISBN validator**
 
 ```powershell
-# Preferred: run as a script (prints timings only)
 python tests\benchmarks\benchmark_isbn_validator.py
-
-# Optional: invoke via pytest on that file alone
+# optional:
 python -m pytest tests\benchmarks\benchmark_isbn_validator.py -v -s
+```
+
+**Google Books enrichment** (Teacher Demo Library; network required; optional
+`GOOGLE_BOOKS_API_KEY`). Reports total books, missing ISBNs, requests, cache
+hits/misses, 429 retries, and wall time — never prints API keys:
+
+```powershell
+python tests\benchmarks\benchmark_google_books_enrichment.py
 ```
 
 Default `python -m pytest` does **not** collect these files (they are named
@@ -540,9 +555,9 @@ Default `python -m pytest` does **not** collect these files (they are named
 **How to interpret results**
 
 - Compare relative times on the **same machine** before/after a change.
-- Absolute numbers vary by CPU, power plan, and background load — do not treat
+- Absolute numbers vary by CPU, power plan, network, and quota — do not treat
   them as pass/fail gates.
-- Look for order-of-magnitude regressions (e.g. 10× slower), not millisecond noise.
+- Look for order-of-magnitude regressions, not millisecond noise.
 
 **CI policy**
 

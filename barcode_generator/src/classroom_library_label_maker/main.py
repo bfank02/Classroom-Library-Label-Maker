@@ -22,7 +22,10 @@ from classroom_library_label_maker.cli.parser import (
     CliArgumentError,
     parse_args,
 )
-from classroom_library_label_maker.config import load_application_settings
+from classroom_library_label_maker.config import (
+    load_application_settings,
+    log_google_books_authentication_status,
+)
 from classroom_library_label_maker.exceptions import ApplicationError
 from classroom_library_label_maker.logger import get_logger, setup_logging
 from classroom_library_label_maker.metadata import APP_COMPONENT_NAME, APP_NAME
@@ -69,6 +72,10 @@ def main(argv: list[str] | None = None) -> int:
         APP_COMPONENT_NAME,
         settings.app_version,
         args.command,
+    )
+    log_google_books_authentication_status(
+        settings.google_books_auth_status,
+        logger=logger,
     )
 
     try:

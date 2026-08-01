@@ -121,7 +121,9 @@ class WorkbookGenerationService:
         if enrichment is not None:
             self._enrichment: BookEnrichmentService | None = enrichment
         elif settings.lookup_missing_isbns:
-            self._enrichment = create_default_enrichment_service()
+            self._enrichment = create_default_enrichment_service(
+                api_key=settings.google_books_api_key,
+            )
         else:
             self._enrichment = None
 
@@ -472,6 +474,8 @@ class WorkbookGenerationService:
                 error_kind = str(result.metadata.get("error_kind") or "")
             if error_kind == "rate_limit":
                 short = "Google Books rate limit — try again later or set API key"
+            elif error_kind == "auth":
+                short = "Google Books API key rejected — continuing anonymously"
             elif len(short) > 80:
                 short = short[:77] + "..."
             warning = WorkbookGenerationWarning(
@@ -482,10 +486,9 @@ class WorkbookGenerationService:
                 code="enrichment_error",
                 isbn=book.isbn,
             )
-            # Rate-limit failures have no catalog choices; keep them out of the
-            # review wizard so teachers are not asked to click through dozens
-            # of empty cards after a quota exhaustion.
-            if error_kind == "rate_limit":
+            # Rate-limit / auth failures have no catalog choices; keep them out
+            # of the review wizard.
+            if error_kind in {"rate_limit", "auth"}:
                 return book, warning, None
             return (
                 book,

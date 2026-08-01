@@ -72,6 +72,8 @@ Phase 3 is printing only.
 - [x] Interactive review wizard (`ReviewWizardDialog` over `ReviewSession`)
 - [x] Persist selected / auto-enriched ISBNs to an updated inventory workbook
       copy after review (`InventoryUpdateService`; original never overwritten)
+- [x] Google Books API key integration (config-only env read, startup
+      validation, authenticated pacing, anonymous fallback on 401/403)
 - [ ] Additional catalog providers (Open Library, …)
 - [ ] Cover image downloads (`services/covers/`)
 - [ ] Inventory / checkout / reading-level workflows

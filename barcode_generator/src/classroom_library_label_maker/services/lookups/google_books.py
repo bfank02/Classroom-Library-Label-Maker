@@ -42,10 +42,13 @@ _logger = get_logger("google_books")
 GOOGLE_BOOKS_VOLUMES_URL = "https://www.googleapis.com/books/v1/volumes"
 DEFAULT_TIMEOUT_SECONDS = 10.0
 DEFAULT_MAX_RESULTS = 10
-# Stay under the common unauthenticated ~100 queries/minute quota when
-# enriching large inventories (demo workbook, classroom batches). Each
+# Anonymous pacing stays under the common ~100 queries/minute quota. Each
 # missing ISBN can issue up to three searches, so pace conservatively.
-DEFAULT_MIN_REQUEST_INTERVAL_SECONDS = 1.25
+DEFAULT_ANONYMOUS_MIN_REQUEST_INTERVAL_SECONDS = 1.25
+# Authenticated keys still have per-user quotas; pace faster but not unbounded.
+DEFAULT_AUTHENTICATED_MIN_REQUEST_INTERVAL_SECONDS = 0.40
+# Backward-compatible alias (anonymous default).
+DEFAULT_MIN_REQUEST_INTERVAL_SECONDS = DEFAULT_ANONYMOUS_MIN_REQUEST_INTERVAL_SECONDS
 DEFAULT_MAX_RETRIES_ON_429 = 6
 DEFAULT_429_INITIAL_BACKOFF_SECONDS = 5.0
 DEFAULT_429_MAX_BACKOFF_SECONDS = 65.0
@@ -58,6 +61,9 @@ RATE_LIMIT_USER_MESSAGE = (
 RATE_LIMIT_STOPPED_MESSAGE = (
     "ISBN lookup stopped: Google Books rate limit. "
     "Try again later or set GOOGLE_BOOKS_API_KEY."
+)
+AUTH_FAILURE_USER_MESSAGE = (
+    "Google Books API key was rejected. Continuing without authentication."
 )
 
 # Match selection thresholds (combined confidence score in [0, 1]).
@@ -132,10 +138,13 @@ class _ScoredCandidate:
 
 # Re-export for callers that historically imported from this module.
 __all__ = [
+    "AUTH_FAILURE_USER_MESSAGE",
     "DEFAULT_429_CIRCUIT_BREAKER_THRESHOLD",
     "DEFAULT_429_INITIAL_BACKOFF_SECONDS",
     "DEFAULT_429_MAX_BACKOFF_SECONDS",
     "DEFAULT_ADAPTIVE_MAX_INTERVAL_SECONDS",
+    "DEFAULT_ANONYMOUS_MIN_REQUEST_INTERVAL_SECONDS",
+    "DEFAULT_AUTHENTICATED_MIN_REQUEST_INTERVAL_SECONDS",
     "DEFAULT_MAX_RESULTS",
     "DEFAULT_MAX_RETRIES_ON_429",
     "DEFAULT_MIN_REQUEST_INTERVAL_SECONDS",
@@ -222,6 +231,11 @@ def _default_fetch_json(url: str, *, timeout_seconds: float) -> Mapping[str, Any
                 RATE_LIMIT_USER_MESSAGE,
                 kind="rate_limit",
                 retry_after_seconds=_retry_after_seconds(exc),
+            ) from exc
+        if exc.code in {401, 403}:
+            raise GoogleBooksTransportError(
+                AUTH_FAILURE_USER_MESSAGE,
+                kind="auth",
             ) from exc
         raise GoogleBooksTransportError(
             f"Google Books HTTP error: {exc.code}",
@@ -561,14 +575,14 @@ class GoogleBooksEnrichmentProvider:
         max_results: int = DEFAULT_MAX_RESULTS,
         api_key: str | None = None,
         fetch_json: JsonFetcher | None = None,
-        min_request_interval_seconds: float = DEFAULT_MIN_REQUEST_INTERVAL_SECONDS,
+        min_request_interval_seconds: float | None = None,
         max_retries_on_429: int = DEFAULT_MAX_RETRIES_ON_429,
         rate_limit_backoff_seconds: float = DEFAULT_429_INITIAL_BACKOFF_SECONDS,
         rate_limit_max_backoff_seconds: float = DEFAULT_429_MAX_BACKOFF_SECONDS,
         rate_limit_circuit_breaker_threshold: int = (
             DEFAULT_429_CIRCUIT_BREAKER_THRESHOLD
         ),
-        adaptive_max_interval_seconds: float = DEFAULT_ADAPTIVE_MAX_INTERVAL_SECONDS,
+        adaptive_max_interval_seconds: float | None = None,
         sleep: Callable[[float], None] | None = None,
     ) -> None:
         """Initialize the provider.
@@ -576,11 +590,12 @@ class GoogleBooksEnrichmentProvider:
         Args:
             timeout_seconds: Per-request timeout.
             max_results: Google Books ``maxResults`` (1-40).
-            api_key: Optional API key for higher quota.
+            api_key: Optional API key (caller-injected; origin unknown here).
             fetch_json: Injectable JSON GET for tests (receives full URL).
                 When set, throttling / 429 retries are skipped (tests own timing).
             min_request_interval_seconds: Minimum delay between live HTTP calls
-                (``0`` disables pacing).
+                (``0`` disables pacing). When omitted, uses authenticated or
+                anonymous defaults based on whether ``api_key`` is set.
             max_retries_on_429: Extra attempts after HTTP 429 before failing.
             rate_limit_backoff_seconds: Initial sleep after a 429 (doubles each
                 retry, capped by ``rate_limit_max_backoff_seconds``).
@@ -588,12 +603,25 @@ class GoogleBooksEnrichmentProvider:
             rate_limit_circuit_breaker_threshold: After this many consecutive
                 book-level rate-limit failures, skip further live lookups.
             adaptive_max_interval_seconds: Cap when pacing slows after 429s.
+                Defaults to at least the chosen base interval.
             sleep: Injectable sleeper for tests (defaults to :func:`time.sleep`).
         """
         if timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
         if not 1 <= max_results <= 40:
             raise ValueError("max_results must be between 1 and 40")
+        resolved_key = api_key.strip() if api_key else None
+        if min_request_interval_seconds is None:
+            min_request_interval_seconds = (
+                DEFAULT_AUTHENTICATED_MIN_REQUEST_INTERVAL_SECONDS
+                if resolved_key
+                else DEFAULT_ANONYMOUS_MIN_REQUEST_INTERVAL_SECONDS
+            )
+        if adaptive_max_interval_seconds is None:
+            adaptive_max_interval_seconds = max(
+                DEFAULT_ADAPTIVE_MAX_INTERVAL_SECONDS,
+                min_request_interval_seconds,
+            )
         if min_request_interval_seconds < 0:
             raise ValueError("min_request_interval_seconds must be >= 0")
         if max_retries_on_429 < 0:
@@ -614,7 +642,7 @@ class GoogleBooksEnrichmentProvider:
             )
         self._timeout_seconds = timeout_seconds
         self._max_results = max_results
-        self._api_key = api_key.strip() if api_key else None
+        self._api_key = resolved_key
         self._fetch_json = fetch_json
         self._base_min_request_interval_seconds = min_request_interval_seconds
         self._min_request_interval_seconds = min_request_interval_seconds
@@ -629,6 +657,36 @@ class GoogleBooksEnrichmentProvider:
         self._last_request_monotonic: float | None = None
         self._consecutive_rate_limit_failures = 0
         self._rate_limit_circuit_open = False
+        self._logged_request_mode = False
+        self._fell_back_to_anonymous = False
+        self._request_count = 0
+        self._retry_count = 0
+        self._rate_limit_response_count = 0
+
+    @property
+    def uses_authentication(self) -> bool:
+        """Return True when the provider currently attaches an API key."""
+        return bool(self._api_key)
+
+    @property
+    def request_count(self) -> int:
+        """Number of live HTTP attempts (including retries)."""
+        return self._request_count
+
+    @property
+    def retry_count(self) -> int:
+        """Number of 429 retry sleeps performed."""
+        return self._retry_count
+
+    @property
+    def rate_limit_response_count(self) -> int:
+        """Number of HTTP 429 responses observed."""
+        return self._rate_limit_response_count
+
+    @property
+    def min_request_interval_seconds(self) -> float:
+        """Current pacing interval (may increase after rate limits)."""
+        return self._min_request_interval_seconds
 
     def enrich(self, book: Book) -> BookEnrichmentResult:
         """Search Google Books and return the best enrichment match.
@@ -673,14 +731,15 @@ class GoogleBooksEnrichmentProvider:
                 )
                 if exc.kind == "rate_limit":
                     self._record_rate_limit_failure()
+                message = exc.message
+                if exc.kind == "rate_limit":
+                    message = RATE_LIMIT_USER_MESSAGE
+                elif exc.kind == "auth":
+                    message = AUTH_FAILURE_USER_MESSAGE
                 return BookEnrichmentResult(
                     isbn=book.isbn,
                     status=BookEnrichmentStatus.ERROR,
-                    message=(
-                        RATE_LIMIT_USER_MESSAGE
-                        if exc.kind == "rate_limit"
-                        else exc.message
-                    ),
+                    message=message,
                     metadata={
                         "provider": "google_books",
                         "error_kind": exc.kind,
@@ -718,6 +777,62 @@ class GoogleBooksEnrichmentProvider:
 
     def _search(self, query: str) -> Mapping[str, Any]:
         """Execute one volumes search and return parsed JSON."""
+        self._log_request_mode_once()
+        url = self._build_search_url(query)
+        # Log query only — never the full URL (may contain an API key).
+        _logger.debug("Google Books search q=%r", query)
+
+        if self._fetch_json is not None:
+            return self._search_with_injected_fetcher(url, query)
+
+        try:
+            return self._fetch_json_with_rate_limits(url)
+        except GoogleBooksTransportError as exc:
+            if exc.kind != "auth" or not self._fallback_to_anonymous():
+                raise
+            anonymous_url = self._build_search_url(query)
+            return self._fetch_json_with_rate_limits(anonymous_url)
+
+    def _search_with_injected_fetcher(
+        self,
+        url: str,
+        query: str,
+    ) -> Mapping[str, Any]:
+        """Run injectable fetch_json, with one anonymous retry on auth failure."""
+        assert self._fetch_json is not None
+        try:
+            payload = self._invoke_injected_fetcher(url)
+        except GoogleBooksTransportError as exc:
+            if exc.kind != "auth" or not self._fallback_to_anonymous():
+                raise
+            payload = self._invoke_injected_fetcher(self._build_search_url(query))
+        if not isinstance(payload, Mapping):
+            raise GoogleBooksTransportError(
+                "Google Books response JSON must be an object",
+                kind="malformed",
+            )
+        return payload
+
+    def _invoke_injected_fetcher(self, url: str) -> Mapping[str, Any]:
+        assert self._fetch_json is not None
+        try:
+            payload = self._fetch_json(url)
+        except GoogleBooksTransportError:
+            raise
+        except TimeoutError as exc:
+            raise GoogleBooksTransportError(
+                "Google Books request timed out",
+                kind="timeout",
+            ) from exc
+        except Exception as exc:
+            raise GoogleBooksTransportError(
+                f"Google Books request failed: {exc}",
+                kind="error",
+            ) from exc
+        return payload
+
+    def _build_search_url(self, query: str) -> str:
+        """Build a volumes search URL (includes key only while authenticated)."""
         params: dict[str, str | int] = {
             "q": query,
             "maxResults": self._max_results,
@@ -725,32 +840,44 @@ class GoogleBooksEnrichmentProvider:
         }
         if self._api_key:
             params["key"] = self._api_key
-        url = f"{GOOGLE_BOOKS_VOLUMES_URL}?{urlencode(params)}"
-        _logger.debug("Google Books search q=%r", query)
+        return f"{GOOGLE_BOOKS_VOLUMES_URL}?{urlencode(params)}"
 
-        if self._fetch_json is not None:
-            try:
-                payload = self._fetch_json(url)
-            except GoogleBooksTransportError:
-                raise
-            except TimeoutError as exc:
-                raise GoogleBooksTransportError(
-                    "Google Books request timed out",
-                    kind="timeout",
-                ) from exc
-            except Exception as exc:
-                raise GoogleBooksTransportError(
-                    f"Google Books request failed: {exc}",
-                    kind="error",
-                ) from exc
-            if not isinstance(payload, Mapping):
-                raise GoogleBooksTransportError(
-                    "Google Books response JSON must be an object",
-                    kind="malformed",
-                )
-            return payload
+    def _log_request_mode_once(self) -> None:
+        """Log Authenticated/Anonymous exactly once per provider instance."""
+        if self._logged_request_mode:
+            return
+        self._logged_request_mode = True
+        mode = "Authenticated" if self._api_key else "Anonymous"
+        _logger.info("Google Books requests: %s", mode)
 
-        return self._fetch_json_with_rate_limits(url)
+    def _fallback_to_anonymous(self) -> bool:
+        """Drop a rejected API key and switch to anonymous pacing.
+
+        Returns:
+            True when a fallback was performed (caller should retry once).
+        """
+        if not self._api_key or self._fell_back_to_anonymous:
+            return False
+        self._api_key = None
+        self._fell_back_to_anonymous = True
+        self._base_min_request_interval_seconds = (
+            DEFAULT_ANONYMOUS_MIN_REQUEST_INTERVAL_SECONDS
+        )
+        self._min_request_interval_seconds = (
+            DEFAULT_ANONYMOUS_MIN_REQUEST_INTERVAL_SECONDS
+        )
+        self._adaptive_max_interval_seconds = max(
+            self._adaptive_max_interval_seconds,
+            DEFAULT_ANONYMOUS_MIN_REQUEST_INTERVAL_SECONDS,
+        )
+        _logger.warning(
+            "Google Books API key rejected; switching to Anonymous for "
+            "the remainder of this run"
+        )
+        # Allow a fresh mode log if enrichment continues after fallback.
+        self._logged_request_mode = False
+        self._log_request_mode_once()
+        return True
 
     def _fetch_json_with_rate_limits(self, url: str) -> Mapping[str, Any]:
         """GET with pacing and exponential backoff on HTTP 429."""
@@ -758,26 +885,30 @@ class GoogleBooksEnrichmentProvider:
         last_rate_limit: GoogleBooksTransportError | None = None
         for attempt in range(attempts):
             self._wait_for_request_slot()
+            self._request_count += 1
             try:
                 return _default_fetch_json(
                     url,
                     timeout_seconds=self._timeout_seconds,
                 )
             except GoogleBooksTransportError as exc:
-                if exc.kind != "rate_limit":
-                    raise
-                last_rate_limit = exc
-                self._slow_down_after_rate_limit()
-                if attempt >= attempts - 1:
-                    break
-                delay = self._rate_limit_delay(attempt, exc.retry_after_seconds)
-                _logger.warning(
-                    "Google Books rate limited (429); retry %s/%s after %.1fs",
-                    attempt + 1,
-                    self._max_retries_on_429,
-                    delay,
-                )
-                self._sleep(delay)
+                if exc.kind == "rate_limit":
+                    self._rate_limit_response_count += 1
+                    last_rate_limit = exc
+                    self._slow_down_after_rate_limit()
+                    if attempt >= attempts - 1:
+                        break
+                    delay = self._rate_limit_delay(attempt, exc.retry_after_seconds)
+                    _logger.warning(
+                        "Google Books rate limited (429); retry %s/%s after %.1fs",
+                        attempt + 1,
+                        self._max_retries_on_429,
+                        delay,
+                    )
+                    self._retry_count += 1
+                    self._sleep(delay)
+                    continue
+                raise
         raise GoogleBooksTransportError(
             RATE_LIMIT_USER_MESSAGE,
             kind="rate_limit",

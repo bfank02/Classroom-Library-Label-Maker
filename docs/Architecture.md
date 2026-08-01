@@ -258,8 +258,12 @@ is populated from that message.
 ### Performance benchmarks
 
 Engineering timings live under `barcode_generator/tests/benchmarks/`. They are
-**not** part of the normal unit-test suite and must **never** fail CI. See the
-barcode generator README for how to run them and how to interpret results.
+manual developer tools — **not** part of the normal unit-test suite and must
+**never** fail CI. See the barcode generator README for how to run them.
+
+* `benchmark_isbn_validator.py` — ISBN normalize/validate throughput
+* `benchmark_google_books_enrichment.py` — Teacher Demo Library enrichment
+  (requests, cache, 429s, wall time; optional `GOOGLE_BOOKS_API_KEY`)
 
 ## Rendering layer (`rendering/`)
 
@@ -370,7 +374,8 @@ BookEnrichmentProvider   (protocol)
 ```
 
 `WorkbookGenerationService` constructs enrichment via
-`create_default_enrichment_service()` when `lookup_missing_isbns` is True,
+`create_default_enrichment_service(api_key=settings.google_books_api_key)` when
+`lookup_missing_isbns` is True,
 or accepts an injected `BookEnrichmentService` for tests.
 **Phase 3 behavior (integrated enrichment)**
 
@@ -568,16 +573,36 @@ Populates `isbn` (ISBN-13 preferred), `title`, `author`, and `metadata`
 scored peers to public `ReviewCandidate` values. Never mutates the input
 `Book`.
 
-**Rate limiting**
+**Authentication & rate limiting**
 
-Live HTTP calls are paced (~1.25s apart by default) and HTTP **429** responses
-retry with capped exponential backoff (defaults: up to 6 retries, max ~65s
-sleep, honoring ``Retry-After`` when present). After a 429, pacing slows for
-the rest of the run; after several consecutive book-level rate-limit failures,
-remaining lookups short-circuit so the review wizard is not filled with empty
-429 cards. Optional `GOOGLE_BOOKS_API_KEY` (read by
-`create_default_enrichment_service`) improves quota for large inventories.
-Injectable `fetch_json` bypasses pacing for unit tests.
+Configuration resolves `GOOGLE_BOOKS_API_KEY` **once** in
+`config.load_google_books_auth_config()` (the only `os.environ` read for this
+key) and stores the result on `ApplicationSettings` (`google_books_api_key`,
+`google_books_auth_status`). Startup logs exactly one of:
+
+* `Google Books authentication: Enabled`
+* `Google Books authentication: Disabled (anonymous mode)`
+* `Google Books authentication: Disabled (invalid API key configuration)`
+
+No network “test” request is made at startup. The key is injected into
+`GoogleBooksEnrichmentProvider(api_key=...)` via
+`create_default_enrichment_service(api_key=settings.google_books_api_key)`;
+the provider never reads the environment.
+
+Live HTTP pacing defaults:
+
+* **Authenticated** ≈ 0.40s between requests
+* **Anonymous** ≈ 1.25s between requests
+
+HTTP **429** responses still use capped exponential backoff (up to 6 retries,
+max ~65s, honoring `Retry-After`), adaptive slowdown, and a circuit breaker.
+HTTP **401/403** drop the key for the remainder of the run and retry once in
+anonymous mode (invalid keys are not retried repeatedly). Rate-limit and auth
+failures are not queued in the review wizard. Injectable `fetch_json` bypasses
+pacing for unit tests.
+
+Never log API keys or URLs that contain them. Production builds should obtain
+the key from environment/configuration — never embed it in source or packages.
 
 **Testing**
 

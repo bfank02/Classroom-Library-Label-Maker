@@ -65,7 +65,11 @@ def run(argv: list[str] | None = None) -> int:
     Returns:
         Exit code from ``QApplication.exec()``.
     """
-    from classroom_library_label_maker.config import ProjectPaths
+    from classroom_library_label_maker.config import (
+        ProjectPaths,
+        load_google_books_auth_config,
+        log_google_books_authentication_status,
+    )
     from classroom_library_label_maker.logger import get_logger
     from classroom_library_label_maker.metadata import APP_COMPONENT_NAME
 
@@ -79,6 +83,8 @@ def run(argv: list[str] | None = None) -> int:
         APP_VERSION,
     )
     logger.info("Log file: %s", paths.default_log_file)
+    auth = load_google_books_auth_config()
+    log_google_books_authentication_status(auth.status, logger=logger)
 
     app = create_application(argv)
     window = create_main_window()

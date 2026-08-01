@@ -1009,6 +1009,18 @@ class WorkbookGenerationResult:
         )
 
 
+class GoogleBooksAuthStatus(StrEnum):
+    """Local configuration quality for the Google Books API key.
+
+    Does not imply Google accepted the key — only that the configured value
+    passed startup validation (present and non-empty after strip).
+    """
+
+    ENABLED = "enabled"
+    DISABLED_ANONYMOUS = "disabled_anonymous"
+    DISABLED_INVALID = "disabled_invalid"
+
+
 @dataclass(slots=True)
 class ApplicationSettings:
     """Project-wide and per-run application settings.
@@ -1044,6 +1056,11 @@ class ApplicationSettings:
         label_content: Which title/author/barcode fields appear on labels.
         lookup_missing_isbns: When True, look up missing ISBNs during generation
             via ``BookEnrichmentService`` before barcode validation.
+        google_books_api_key: Optional Google Books API key resolved at settings
+            load time. Never log or serialize this value.
+        google_books_auth_status: Startup validation outcome for the API key
+            (enabled / anonymous / invalid). Does not imply Google accepted the
+            key — only that configuration quality passed local checks.
     """
 
     barcode_output_directory: Path
@@ -1073,6 +1090,10 @@ class ApplicationSettings:
     label_template_id: str = DEFAULT_LABEL_TEMPLATE_ID
     label_content: LabelContentOptions = field(default_factory=LabelContentOptions)
     lookup_missing_isbns: bool = True
+    google_books_api_key: str | None = None
+    google_books_auth_status: GoogleBooksAuthStatus = (
+        GoogleBooksAuthStatus.DISABLED_ANONYMOUS
+    )
 
     def __post_init__(self) -> None:
         """Normalize path fields to :class:`~pathlib.Path` instances."""
@@ -1088,6 +1109,9 @@ class ApplicationSettings:
             self.log_file = Path(self.log_file)
         if self.workbook_path is not None:
             self.workbook_path = Path(self.workbook_path)
+        if self.google_books_api_key is not None:
+            stripped = self.google_books_api_key.strip()
+            self.google_books_api_key = stripped or None
         if not self.app_version.strip():
             raise ValueError("app_version must not be empty")
         if not self.default_label_type.strip():
@@ -1121,13 +1145,22 @@ class ApplicationSettings:
             if not str(value).strip():
                 raise ValueError(f"{name} must not be empty")
 
+    @property
+    def google_books_authenticated(self) -> bool:
+        """Return True when a non-empty API key is configured for enrichment."""
+        return (
+            self.google_books_auth_status is GoogleBooksAuthStatus.ENABLED
+            and bool(self.google_books_api_key)
+        )
+
     def __repr__(self) -> str:
-        """Return a developer-friendly representation."""
+        """Return a developer-friendly representation (never includes API keys)."""
         return (
             f"ApplicationSettings(version={self.app_version!r}, "
             f"barcode_output_directory={self.barcode_output_directory!r}, "
             f"log_directory={self.log_directory!r}, "
-            f"default_label_type={self.default_label_type!r})"
+            f"default_label_type={self.default_label_type!r}, "
+            f"google_books_auth_status={self.google_books_auth_status.value!r})"
         )
 
 

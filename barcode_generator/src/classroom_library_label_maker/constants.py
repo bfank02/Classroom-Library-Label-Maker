@@ -14,6 +14,9 @@ APP_LOGGER_NAME = APP_PACKAGE_NAME
 DEFAULT_LOG_FILE_NAME = "application.log"
 DEFAULT_LOG_LEVEL = "INFO"
 
+# Google Books enrichment (read only via config.load_google_books_auth_config)
+GOOGLE_BOOKS_API_KEY_ENV = "GOOGLE_BOOKS_API_KEY"
+
 # Label templates
 # Canonical setting / registry id (use ApplicationSettings.label_template_id).
 DEFAULT_LABEL_TEMPLATE_ID = "avery-5160"

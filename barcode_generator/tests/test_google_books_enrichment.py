@@ -564,3 +564,165 @@ def test_injected_fetch_json_skips_rate_limiting() -> None:
     )
     provider.enrich(_book())
     assert sleeps == []
+
+
+def test_authenticated_requests_append_key_parameter() -> None:
+    fetcher = _ScriptedFetcher(
+        [
+            _payload(
+                _volume(
+                    volume_id="v",
+                    title="Charlotte's Web",
+                    authors=["E. B. White"],
+                    isbn13="9780064400558",
+                )
+            )
+        ]
+    )
+    provider = GoogleBooksEnrichmentProvider(
+        api_key="secret-test-key",
+        fetch_json=fetcher,
+    )
+    result = provider.enrich(_book())
+    assert result.status is BookEnrichmentStatus.FOUND
+    assert fetcher.urls
+    params = parse_qs(urlparse(fetcher.urls[0]).query)
+    assert params.get("key") == ["secret-test-key"]
+
+
+def test_anonymous_requests_omit_key_parameter() -> None:
+    fetcher = _ScriptedFetcher([_payload()])
+    provider = GoogleBooksEnrichmentProvider(fetch_json=fetcher)
+    provider.enrich(_book())
+    params = parse_qs(urlparse(fetcher.urls[0]).query)
+    assert "key" not in params
+
+
+def test_authenticated_default_pacing_is_faster_than_anonymous() -> None:
+    from classroom_library_label_maker.services.lookups.google_books import (
+        DEFAULT_ANONYMOUS_MIN_REQUEST_INTERVAL_SECONDS,
+        DEFAULT_AUTHENTICATED_MIN_REQUEST_INTERVAL_SECONDS,
+    )
+
+    authenticated = GoogleBooksEnrichmentProvider(api_key="k")
+    anonymous = GoogleBooksEnrichmentProvider()
+    assert (
+        authenticated.min_request_interval_seconds
+        == DEFAULT_AUTHENTICATED_MIN_REQUEST_INTERVAL_SECONDS
+    )
+    assert (
+        anonymous.min_request_interval_seconds
+        == DEFAULT_ANONYMOUS_MIN_REQUEST_INTERVAL_SECONDS
+    )
+    assert (
+        authenticated.min_request_interval_seconds
+        < anonymous.min_request_interval_seconds
+    )
+
+
+def test_adaptive_slowdown_still_functions_when_authenticated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from classroom_library_label_maker.services.lookups import google_books as gb
+
+    calls = {"n": 0}
+    sleeps: list[float] = []
+
+    def fake_fetch(url: str, *, timeout_seconds: float) -> dict[str, object]:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise GoogleBooksTransportError(
+                RATE_LIMIT_USER_MESSAGE,
+                kind="rate_limit",
+            )
+        return _payload(
+            _volume(
+                volume_id="v",
+                title="Charlotte's Web",
+                authors=["E. B. White"],
+                isbn13="9780064400558",
+            )
+        )
+
+    monkeypatch.setattr(gb, "_default_fetch_json", fake_fetch)
+    provider = GoogleBooksEnrichmentProvider(
+        api_key="k",
+        min_request_interval_seconds=0.4,
+        max_retries_on_429=2,
+        rate_limit_backoff_seconds=0.1,
+        rate_limit_max_backoff_seconds=0.1,
+        adaptive_max_interval_seconds=2.0,
+        sleep=sleeps.append,
+    )
+    before = provider.min_request_interval_seconds
+    result = provider.enrich(_book())
+    assert result.status is BookEnrichmentStatus.FOUND
+    assert provider.min_request_interval_seconds > before
+    assert provider.rate_limit_response_count >= 1
+
+
+def test_auth_failure_falls_back_to_anonymous() -> None:
+    secret = "reject-me-key"
+    responses: list[dict[str, Any] | BaseException] = [
+        GoogleBooksTransportError("rejected", kind="auth"),
+        _payload(
+            _volume(
+                volume_id="v",
+                title="Charlotte's Web",
+                authors=["E. B. White"],
+                isbn13="9780064400558",
+            )
+        ),
+    ]
+    fetcher = _ScriptedFetcher(responses)
+    provider = GoogleBooksEnrichmentProvider(api_key=secret, fetch_json=fetcher)
+    result = provider.enrich(_book())
+    assert result.status is BookEnrichmentStatus.FOUND
+    assert provider.uses_authentication is False
+    assert len(fetcher.urls) == 2
+    first = parse_qs(urlparse(fetcher.urls[0]).query)
+    second = parse_qs(urlparse(fetcher.urls[1]).query)
+    assert first.get("key") == [secret]
+    assert "key" not in second
+
+
+def test_auth_failure_does_not_retry_invalid_key_repeatedly() -> None:
+    secret = "bad-key"
+    fetcher = _ScriptedFetcher(
+        [
+            GoogleBooksTransportError("rejected", kind="auth"),
+            GoogleBooksTransportError("rejected", kind="auth"),
+        ]
+    )
+    provider = GoogleBooksEnrichmentProvider(api_key=secret, fetch_json=fetcher)
+    result = provider.enrich(_book())
+    assert result.status is BookEnrichmentStatus.ERROR
+    assert result.metadata["error_kind"] == "auth"
+    # One authenticated attempt + one anonymous fallback attempt only.
+    assert len(fetcher.urls) == 2
+    assert parse_qs(urlparse(fetcher.urls[0]).query).get("key") == [secret]
+    assert "key" not in parse_qs(urlparse(fetcher.urls[1]).query)
+
+
+def test_api_key_never_appears_in_provider_log_records(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    secret = "super-secret-api-key-xyz"
+    fetcher = _ScriptedFetcher(
+        [
+            _payload(
+                _volume(
+                    volume_id="v",
+                    title="Charlotte's Web",
+                    authors=["E. B. White"],
+                    isbn13="9780064400558",
+                )
+            )
+        ]
+    )
+    provider = GoogleBooksEnrichmentProvider(api_key=secret, fetch_json=fetcher)
+    with caplog.at_level("DEBUG"):
+        provider.enrich(_book())
+    joined = "\n".join(record.getMessage() for record in caplog.records)
+    assert secret not in joined
+    assert "Google Books requests: Authenticated" in joined

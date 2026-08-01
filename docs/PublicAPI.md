@@ -228,6 +228,8 @@ label template selection, and enrichment options for a run.
 | `workbook_path`, `workbook_sheet_name`, `workbook_column_*`, `workbook_header_row` | Excel import |
 | `barcode_output_directory`, `barcode_module_*` / `quiet_zone` / `font_size` / `dpi` | Barcode output + render geometry |
 | `lookup_missing_isbns` | When True (default), look up blank ISBNs during generation |
+| `google_books_api_key` | Optional API key from env (never log / serialize) |
+| `google_books_auth_status` | Startup config quality: enabled / anonymous / invalid |
 | `input_path` / `results_path` | Legacy CLI JSON paths |
 
 ### `BatchResults` — Internal / Deprecated
@@ -474,7 +476,7 @@ Module: `classroom_library_label_maker.services.lookups.google_books`
 
 | Method / ctor | Inputs | Outputs |
 |---------------|--------|---------|
-| `__init__(*, timeout_seconds=10, max_results=10, api_key=None, fetch_json=None)` | Optional timeout, page size, API key, injectable JSON GET | provider |
+| `__init__(*, timeout_seconds=10, max_results=10, api_key=None, fetch_json=None, min_request_interval_seconds=None, …)` | Optional timeout, page size, injected API key, injectable JSON GET, pacing/backoff knobs | provider |
 | `enrich(book)` | `Book` | `BookEnrichmentResult` (`FOUND` / `AMBIGUOUS` / `NOT_FOUND` / `ERROR`) |
 
 **Query order:** `intitle+inauthor` → `intitle` → free-text `title author`
@@ -483,9 +485,13 @@ Module: `classroom_library_label_maker.services.lookups.google_books`
 **Notes**
 
 - Does not mutate `Book`.
+- Does not read environment variables; callers inject `api_key`.
+- Authenticated vs anonymous pacing defaults (~0.40s / ~1.25s).
 - Transport failures map to `ERROR` (no leaked exceptions).
+- HTTP 401/403 with a key falls back to anonymous for the rest of the run.
 - `fetch_json` is for tests / custom transports; production uses urllib.
-- Not the default provider; not used by generation / CLI / GUI.
+- Used by generation when `lookup_missing_isbns` is enabled via
+  `create_default_enrichment_service(api_key=…)`.
 
 **External use:** Yes when callers explicitly inject it into
 `BookEnrichmentService`.
@@ -691,8 +697,9 @@ print or display UI. Does not import Google Books types (depends on
 Default `output_path`: `{project_root}/output/library_labels.xlsx`.
 
 When `settings.lookup_missing_isbns` is True and `enrichment` is omitted, a
-default enrichment service is created. Set `lookup_missing_isbns=False` for
-Version 1.0 behavior (no enrichment stage).
+default enrichment service is created with
+`create_default_enrichment_service(api_key=settings.google_books_api_key)`.
+Set `lookup_missing_isbns=False` for Version 1.0 behavior (no enrichment stage).
 
 Optional progress uses Qt-free `GenerationProgressReporter` /
 `GenerationProgress` / `GenerationStage` from

@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Google Books API key integration: `GOOGLE_BOOKS_API_KEY` resolved once in
+  `config.load_google_books_auth_config()`, stored on `ApplicationSettings`,
+  injected into `GoogleBooksEnrichmentProvider` (provider never reads env)
+- Startup authentication logging (`Enabled` / anonymous / invalid) with no
+  network test request and no key leakage
+- Authenticated pacing (~0.40s) vs anonymous (~1.25s), with 401/403 fallback
+  to anonymous for the remainder of a run
+- Developer enrichment benchmark:
+  `tests/benchmarks/benchmark_google_books_enrichment.py`
 - Book enrichment architecture: `BookEnrichmentService`,
   `BookEnrichmentProvider`, `NullBookEnrichmentProvider`, plus immutable
   `BookEnrichmentResult` / `BookEnrichmentStatus` (not wired into generation;
