@@ -540,9 +540,9 @@ adapter. Callers only see `BookEnrichmentResult`.
 
 **Query strategy (sequential; no author-only searches)**
 
-1. `intitle:"<title>" inauthor:"<author>"`
-2. `intitle:"<title>"`
-3. `<title> <author>`
+1. `<title> inauthor:<surname>`
+2. `<title> <author>`
+3. `<title>`
 
 Stops early on `FOUND` or `AMBIGUOUS`. Empty results fall through to the next
 query. Transport failures become `ERROR` (timeouts, HTTP errors, malformed

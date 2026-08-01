@@ -274,17 +274,53 @@ def _default_fetch_json(url: str, *, timeout_seconds: float) -> Mapping[str, Any
     return payload
 
 
+def _author_surname(author: str) -> str | None:
+    """Extract a surname token suitable for Google ``inauthor:`` queries.
+
+    Google Books currently often returns empty/noisy results for quoted
+    ``inauthor:"E. B. White"`` forms; ``inauthor:White`` is much more reliable.
+    """
+    cleaned = author.strip()
+    if not cleaned:
+        return None
+    if "," in cleaned:
+        # "White, E. B." → White
+        head = cleaned.split(",", 1)[0].strip()
+        token = head.split()[-1] if head else ""
+    else:
+        tokens = [part.strip(".,") for part in cleaned.split() if part.strip(".,")]
+        while tokens and tokens[-1].upper() in {"JR", "SR", "II", "III", "IV", "PHD"}:
+            tokens.pop()
+        token = tokens[-1] if tokens else ""
+    token = token.strip()
+    if len(token) < 2:
+        return None
+    return token
+
+
 def _build_queries(title: str, author: str) -> tuple[str, ...]:
-    """Return ordered Google Books ``q`` values (no author-only search)."""
+    """Return ordered Google Books ``q`` values (no author-only search).
+
+    Prefer ``{title} inauthor:{surname}`` over quoted ``intitle``/``inauthor``
+    pairs. With current Google Books API behavior, quoted field queries often
+    return zero hits for well-known children's titles, while surname forms
+    return usable matches.
+    """
     title = title.strip()
     author = author.strip()
     queries: list[str] = []
+    surname = _author_surname(author) if author else None
+
+    if title and surname:
+        queries.append(f"{title} inauthor:{surname}")
     if title and author:
-        queries.append(f'intitle:"{title}" inauthor:"{author}"')
+        free = f"{title} {author}"
+        if free not in queries:
+            queries.append(free)
     if title:
-        queries.append(f'intitle:"{title}"')
-    if title and author:
-        queries.append(f"{title} {author}")
+        # Broader fallback when author-constrained queries miss.
+        if title not in queries:
+            queries.append(title)
     return tuple(queries)
 
 
@@ -560,9 +596,9 @@ class GoogleBooksEnrichmentProvider:
 
     Search order (sequential requests; stops early on FOUND or AMBIGUOUS):
 
-    1. ``intitle:"<title>" inauthor:"<author>"``
-    2. ``intitle:"<title>"``
-    3. ``<title> <author>``
+    1. ``<title> inauthor:<surname>``
+    2. ``<title> <author>``
+    3. ``<title>``
 
     Never performs author-only searches. Transport failures become
     :attr:`BookEnrichmentStatus.ERROR` results - exceptions are not leaked.

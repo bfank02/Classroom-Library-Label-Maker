@@ -479,7 +479,8 @@ Module: `classroom_library_label_maker.services.lookups.google_books`
 | `__init__(*, timeout_seconds=10, max_results=10, api_key=None, fetch_json=None, min_request_interval_seconds=None, …)` | Optional timeout, page size, injected API key, injectable JSON GET, pacing/backoff knobs | provider |
 | `enrich(book)` | `Book` | `BookEnrichmentResult` (`FOUND` / `AMBIGUOUS` / `NOT_FOUND` / `ERROR`) |
 
-**Query order:** `intitle+inauthor` → `intitle` → free-text `title author`
+**Query order:** `title inauthor:surname` → free-text `title author` →
+`title`
 (sequential; no author-only search).
 
 **Notes**

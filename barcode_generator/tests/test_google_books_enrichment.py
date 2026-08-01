@@ -105,7 +105,7 @@ def test_title_and_author_similarity_high_for_near_matches() -> None:
 
 
 def test_exact_match_title_and_author() -> None:
-    """intitle+inauthor hit with strong scores should return FOUND."""
+    """Title + inauthor:surname hit with strong scores should return FOUND."""
     fetcher = _ScriptedFetcher(
         [
             _payload(
@@ -133,15 +133,16 @@ def test_exact_match_title_and_author() -> None:
     assert result.metadata["provider"] == "google_books"
     assert result.metadata["normalized_title"] == "charlottes web"
     assert book.title == "Charlotte's Web"  # original unchanged
-    assert "intitle:" in _query_from_url(fetcher.urls[0])
-    assert "inauthor:" in _query_from_url(fetcher.urls[0])
+    assert "inauthor:White" in _query_from_url(fetcher.urls[0])
+    assert "Charlotte" in _query_from_url(fetcher.urls[0])
 
 
 def test_title_only_match_after_empty_combined_query() -> None:
-    """Fall through to intitle-only when the first query returns nothing."""
+    """Fall through to free-text / title-only when surname query is empty."""
     fetcher = _ScriptedFetcher(
         [
-            _payload(),  # intitle+inauthor empty
+            _payload(),  # title inauthor:surname empty
+            _payload(),  # title + author empty
             _payload(
                 _volume(
                     volume_id="vol2",
@@ -155,9 +156,8 @@ def test_title_only_match_after_empty_combined_query() -> None:
     result = GoogleBooksEnrichmentProvider(fetch_json=fetcher).enrich(_book())
 
     assert result.status is BookEnrichmentStatus.FOUND
-    assert len(fetcher.urls) == 2
-    assert "inauthor:" not in _query_from_url(fetcher.urls[1])
-    assert _query_from_url(fetcher.urls[1]).startswith("intitle:")
+    assert len(fetcher.urls) == 3
+    assert _query_from_url(fetcher.urls[2]) == "Charlotte's Web"
 
 
 def test_ambiguous_when_two_distinct_confident_matches() -> None:
@@ -204,10 +204,24 @@ def test_no_match_across_all_queries() -> None:
     assert result.status is BookEnrichmentStatus.NOT_FOUND
     assert len(fetcher.urls) == 3
     queries = [_query_from_url(url) for url in fetcher.urls]
-    assert "inauthor:" in queries[0]
-    assert queries[1].startswith("intitle:")
-    assert "inauthor:" not in queries[1]
-    assert "Charlotte" in queries[2] and "White" in queries[2]
+    assert queries[0] == "Charlotte's Web inauthor:White"
+    assert queries[1] == "Charlotte's Web E. B. White"
+    assert queries[2] == "Charlotte's Web"
+
+
+def test_build_queries_prefers_surname_inauthor() -> None:
+    from classroom_library_label_maker.services.lookups.google_books import (
+        _author_surname,
+        _build_queries,
+    )
+
+    assert _author_surname("E. B. White") == "White"
+    assert _author_surname("White, E. B.") == "White"
+    assert _author_surname("Dr. Seuss") == "Seuss"
+    queries = _build_queries("Charlotte's Web", "E. B. White")
+    assert queries[0] == "Charlotte's Web inauthor:White"
+    assert "Charlotte's Web E. B. White" in queries
+    assert "Charlotte's Web" in queries
 
 
 def test_weak_results_are_not_found() -> None:
@@ -326,11 +340,10 @@ def test_does_not_mutate_book_on_found() -> None:
     assert book.to_dict() == original
 
 
-def test_free_text_query_used_third() -> None:
-    """Third strategy is plain title+author when earlier queries miss."""
+def test_free_text_query_used_second() -> None:
+    """Free-text title+author runs after surname query misses."""
     fetcher = _ScriptedFetcher(
         [
-            _payload(),
             _payload(),
             _payload(
                 _volume(
@@ -344,8 +357,8 @@ def test_free_text_query_used_third() -> None:
     )
     result = GoogleBooksEnrichmentProvider(fetch_json=fetcher).enrich(_book())
     assert result.status is BookEnrichmentStatus.FOUND
-    assert len(fetcher.urls) == 3
-    assert _query_from_url(fetcher.urls[2]) == "Charlotte's Web E. B. White"
+    assert len(fetcher.urls) == 2
+    assert _query_from_url(fetcher.urls[1]) == "Charlotte's Web E. B. White"
 
 
 def test_provider_rejects_invalid_timeout() -> None:
@@ -382,7 +395,7 @@ def test_build_queries_never_author_only() -> None:
     )
 
     queries = _build_queries("Title", "Author")
-    assert all("intitle" in q or "Title" in q for q in queries)
+    assert all("Title" in q for q in queries)
     assert not any(q.strip().startswith("inauthor:") for q in queries)
     assert not any(q == 'inauthor:"Author"' for q in queries)
 
