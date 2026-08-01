@@ -181,7 +181,11 @@ class WorkbookGenerationService:
             if self._settings.lookup_missing_isbns and self._enrichment is not None:
                 self._report(reporter, GenerationStage.ENRICHING)
                 books_for_batch, enrichment_summary, enrich_warnings = (
-                    self._enrich_missing_isbns(books_for_batch, self._enrichment)
+                    self._enrich_missing_isbns(
+                        books_for_batch,
+                        self._enrichment,
+                        reporter=reporter,
+                    )
                 )
                 warnings.extend(enrich_warnings)
                 _logger.info(
@@ -306,6 +310,8 @@ class WorkbookGenerationService:
         self,
         books: list[Book],
         enrichment: BookEnrichmentService,
+        *,
+        reporter: GenerationProgressReporter | None = None,
     ) -> tuple[list[Book], EnrichmentSummary, list[WorkbookGenerationWarning]]:
         """Look up missing ISBNs; never abort the generation run."""
         hits_before = enrichment.cache_hits
@@ -321,12 +327,24 @@ class WorkbookGenerationService:
         review_items: list[ReviewItem] = []
         updated: list[Book] = []
 
+        lookup_total = sum(1 for book in books if book_needs_isbn_lookup(book))
+        lookup_index = 0
+
         for book in books:
             if not book_needs_isbn_lookup(book):
                 books_with_isbn += 1
                 updated.append(book)
                 continue
 
+            lookup_index += 1
+            self._report(
+                reporter,
+                GenerationStage.ENRICHING,
+                message=(
+                    f"Looking up missing ISBNs... "
+                    f"({lookup_index} of {lookup_total})"
+                ),
+            )
             looked_up += 1
             result = enrichment.enrich(book)
             next_book, warning, review = self._apply_enrichment_result(book, result)
@@ -497,10 +515,16 @@ class WorkbookGenerationService:
         self,
         reporter: GenerationProgressReporter | None,
         stage: GenerationStage,
+        *,
+        message: str | None = None,
     ) -> None:
         if reporter is None:
             return
-        progress = GenerationProgress.for_stage(stage)
+        progress = (
+            GenerationProgress(stage=stage, message=message)
+            if message is not None
+            else GenerationProgress.for_stage(stage)
+        )
         try:
             reporter.on_progress(progress)
         except Exception:

@@ -422,6 +422,42 @@ def test_live_fetch_retries_on_429(monkeypatch: pytest.MonkeyPatch) -> None:
     assert sleeps == [0.5, 1.0]
 
 
+def test_live_fetch_429_backoff_is_capped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """429 backoff should not grow past ``rate_limit_max_backoff_seconds``."""
+    from classroom_library_label_maker.services.lookups import google_books as gb
+
+    calls = {"n": 0}
+    sleeps: list[float] = []
+
+    def fake_fetch(url: str, *, timeout_seconds: float) -> dict[str, object]:
+        calls["n"] += 1
+        if calls["n"] < 5:
+            raise GoogleBooksTransportError(
+                "Google Books HTTP error: 429",
+                kind="rate_limit",
+            )
+        return _payload(
+            _volume(
+                volume_id="v",
+                title="Charlotte's Web",
+                authors=["E. B. White"],
+                isbn13="9780064400558",
+            )
+        )
+
+    monkeypatch.setattr(gb, "_default_fetch_json", fake_fetch)
+    provider = GoogleBooksEnrichmentProvider(
+        min_request_interval_seconds=0,
+        max_retries_on_429=4,
+        rate_limit_backoff_seconds=2.0,
+        rate_limit_max_backoff_seconds=3.0,
+        sleep=sleeps.append,
+    )
+    result = provider.enrich(_book())
+    assert result.status is BookEnrichmentStatus.FOUND
+    assert sleeps == [2.0, 3.0, 3.0, 3.0]
+
+
 def test_live_fetch_paces_requests(monkeypatch: pytest.MonkeyPatch) -> None:
     from classroom_library_label_maker.services.lookups import google_books as gb
 

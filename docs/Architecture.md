@@ -378,7 +378,8 @@ or accepts an injected `BookEnrichmentService` for tests.
 * When enabled, `WorkbookGenerationService` depends only on
   `BookEnrichmentService` (default factory uses Google Books internally —
   the orchestrator never imports catalog SDKs).
-* Progress stage `ENRICHING` reports **"Looking up missing ISBNs..."**.
+* Progress stage `ENRICHING` reports **"Looking up missing ISBNs..."**, then
+  updates with **"(n of total)"** as each missing-ISBN book is looked up.
 * Books with blank ISBN cells are imported with a provisional placeholder
   when lookup is enabled, enriched by title/author, then validated as usual.
 * Ambiguous / not-found / error outcomes become warnings; generation continues.
@@ -570,7 +571,8 @@ scored peers to public `ReviewCandidate` values. Never mutates the input
 **Rate limiting**
 
 Live HTTP calls are paced (~0.75s apart by default) and HTTP **429** responses
-retry with exponential backoff. Optional `GOOGLE_BOOKS_API_KEY` (read by
+retry with capped exponential backoff (defaults: up to 3 retries, max ~8s
+sleep). Optional `GOOGLE_BOOKS_API_KEY` (read by
 `create_default_enrichment_service`) improves quota for large inventories.
 Injectable `fetch_json` bypasses pacing for unit tests.
 

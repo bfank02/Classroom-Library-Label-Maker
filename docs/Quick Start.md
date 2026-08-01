@@ -20,7 +20,9 @@ A ready-made example is included: `samples/Sample Books.xlsx` (also under
 
 For a larger **manual QA / demo** inventory (~190 books with blank ISBNs,
 duplicates, and ambiguous titles), use
-`samples/Teacher Demo Library.xlsx`.
+`samples/Teacher Demo Library.xlsx`. With **Look up missing ISBNs** enabled,
+that run can take a few minutes — status advances as
+`Looking up missing ISBNs... (n of total)`.
 
 ## 2. Open the app
 

@@ -172,15 +172,13 @@ def test_enrichment_enabled_finds_isbn_and_continues(
     assert result.enrichment.books_looked_up == 1
     assert result.enrichment.isbns_found == 1
     assert result.barcodes_generated + result.barcodes_reused >= 1
-    assert [e.stage for e in reporter.events] == [
-        GenerationStage.IMPORTING,
-        GenerationStage.ENRICHING,
-        GenerationStage.VALIDATING,
-        GenerationStage.GENERATING_BARCODES,
-        GenerationStage.CREATING_LABELS,
-        GenerationStage.SAVING,
-    ]
-    assert reporter.events[1].message == "Looking up missing ISBNs..."
+    stages = [e.stage for e in reporter.events]
+    assert stages[0] is GenerationStage.IMPORTING
+    assert GenerationStage.ENRICHING in stages
+    assert stages[-1] is GenerationStage.SAVING
+    enriching = [e for e in reporter.events if e.stage is GenerationStage.ENRICHING]
+    assert enriching[0].message == "Looking up missing ISBNs..."
+    assert any("(1 of 1)" in e.message for e in enriching)
 
 
 def test_generation_continues_after_ambiguous_and_errors(

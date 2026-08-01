@@ -45,8 +45,9 @@ DEFAULT_MAX_RESULTS = 10
 # Stay under the common unauthenticated ~100 queries/minute quota when
 # enriching large inventories (demo workbook, classroom batches).
 DEFAULT_MIN_REQUEST_INTERVAL_SECONDS = 0.75
-DEFAULT_MAX_RETRIES_ON_429 = 5
-DEFAULT_429_INITIAL_BACKOFF_SECONDS = 2.0
+DEFAULT_MAX_RETRIES_ON_429 = 3
+DEFAULT_429_INITIAL_BACKOFF_SECONDS = 1.5
+DEFAULT_429_MAX_BACKOFF_SECONDS = 8.0
 
 # Match selection thresholds (combined confidence score in [0, 1]).
 _FOUND_THRESHOLD = 0.85
@@ -97,6 +98,7 @@ class _ScoredCandidate:
 # Re-export for callers that historically imported from this module.
 __all__ = [
     "DEFAULT_429_INITIAL_BACKOFF_SECONDS",
+    "DEFAULT_429_MAX_BACKOFF_SECONDS",
     "DEFAULT_MAX_RESULTS",
     "DEFAULT_MAX_RETRIES_ON_429",
     "DEFAULT_MIN_REQUEST_INTERVAL_SECONDS",
@@ -522,6 +524,7 @@ class GoogleBooksEnrichmentProvider:
         min_request_interval_seconds: float = DEFAULT_MIN_REQUEST_INTERVAL_SECONDS,
         max_retries_on_429: int = DEFAULT_MAX_RETRIES_ON_429,
         rate_limit_backoff_seconds: float = DEFAULT_429_INITIAL_BACKOFF_SECONDS,
+        rate_limit_max_backoff_seconds: float = DEFAULT_429_MAX_BACKOFF_SECONDS,
         sleep: Callable[[float], None] | None = None,
     ) -> None:
         """Initialize the provider.
@@ -536,7 +539,8 @@ class GoogleBooksEnrichmentProvider:
                 (``0`` disables pacing).
             max_retries_on_429: Extra attempts after HTTP 429 before failing.
             rate_limit_backoff_seconds: Initial sleep after a 429 (doubles each
-                retry).
+                retry, capped by ``rate_limit_max_backoff_seconds``).
+            rate_limit_max_backoff_seconds: Upper bound for 429 backoff sleeps.
             sleep: Injectable sleeper for tests (defaults to :func:`time.sleep`).
         """
         if timeout_seconds <= 0:
@@ -549,6 +553,11 @@ class GoogleBooksEnrichmentProvider:
             raise ValueError("max_retries_on_429 must be >= 0")
         if rate_limit_backoff_seconds <= 0:
             raise ValueError("rate_limit_backoff_seconds must be positive")
+        if rate_limit_max_backoff_seconds < rate_limit_backoff_seconds:
+            raise ValueError(
+                "rate_limit_max_backoff_seconds must be >= "
+                "rate_limit_backoff_seconds"
+            )
         self._timeout_seconds = timeout_seconds
         self._max_results = max_results
         self._api_key = api_key.strip() if api_key else None
@@ -556,6 +565,7 @@ class GoogleBooksEnrichmentProvider:
         self._min_request_interval_seconds = min_request_interval_seconds
         self._max_retries_on_429 = max_retries_on_429
         self._rate_limit_backoff_seconds = rate_limit_backoff_seconds
+        self._rate_limit_max_backoff_seconds = rate_limit_max_backoff_seconds
         self._sleep = sleep or time.sleep
         self._last_request_monotonic: float | None = None
 
@@ -675,7 +685,10 @@ class GoogleBooksEnrichmentProvider:
             except GoogleBooksTransportError as exc:
                 if exc.kind != "rate_limit" or attempt >= attempts - 1:
                     raise
-                delay = self._rate_limit_backoff_seconds * (2**attempt)
+                delay = min(
+                    self._rate_limit_backoff_seconds * (2**attempt),
+                    self._rate_limit_max_backoff_seconds,
+                )
                 _logger.warning(
                     "Google Books rate limited (429); retry %s/%s after %.1fs",
                     attempt + 1,

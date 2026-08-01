@@ -261,7 +261,10 @@ GUI: checkbox **Look up missing ISBNs automatically** (checked by default).
 Uncheck for Version 1.0 behavior (blank ISBN rows skipped at import; no
 lookup stage).
 
-Progress stage: **"Looking up missing ISBNs..."**. Results are summarized in
+Progress stage: **"Looking up missing ISBNs..."**, then **"(n of total)"** as
+each book is looked up. Large inventories (e.g. the teacher demo) can take a
+few minutes because Google Books requests are paced to avoid rate limits;
+set `GOOGLE_BOOKS_API_KEY` for higher quota. Results are summarized in
 `EnrichmentSummary` on `WorkbookGenerationResult` (consumed by GUI/CLI/logs).
 When some books still need attention, the completion message includes an
 **ISBN Lookup Summary** with found/needs-review counts and up to five titles.
