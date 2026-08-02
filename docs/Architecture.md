@@ -234,6 +234,10 @@ Root package `__init__` exports a narrow public API (models + exceptions +
 It never raises for expected ISBN failures; it always returns
 `ValidationResult`.
 
+`validate` accepts **ISBN-10 or ISBN-13**. Valid ISBN-10 values are converted
+to ISBN-13 (`978` + body + check digit) so successful results always carry an
+ISBN-13.
+
 ### Stable public API (frozen)
 
 The following methods are the **stable public interface** for ISBN validation.
@@ -242,14 +246,15 @@ unless a **major** version bump intentionally breaks them:
 
 | Method | Contract |
 |--------|----------|
-| `normalize(isbn: str \| None) -> str` | Clean an ISBN string (trim; remove spaces/hyphens). Does **not** validate. |
-| `validate(isbn: str \| None) -> ValidationResult` | Validate one ISBN; always returns a result (never raises for invalid input). |
+| `normalize(isbn: str \| None) -> str` | Clean an ISBN string (trim; remove spaces/hyphens; uppercase ISBN-10 `x`). Does **not** validate. |
+| `validate(isbn: str \| None) -> ValidationResult` | Validate ISBN-10 or ISBN-13; success always returns ISBN-13; never raises for invalid input. |
 | `validate_many(isbns: Iterable[str \| None]) -> list[ValidationResult]` | Validate many values by calling `validate()` per item, preserving order. |
 
 Additional public helpers (`is_valid`, `compute_check_digit`) exist for
 convenience but are not part of the frozen compatibility surface above.
 
-Validation order: empty → numeric → length 13 → prefix `978`/`979` → checksum.
+Validation order: empty → optional ISBN-10→13 conversion → numeric → length 13
+→ prefix `978`/`979` → checksum.
 
 `ValidationErrorCode` is the single source of truth for failure **codes and
 default user-facing messages** (`error_code.message`). `ValidationResult.errors`
@@ -448,12 +453,16 @@ GUI (ReviewWizardDialog)  →  ReviewSession  →  BookReviewService  →  updat
   `ReviewItem` pairs (or `ReviewSession.from_pairs`). The GUI must not
   keep its own indexes.
 * Immutable `ReviewDecision` records exactly one action per queue entry:
-  select a preserved `ReviewCandidate`, or `skipped=True`.
+  select a preserved `ReviewCandidate`, accept a teacher-entered ISBN via
+  `select_manual_isbn` (stored as an ordinary candidate decision), or
+  `skipped=True`.
 * `BookReviewService.apply(finished_session)` produces
   `ReviewSessionResult` (`updated_books`, resolved/skipped/unresolved/
-  total_reviewed). Selecting a candidate creates a **new** `Book` with
-  the chosen ISBN (ISBN-13 preferred) and preserves title, author, and
-  other fields. Skipping leaves the original book unchanged.
+  total_reviewed). Selecting a candidate or manual ISBN creates a **new**
+  `Book` with the chosen ISBN (ISBN-13 preferred) and preserves title,
+  author, and other fields. Skipping leaves the original book unchanged.
+  Downstream produce / inventory paths do not distinguish catalog vs manual
+  origin.
 * No workbook writes, no Google Books / provider calls, no Qt types.
   Generation (`WorkbookGenerationService`) attaches the original `Book` on
   each `ReviewItem` so the GUI can seed a session without re-querying.
@@ -497,15 +506,23 @@ Ready to Print completion page (GuiCompletionSummary / CompletionView)
   light tint, subtle elevation, and a short checkmark fade (~150 ms).
   Recommended cards show **⭐ Recommended Match** with the confidence label
   beneath (e.g. Very High Match).
+* Below catalog matches, an alternative path **Can't find the correct
+  edition? / Enter ISBN Manually** expands an inline panel (ISBN field,
+  help text, **Apply ISBN**) — not a candidate card. Invalid values show an
+  inline message; valid ISBN-10/13 values become ordinary
+  `ReviewDecision`s via `ReviewSession.select_manual_isbn` (normalized to
+  ISBN-13), show **✓ Manual ISBN Accepted**, and auto-advance like a card
+  selection (~250 ms). Previous restores the accepted manual ISBN or the
+  expanded draft editor.
 * Returning to a skipped book shows **This book will be skipped.**; choosing
-  a candidate clears that state automatically.
+  a candidate or applying a manual ISBN clears that state automatically.
 * Streamlined workflow (Version 1.4 Phase 2) is unchanged: **Skip** advances
   immediately; selection auto-advances after ~250 ms; buttons are
   **Previous** / **Skip** / **Cancel**; **Finish Review** replaces Skip on
   the final item after a decision. No **Next** button.
 * Buttons call `ReviewSession` (`previous` / `skip_current` /
-  `select_candidate` / `next` for auto-advance / `finish`). Qt does not own
-  the review index.
+  `select_candidate` / `select_manual_isbn` / `next` for auto-advance /
+  `finish`). Qt does not own the review index.
 * Single **Very High** candidate is pre-selected without auto-advancing
   (teacher may still Skip or change the choice).
 * Checkbox **Save updated inventory workbook when review is complete**

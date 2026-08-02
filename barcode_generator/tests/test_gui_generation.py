@@ -119,8 +119,10 @@ def test_controller_invokes_generation_service_with_form_inputs(
     controller.on_generate_labels()
     wait_until_generation_finished(controller)
 
-    assert len(recorded) == 1
-    service = recorded[0]
+    # Factory is used once to probe prepare/produce support, then again for
+    # the background worker.
+    assert len(recorded) == 2
+    service = recorded[-1]
     assert service.settings.workbook_path == tmp_paths["inventory"].resolve()
     assert service.settings.barcode_output_directory == tmp_paths["barcodes"].resolve()
     assert service.settings.label_template_id == DEFAULT_LABEL_TEMPLATE_ID

@@ -102,5 +102,7 @@ Phase 3 is printing only.
 
 - [x] Reviewed ISBNs drive barcodes/labels/inventory via prepare → review →
       produce (single authoritative book collection)
+- [x] Manual ISBN entry in Review Wizard (ordinary `ReviewDecision`; ISBN-10/13
+      via `IsbnValidator`; no produce/inventory branching)
 
 See also: [`Architecture.md`](Architecture.md), [`../TASKS.md`](../TASKS.md).

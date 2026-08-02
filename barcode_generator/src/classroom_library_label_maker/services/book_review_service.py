@@ -29,6 +29,7 @@ from classroom_library_label_maker.models import (
     ReviewSessionResult,
     WorkbookGenerationResult,
 )
+from classroom_library_label_maker.services.isbn_validator import IsbnValidator
 
 
 def review_session_from_generation_result(
@@ -226,6 +227,61 @@ class ReviewSession:
         decision = ReviewDecision(book=book, candidate=candidate, skipped=False)
         self._decisions[self._index] = decision
         return decision
+
+    def select_manual_isbn(
+        self,
+        raw_isbn: str,
+        *,
+        validator: IsbnValidator | None = None,
+    ) -> ReviewDecision:
+        """Record a teacher-supplied ISBN as an ordinary accepted decision.
+
+        Validates and normalizes ``raw_isbn`` with :class:`IsbnValidator`
+        (ISBN-10 or ISBN-13). Builds a :class:`ReviewCandidate` carrying the
+        normalized ISBN-13 so :class:`BookReviewService` and downstream
+        produce/inventory paths stay unaware of manual vs catalog origin.
+
+        Args:
+            raw_isbn: Teacher-entered ISBN-10 or ISBN-13.
+            validator: Optional ISBN validator (defaults to a new instance).
+
+        Returns:
+            The recorded :class:`ReviewDecision`.
+
+        Raises:
+            RuntimeError: If the session is finished or the queue is empty.
+            ValueError: If ``raw_isbn`` is not a valid ISBN-10 or ISBN-13.
+        """
+        self._ensure_editable()
+        book = self.current_book()
+        if book is None:
+            raise RuntimeError("review queue is empty")
+        check = (validator or IsbnValidator()).validate(raw_isbn)
+        if not check.is_valid:
+            raise ValueError(
+                check.errors[0] if check.errors else "Invalid ISBN."
+            )
+        candidate = ReviewCandidate(
+            isbn13=check.isbn,
+            title=book.title,
+            author=book.author,
+        )
+        decision = ReviewDecision(book=book, candidate=candidate, skipped=False)
+        self._decisions[self._index] = decision
+        return decision
+
+    def current_decision_is_manual(self) -> bool:
+        """True when the current decision is a manual ISBN (not a catalog card)."""
+        decision = self.decision_for_current()
+        item = self.current_item()
+        if (
+            decision is None
+            or decision.skipped
+            or decision.candidate is None
+            or item is None
+        ):
+            return False
+        return decision.candidate not in item.candidates
 
     def skip_current(self) -> ReviewDecision:
         """Record a skip for the current entry (book left unchanged)."""

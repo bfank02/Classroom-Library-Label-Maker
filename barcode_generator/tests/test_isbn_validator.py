@@ -98,6 +98,53 @@ def test_is_valid_true_for_good_isbn(validator: IsbnValidator) -> None:
     assert validator.is_valid("978-0-06-440055-8") is True
 
 
+def test_validate_accepts_isbn10(validator: IsbnValidator) -> None:
+    """Valid ISBN-10 should convert to ISBN-13."""
+    result = validator.validate("0064400557")
+    assert result.is_valid is True
+    assert result.isbn == "9780064400558"
+    assert result.error_code == ValidationErrorCode.NONE
+
+
+def test_validate_accepts_hyphenated_isbn10(validator: IsbnValidator) -> None:
+    """Hyphenated ISBN-10 should normalize and convert."""
+    result = validator.validate("0-06-440055-7")
+    assert result.is_valid is True
+    assert result.isbn == "9780064400558"
+
+
+def test_validate_accepts_isbn10_with_x_check_digit(
+    validator: IsbnValidator,
+) -> None:
+    """ISBN-10 ending in X should convert to ISBN-13."""
+    result = validator.validate("039480001X")
+    assert result.is_valid is True
+    assert result.isbn == "9780394800011"
+
+
+def test_validate_accepts_isbn10_with_lowercase_x(
+    validator: IsbnValidator,
+) -> None:
+    """Lowercase x check digit should normalize and convert."""
+    result = validator.validate("039480001x")
+    assert result.is_valid is True
+    assert result.isbn == "9780394800011"
+
+
+def test_validate_rejects_invalid_isbn10_checksum(
+    validator: IsbnValidator,
+) -> None:
+    """ISBN-10 shaped values with a bad check digit should fail."""
+    result = validator.validate("1234567890")
+    assert result.is_valid is False
+    assert result.error_code == ValidationErrorCode.INVALID_CHECKSUM
+
+
+def test_normalize_uppercases_isbn10_x(validator: IsbnValidator) -> None:
+    """normalize should uppercase a trailing ISBN-10 X check digit."""
+    assert validator.normalize("039480001x") == "039480001X"
+
+
 def test_isbn_validator_alias() -> None:
     """ISBNValidator should be an alias of IsbnValidator."""
     assert ISBNValidator is IsbnValidator

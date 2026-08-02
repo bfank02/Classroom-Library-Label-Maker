@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Manual ISBN entry in the Review Wizard: teachers can enter ISBN-10 or ISBN-13
+  inline when catalog matches are wrong or missing; accepted values become
+  ordinary `ReviewDecision`s (Version 1.4.1 Phase 2)
+- `IsbnValidator` accepts ISBN-10 and converts valid values to ISBN-13
+- `ReviewSession.select_manual_isbn` / `current_decision_is_manual`
 - Google Books API key integration: `GOOGLE_BOOKS_API_KEY` resolved once in
   `config.load_google_books_auth_config()`, stored on `ApplicationSettings`,
   injected into `GoogleBooksEnrichmentProvider` (provider never reads env)

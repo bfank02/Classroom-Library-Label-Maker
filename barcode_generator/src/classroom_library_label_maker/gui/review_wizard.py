@@ -6,6 +6,8 @@ This dialog only renders the current item and forwards teacher actions.
 
 Version 1.4 Phase 2 streamlines the click path; Phase 4 polishes presentation
 (hierarchy, cards, badges, spacing) without changing workflow or domain logic.
+Version 1.4.1 Phase 2 adds inline manual ISBN entry as an ordinary
+``ReviewDecision`` (not a separate review state).
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QProgressBar,
     QPushButton,
     QScrollArea,
@@ -45,6 +48,10 @@ from classroom_library_label_maker.services.book_review_service import ReviewSes
 DEFAULT_AUTO_ADVANCE_MS = 250
 # Subtle selected-state checkmark fade (presentation only).
 _CHECKMARK_ANIM_MS = 150
+
+_MANUAL_ISBN_INVALID_MESSAGE = (
+    "Invalid ISBN.\nPlease enter a valid ISBN-10 or ISBN-13."
+)
 
 
 def _candidate_isbn_text(candidate: ReviewCandidate) -> str:
@@ -69,12 +76,14 @@ def friendly_review_reason(item: ReviewItem) -> str:
     if item.status is BookEnrichmentStatus.NOT_FOUND:
         return (
             "We couldn't find a clear ISBN match for this book.\n"
-            "You can skip it, or choose a catalog match if one is listed."
+            "You can enter an ISBN manually, skip it, or choose a catalog "
+            "match if one is listed."
         )
     if item.status is BookEnrichmentStatus.ERROR:
         return (
             "We had trouble looking up this book.\n"
-            "You can skip it, or choose a catalog match if one is listed."
+            "You can enter an ISBN manually, skip it, or choose a catalog "
+            "match if one is listed."
         )
     message = (item.message or "").strip()
     return message or (
@@ -292,6 +301,8 @@ class ReviewWizardDialog(QDialog):
         self._cards: list[CandidateCard] = []
         self._refreshing = False
         self._auto_advance_ms = max(0, int(auto_advance_ms))
+        self._manual_expanded: dict[int, bool] = {}
+        self._manual_draft: dict[int, str] = {}
 
         self.setWindowTitle("Review ISBN Matches")
         self.setObjectName("reviewWizardDialog")
@@ -419,6 +430,9 @@ class ReviewWizardDialog(QDialog):
             QSizePolicy.Policy.Expanding,
         )
         candidates_layout.addWidget(scroll, stretch=1)
+
+        self._manual_section = self._build_manual_entry_section()
+        candidates_layout.addWidget(self._manual_section)
         root.addWidget(candidates_section, stretch=1)
 
         self.save_inventory_checkbox = QCheckBox(
@@ -498,13 +512,202 @@ class ReviewWizardDialog(QDialog):
         self._cancel_auto_advance()
         super().reject()
 
+    def _build_manual_entry_section(self) -> QFrame:
+        """Build the alternative manual ISBN resolution path (not a candidate card)."""
+        section = QFrame()
+        section.setObjectName("reviewManualIsbnSection")
+        section.setStyleSheet(
+            "QFrame#reviewManualIsbnSection {"
+            "background: #f7f7f7; border: 1px solid #e0e0e0;"
+            "border-radius: 8px;}"
+        )
+        layout = QVBoxLayout(section)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(8)
+
+        self.manual_prompt_label = QLabel("Can't find the correct edition?")
+        self.manual_prompt_label.setObjectName("reviewManualIsbnPrompt")
+        self.manual_prompt_label.setStyleSheet(
+            "font-size: 13px; color: #555555;"
+        )
+        layout.addWidget(self.manual_prompt_label)
+
+        self.manual_toggle_button = QPushButton("Enter ISBN Manually")
+        self.manual_toggle_button.setObjectName("reviewManualIsbnToggle")
+        self.manual_toggle_button.setMinimumHeight(32)
+        self.manual_toggle_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.manual_toggle_button.setAccessibleName("Enter ISBN Manually")
+        self.manual_toggle_button.setAccessibleDescription(
+            "Expand the manual ISBN entry panel"
+        )
+        self.manual_toggle_button.clicked.connect(self._on_manual_toggle)
+        layout.addWidget(self.manual_toggle_button)
+
+        self.manual_editor_panel = QWidget()
+        self.manual_editor_panel.setObjectName("reviewManualIsbnEditor")
+        editor_layout = QVBoxLayout(self.manual_editor_panel)
+        editor_layout.setContentsMargins(0, 4, 0, 0)
+        editor_layout.setSpacing(6)
+
+        isbn_row = QHBoxLayout()
+        isbn_row.setSpacing(8)
+        self.manual_isbn_field_label = QLabel("ISBN")
+        self.manual_isbn_field_label.setObjectName("reviewManualIsbnFieldLabel")
+        self.manual_isbn_field_label.setStyleSheet(
+            "font-size: 13px; font-weight: 600; color: #333333;"
+        )
+        isbn_row.addWidget(self.manual_isbn_field_label)
+        self.manual_isbn_edit = QLineEdit()
+        self.manual_isbn_edit.setObjectName("reviewManualIsbnEdit")
+        self.manual_isbn_edit.setPlaceholderText("ISBN-10 or ISBN-13")
+        self.manual_isbn_edit.setClearButtonEnabled(True)
+        self.manual_isbn_edit.setMinimumHeight(32)
+        self.manual_isbn_edit.setAccessibleName("ISBN")
+        self.manual_isbn_edit.setAccessibleDescription(
+            "Paste or type an ISBN-10 or ISBN-13"
+        )
+        self.manual_isbn_edit.returnPressed.connect(self._on_apply_manual_isbn)
+        self.manual_isbn_edit.textChanged.connect(self._on_manual_isbn_text_changed)
+        isbn_row.addWidget(self.manual_isbn_edit, stretch=1)
+        editor_layout.addLayout(isbn_row)
+
+        self.manual_help_label = QLabel("Paste or type an ISBN-10 or ISBN-13.")
+        self.manual_help_label.setObjectName("reviewManualIsbnHelp")
+        self.manual_help_label.setStyleSheet("font-size: 12px; color: #666666;")
+        editor_layout.addWidget(self.manual_help_label)
+
+        self.manual_error_label = QLabel()
+        self.manual_error_label.setObjectName("reviewManualIsbnError")
+        self.manual_error_label.setWordWrap(True)
+        self.manual_error_label.setStyleSheet(
+            "font-size: 12px; color: #b42318; font-weight: 600;"
+        )
+        self.manual_error_label.setAccessibleName("ISBN validation message")
+        self.manual_error_label.hide()
+        editor_layout.addWidget(self.manual_error_label)
+
+        self.manual_apply_button = QPushButton("Apply ISBN")
+        self.manual_apply_button.setObjectName("reviewManualIsbnApply")
+        self.manual_apply_button.setMinimumHeight(32)
+        self.manual_apply_button.setAccessibleName("Apply ISBN")
+        self.manual_apply_button.setAccessibleDescription(
+            "Validate and accept the entered ISBN"
+        )
+        self.manual_apply_button.clicked.connect(self._on_apply_manual_isbn)
+        editor_layout.addWidget(self.manual_apply_button)
+
+        self.manual_editor_panel.hide()
+        layout.addWidget(self.manual_editor_panel)
+
+        self.manual_accepted_panel = QWidget()
+        self.manual_accepted_panel.setObjectName("reviewManualIsbnAccepted")
+        accepted_layout = QVBoxLayout(self.manual_accepted_panel)
+        accepted_layout.setContentsMargins(0, 4, 0, 0)
+        accepted_layout.setSpacing(4)
+
+        self.manual_accepted_title = QLabel("✓ Manual ISBN Accepted")
+        self.manual_accepted_title.setObjectName("reviewManualIsbnAcceptedTitle")
+        self.manual_accepted_title.setStyleSheet(
+            "font-size: 13px; font-weight: 700; color: #0f5132;"
+        )
+        self.manual_accepted_title.setAccessibleName("Manual ISBN Accepted")
+        accepted_layout.addWidget(self.manual_accepted_title)
+
+        self.manual_accepted_isbn = QLabel()
+        self.manual_accepted_isbn.setObjectName("reviewManualIsbnAcceptedValue")
+        self.manual_accepted_isbn.setStyleSheet(
+            "font-size: 14px; font-weight: 600; color: #111111;"
+        )
+        self.manual_accepted_isbn.setAccessibleName("Accepted manual ISBN")
+        accepted_layout.addWidget(self.manual_accepted_isbn)
+
+        self.manual_accepted_panel.hide()
+        layout.addWidget(self.manual_accepted_panel)
+        return section
+
+    def _on_manual_toggle(self) -> None:
+        if self._refreshing:
+            return
+        index = self._session.current_index()
+        self._persist_manual_draft()
+        expanded = not self._manual_expanded.get(index, False)
+        self._manual_expanded[index] = expanded
+        self._sync_manual_entry_ui()
+        if expanded:
+            self.manual_isbn_edit.setFocus(Qt.FocusReason.TabFocusReason)
+
+    def _on_manual_isbn_text_changed(self, _text: str) -> None:
+        if self._refreshing:
+            return
+        if self.manual_error_label.isVisible():
+            self.manual_error_label.clear()
+            self.manual_error_label.hide()
+
+    def _on_apply_manual_isbn(self) -> None:
+        if self._refreshing:
+            return
+        raw = self.manual_isbn_edit.text()
+        try:
+            self._session.select_manual_isbn(raw)
+        except ValueError:
+            self.manual_error_label.setText(_MANUAL_ISBN_INVALID_MESSAGE)
+            self.manual_error_label.show()
+            self.manual_isbn_edit.setFocus(Qt.FocusReason.OtherFocusReason)
+            return
+
+        index = self._session.current_index()
+        self._manual_expanded[index] = False
+        self._manual_draft.pop(index, None)
+        self.manual_error_label.clear()
+        self.manual_error_label.hide()
+        self._update_remaining_label()
+        self._refresh_selection_styles(animate=False)
+        self._update_decision_status()
+        self._sync_manual_entry_ui()
+        self._update_nav_enabled()
+        self._schedule_auto_advance()
+
+    def _persist_manual_draft(self) -> None:
+        index = self._session.current_index()
+        if self.manual_editor_panel.isVisible():
+            self._manual_draft[index] = self.manual_isbn_edit.text()
+
+    def _sync_manual_entry_ui(self) -> None:
+        index = self._session.current_index()
+        if self._session.current_decision_is_manual():
+            decision = self._session.decision_for_current()
+            assert decision is not None and decision.candidate is not None
+            isbn = _candidate_isbn_text(decision.candidate)
+            self.manual_toggle_button.hide()
+            self.manual_editor_panel.hide()
+            self.manual_accepted_panel.show()
+            self.manual_accepted_isbn.setText(isbn)
+            self.manual_error_label.clear()
+            self.manual_error_label.hide()
+            return
+
+        self.manual_accepted_panel.hide()
+        self.manual_toggle_button.show()
+        expanded = self._manual_expanded.get(index, False)
+        self.manual_editor_panel.setVisible(expanded)
+        self.manual_toggle_button.setText(
+            "Hide Manual Entry" if expanded else "Enter ISBN Manually"
+        )
+        draft = self._manual_draft.get(index, "")
+        if self.manual_isbn_edit.text() != draft:
+            self.manual_isbn_edit.setText(draft)
+        self.manual_error_label.clear()
+        self.manual_error_label.hide()
+
     def _on_previous(self) -> None:
         self._cancel_auto_advance()
+        self._persist_manual_draft()
         if self._session.previous():
             self._refresh()
 
     def _on_skip(self) -> None:
         self._cancel_auto_advance()
+        self._persist_manual_draft()
         self._session.skip_current()
         if self._session.next():
             self._refresh()
@@ -520,10 +723,14 @@ class ReviewWizardDialog(QDialog):
         if self._refreshing:
             return
         assert isinstance(candidate, ReviewCandidate)
+        self._persist_manual_draft()
+        index = self._session.current_index()
+        self._manual_expanded[index] = False
         self._session.select_candidate(candidate)
         self._update_remaining_label()
         self._refresh_selection_styles(animate=True)
         self._update_decision_status()
+        self._sync_manual_entry_ui()
         self._update_nav_enabled()
         self._schedule_auto_advance()
 
@@ -572,6 +779,7 @@ class ReviewWizardDialog(QDialog):
                 self.reason_label.setText("")
                 self.decision_status_label.clear()
                 self._rebuild_cards(())
+                self._sync_manual_entry_ui()
                 self._update_nav_enabled()
                 return
 
@@ -582,6 +790,7 @@ class ReviewWizardDialog(QDialog):
             self._maybe_preselect_single_very_high(item.candidates)
             self._refresh_selection_styles(animate=False)
             self._update_decision_status()
+            self._sync_manual_entry_ui()
             self._update_nav_enabled()
         finally:
             self._refreshing = False
@@ -596,7 +805,8 @@ class ReviewWizardDialog(QDialog):
 
         if not candidates:
             empty = QLabel(
-                "No catalog matches to choose from. You can skip this book."
+                "No catalog matches to choose from. Enter an ISBN manually "
+                "or skip this book."
             )
             empty.setObjectName("reviewCandidatesEmpty")
             empty.setWordWrap(True)

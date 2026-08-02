@@ -17,6 +17,9 @@ Additional public helpers (not part of the frozen surface above):
 
 * :meth:`IsbnValidator.is_valid` — convenience boolean wrapper
 * :meth:`IsbnValidator.compute_check_digit` — ISBN-13 / EAN-13 check digit
+
+``validate`` accepts ISBN-10 or ISBN-13. Valid ISBN-10 values are converted to
+ISBN-13 (``978`` + body) so callers always receive an ISBN-13 on success.
 """
 
 from __future__ import annotations
@@ -30,10 +33,11 @@ _logger = get_logger("isbn_validator")
 
 _VALID_PREFIXES: frozenset[str] = frozenset({"978", "979"})
 _ISBN13_LENGTH = 13
+_ISBN10_LENGTH = 10
 
 
 class IsbnValidator:
-    """Stateless ISBN-13 normalizer and validator.
+    """Stateless ISBN-10 / ISBN-13 normalizer and validator.
 
     Expected validation failures are returned as :class:`ValidationResult`
     values; this class does not raise for invalid ISBN input.
@@ -52,6 +56,7 @@ class IsbnValidator:
         Accepts ``None`` or ``str``. Trims leading/trailing whitespace, then
         removes internal spaces and hyphens. Other characters are left in place
         so :meth:`validate` can report ``NON_NUMERIC`` when appropriate.
+        A trailing ISBN-10 check digit ``x`` / ``X`` is uppercased.
 
         Args:
             isbn: Raw ISBN value, or ``None``.
@@ -63,12 +68,23 @@ class IsbnValidator:
         if isbn is None:
             return ""
         trimmed = isbn.strip()
-        return trimmed.replace("-", "").replace(" ", "")
+        cleaned = trimmed.replace("-", "").replace(" ", "")
+        if (
+            len(cleaned) == _ISBN10_LENGTH
+            and cleaned[:9].isdigit()
+            and cleaned[9] in "xX"
+        ):
+            return cleaned[:9] + "X"
+        return cleaned
 
     def validate(self, isbn: str | None) -> ValidationResult:
-        """Validate an ISBN-13 value and return a structured result.
+        """Validate an ISBN-10 or ISBN-13 value and return a structured result.
 
-        Validation order:
+        ISBN-10 inputs that pass the ISBN-10 check digit are converted to
+        ISBN-13 before the ISBN-13 rules below. Successful results always
+        carry an ISBN-13 in :attr:`ValidationResult.isbn`.
+
+        Validation order (after optional ISBN-10 conversion):
 
         1. Empty input
         2. Numeric characters only
@@ -89,6 +105,15 @@ class IsbnValidator:
                 isbn="",
                 code=ValidationErrorCode.EMPTY,
             )
+
+        if self._looks_like_isbn10(normalized):
+            converted = self._isbn10_to_isbn13(normalized)
+            if converted is None:
+                return self._invalid_result(
+                    isbn=normalized,
+                    code=ValidationErrorCode.INVALID_CHECKSUM,
+                )
+            normalized = converted
 
         if not self._is_numeric(normalized):
             return self._invalid_result(
@@ -141,7 +166,7 @@ class IsbnValidator:
         return [self.validate(value) for value in isbns]
 
     def is_valid(self, isbn: str | None) -> bool:
-        """Return whether ``isbn`` is a valid ISBN-13.
+        """Return whether ``isbn`` is a valid ISBN-10 or ISBN-13.
 
         Args:
             isbn: Raw ISBN value, or ``None``.
@@ -194,6 +219,32 @@ class IsbnValidator:
         """Return whether the ISBN-13 check digit is correct."""
         expected = self.compute_check_digit(isbn13[:12])
         return isbn13[12] == expected
+
+    def _looks_like_isbn10(self, normalized: str) -> bool:
+        """True when normalized input is shaped like an ISBN-10."""
+        if len(normalized) != _ISBN10_LENGTH:
+            return False
+        body, check = normalized[:9], normalized[9]
+        return body.isdigit() and (check.isdigit() or check == "X")
+
+    def _isbn10_check_is_valid(self, isbn10: str) -> bool:
+        """Return whether an ISBN-10 check character is correct."""
+        if not self._looks_like_isbn10(isbn10):
+            return False
+        total = sum(
+            (10 - index) * int(digit) for index, digit in enumerate(isbn10[:9])
+        )
+        remainder = total % 11
+        expected = (11 - remainder) % 11
+        expected_char = "X" if expected == 10 else str(expected)
+        return isbn10[9] == expected_char
+
+    def _isbn10_to_isbn13(self, isbn10: str) -> str | None:
+        """Convert a valid ISBN-10 to ISBN-13, or ``None`` if invalid."""
+        if not self._isbn10_check_is_valid(isbn10):
+            return None
+        core = f"978{isbn10[:9]}"
+        return f"{core}{self.compute_check_digit(core)}"
 
     def _invalid_result(
         self,

@@ -279,13 +279,14 @@ Module: `classroom_library_label_maker.services.isbn_validator`
 
 ### `IsbnValidator` (alias `ISBNValidator`) — Stable — External
 
-**Purpose:** Normalize and validate ISBN-13 values. Stateless. Does not raise
-for expected invalid ISBNs.
+**Purpose:** Normalize and validate ISBN-10 / ISBN-13 values. Valid ISBN-10
+inputs are converted to ISBN-13. Stateless. Does not raise for expected
+invalid ISBNs.
 
 | Method | Stability | Inputs | Outputs |
 |--------|-----------|--------|---------|
-| `normalize(isbn)` | **Stable** | `str \| None` | Digits-only string (may be empty) |
-| `validate(isbn)` | **Stable** | `str \| None` | `ValidationResult` |
+| `normalize(isbn)` | **Stable** | `str \| None` | Digits-only string (may be empty; ISBN-10 `x` uppercased) |
+| `validate(isbn)` | **Stable** | `str \| None` (ISBN-10 or ISBN-13) | `ValidationResult` (success → ISBN-13) |
 | `validate_many(isbns)` | **Stable** | iterable of `str \| None` | `list[ValidationResult]` (order preserved) |
 | `is_valid(isbn)` | Experimental | `str \| None` | `bool` |
 | `compute_check_digit(first_twelve_digits)` | Experimental | 12-digit string | Check digit `str` (may raise `ValueError`) |
@@ -427,7 +428,8 @@ catalog provider calls.
 | `current_item()` / `current_book()` / `current_index()` | What the UI should show |
 | `item_count()` / `remaining_count()` / `is_complete()` | Progress |
 | `next()` / `previous()` | Navigation (`bool` if moved) |
-| `select_candidate(candidate)` / `skip_current()` | Record one decision per slot |
+| `select_candidate(candidate)` / `select_manual_isbn(raw)` / `skip_current()` | Record one decision per slot (manual ISBN → ordinary accepted decision) |
+| `current_decision_is_manual()` | True when current decision is a teacher-entered ISBN |
 | `finish()` / `is_finished()` | Seal against further edits |
 | `decisions()` / `decision_at(i)` / `books()` / `items()` | Inspection |
 
@@ -443,8 +445,10 @@ providers.
 |--------|--------|---------|
 | `apply(session)` | Finished `ReviewSession` | `ReviewSessionResult` |
 
-Selecting a candidate → new `Book` with ISBN-13 (else ISBN-10); title/author
-and other fields preserved. Skipping → original book unchanged.
+Selecting a candidate or manual ISBN → new `Book` with ISBN-13 (else ISBN-10);
+title/author and other fields preserved. Skipping → original book unchanged.
+Manual entry is not a separate review state — produce and inventory cannot
+tell catalog vs manual origin.
 
 ### `InventoryUpdateService` — Experimental — External
 

@@ -20,8 +20,11 @@ Copy into a PR description or a filled
       `WorkbookGenerationService`; gate with `lookup_missing_isbns`)
 - [ ] Interactive ISBN review uses `ReviewSession` + `BookReviewService`
       (GUI must not own review indexes or call Google Books during review;
-      presentation lives in `ReviewWizardDialog`; Skip/selection auto-advance
-      and visual polish are UI-only and must not change domain review logic)
+      presentation lives in `ReviewWizardDialog`; Skip/selection auto-advance,
+      visual polish, and manual ISBN entry UI are presentation/session actions
+      and must not invent a parallel review state or change produce/inventory)
+- [ ] Manual ISBN entry uses `IsbnValidator` + `ReviewSession.select_manual_isbn`
+      (ordinary `ReviewDecision`; no provider-specific branching downstream)
 - [ ] Successful generation ends on Ready to Print (`CompletionView`); Done
       returns Home without clearing Files settings; no new generation logic
 - [ ] Home screen presentation uses Files / Options / Actions sections with

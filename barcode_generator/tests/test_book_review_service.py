@@ -198,6 +198,51 @@ def test_skip_current_records_skip() -> None:
     assert session.remaining_count() == 1
 
 
+def test_select_manual_isbn_records_ordinary_decision() -> None:
+    session, c1a, _ = _session_with_two_books()
+    decision = session.select_manual_isbn("978-0-06-440055-8")
+    assert not decision.skipped
+    assert decision.candidate is not None
+    assert decision.candidate.isbn13 == "9780064400558"
+    assert decision.candidate not in session.current_item().candidates  # type: ignore[union-attr]
+    assert session.current_decision_is_manual() is True
+    assert session.has_decision_for_current() is True
+    assert c1a != decision.candidate
+
+
+def test_select_manual_isbn10_normalizes_to_isbn13() -> None:
+    session, _, _ = _session_with_two_books()
+    decision = session.select_manual_isbn("0064400557")
+    assert decision.candidate is not None
+    assert decision.candidate.isbn13 == "9780064400558"
+
+
+def test_select_manual_isbn_rejects_invalid() -> None:
+    session, _, _ = _session_with_two_books()
+    with pytest.raises(ValueError):
+        session.select_manual_isbn("not-valid")
+    assert session.has_decision_for_current() is False
+    assert session.current_decision_is_manual() is False
+
+
+def test_manual_isbn_apply_matches_catalog_book_shape() -> None:
+    catalog = _candidate("9780064400558")
+    book = _book("Book One", copies=2, genre="Fiction")
+    session = ReviewSession.from_pairs(
+        [(book, _item("Book One", candidates=(catalog,)))]
+    )
+    session.select_manual_isbn("0064400557")
+    session.finish()
+    result = BookReviewService().apply(session)
+    updated = result.updated_books[0]
+    assert updated.isbn == "9780064400558"
+    assert updated.title == book.title
+    assert updated.author == book.author
+    assert updated.copies == 2
+    assert updated.genre == "Fiction"
+    assert result.resolved_count == 1
+
+
 def test_select_replaces_prior_decision() -> None:
     session, c1a, _ = _session_with_two_books()
     c1b = session.current_item().candidates[1]  # type: ignore[union-attr]

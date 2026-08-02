@@ -17,10 +17,10 @@ Start here: [`docs/Quick Start.md`](docs/Quick%20Start.md)
    ISBN cells are filled from title/author.
 3. In **Actions**, click **Generate Labels** (status messages appear in that
    section). If some books still need ISBN choices, a
-   **Review ISBN Matches** wizard lets you pick or skip catalog matches
-   (clear Progress / book / match sections; Skip and selections advance
-   automatically; Finish Review appears on the last book). Optionally leave
-   **Save updated inventory workbook** checked to create
+   **Review ISBN Matches** wizard lets you pick a catalog match, enter an ISBN
+   manually, or skip (clear Progress / book / match sections; Skip and
+   selections advance automatically; Finish Review appears on the last book).
+   Optionally leave **Save updated inventory workbook** checked to create
    `Inventory (Updated ISBNs).xlsx` beside your original (the original file
    is never overwritten). When generation finishes, a **✔ Ready to Print**
    page lists what was created and lets you open the files or click **Done**

@@ -456,9 +456,12 @@ When enrichment leaves ambiguous matches, **Review ISBN Matches** opens over
 `ReviewSession` with Progress / Book Information / Candidate Selection
 sections: **Skip** advances immediately; selecting a candidate highlights
 (stronger border, tint, checkmark) and auto-advances after ~250 ms;
-**Previous** restores the prior selection or “This book will be skipped.”;
-**Finish Review** replaces Skip on the final item after a decision. Domain
-review logic is unchanged.
+**Enter ISBN Manually** expands an inline panel for ISBN-10/13 (validated via
+`IsbnValidator`, recorded as an ordinary `ReviewDecision`); **Previous**
+restores the prior selection, manual ISBN, unfinished manual draft, or
+“This book will be skipped.”; **Finish Review** replaces Skip on the final
+item after a decision. Produce and inventory remain unaware of catalog vs
+manual origin.
 
 Teacher quick start: [`docs/Quick Start.md`](../docs/Quick%20Start.md).
 Sample inventory: `assets/sample-data/Sample Books.xlsx` (also
