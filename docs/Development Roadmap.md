@@ -115,5 +115,7 @@ Phase 3 is printing only.
 - [x] Adaptive label title rendering: taller title band (3 rows with barcode),
       font-metrics fit helper (`fit_label_title`), shrink then ellipsis,
       Excel + PDF; max two lines without clipping/overlap
+- [x] Visual accessibility polish: shared `gui/theme.py` tokens; Home header
+      and Ready to Print contrast/typography hierarchy (presentation only)
 
 See also: [`Architecture.md`](Architecture.md), [`../TASKS.md`](../TASKS.md).

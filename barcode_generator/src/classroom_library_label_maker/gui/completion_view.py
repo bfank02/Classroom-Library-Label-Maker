@@ -2,6 +2,7 @@
 
 Presentation only. Summary text and paths come from
 :class:`~classroom_library_label_maker.generation_summary.GuiCompletionSummary`.
+Typography and colors come from :mod:`classroom_library_label_maker.gui.theme`.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from classroom_library_label_maker.generation_summary import GuiCompletionSummary
+from classroom_library_label_maker.gui import theme
 
 
 class CompletionView(QWidget):
@@ -34,17 +36,21 @@ class CompletionView(QWidget):
         )
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(36, 32, 36, 32)
-        root.setSpacing(20)
+        root.setContentsMargins(
+            theme.PAGE_MARGIN_H,
+            theme.PAGE_MARGIN_TOP,
+            theme.PAGE_MARGIN_H,
+            theme.PAGE_MARGIN_BOTTOM,
+        )
+        root.setSpacing(theme.PAGE_SECTION_SPACING)
 
         root.addStretch(1)
 
+        # Hierarchy: success headline → explanation → Files Created → actions.
         self.headline_label = QLabel("✔ Ready to Print")
         self.headline_label.setObjectName("completionHeadline")
         self.headline_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.headline_label.setStyleSheet(
-            "font-size: 28px; font-weight: 700; color: #0b6a0b;"
-        )
+        self.headline_label.setStyleSheet(theme.completion_headline_stylesheet())
         self.headline_label.setAccessibleName("Ready to Print")
         root.addWidget(self.headline_label)
 
@@ -52,36 +58,33 @@ class CompletionView(QWidget):
         self.details_label.setObjectName("completionDetails")
         self.details_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.details_label.setWordWrap(True)
-        self.details_label.setStyleSheet(
-            "font-size: 15px; color: #333333; line-height: 1.4;"
-        )
+        self.details_label.setStyleSheet(theme.completion_details_stylesheet())
         self.details_label.setAccessibleName("Generation summary")
         root.addWidget(self.details_label)
 
         files_caption = QLabel("Files Created")
         files_caption.setObjectName("completionFilesCaption")
         files_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        files_caption.setStyleSheet(
-            "font-size: 13px; font-weight: 600; color: #555555;"
-            "margin-top: 8px;"
-        )
+        files_caption.setStyleSheet(theme.completion_files_caption_stylesheet())
         files_caption.setAccessibleName("Files Created")
         root.addWidget(files_caption)
 
         self.label_file_block = QWidget()
         self.label_file_block.setObjectName("completionLabelFileBlock")
         label_layout = QVBoxLayout(self.label_file_block)
-        label_layout.setContentsMargins(0, 4, 0, 4)
-        label_layout.setSpacing(2)
+        label_layout.setContentsMargins(0, 6, 0, 6)
+        label_layout.setSpacing(4)
         self.label_file_heading = QLabel("✓ Label Workbook")
         self.label_file_heading.setObjectName("completionLabelFileHeading")
         self.label_file_heading.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.label_file_heading.setStyleSheet("font-weight: 600; color: #1a1a1a;")
+        self.label_file_heading.setStyleSheet(
+            theme.completion_file_heading_stylesheet()
+        )
         self.label_file_name = QLabel()
         self.label_file_name.setObjectName("completionLabelFileName")
         self.label_file_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label_file_name.setWordWrap(True)
-        self.label_file_name.setStyleSheet("color: #333333;")
+        self.label_file_name.setStyleSheet(theme.completion_filename_stylesheet())
         self.label_file_name.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse
             | Qt.TextInteractionFlag.TextSelectableByKeyboard
@@ -94,19 +97,21 @@ class CompletionView(QWidget):
         self.inventory_file_block = QWidget()
         self.inventory_file_block.setObjectName("completionInventoryFileBlock")
         inv_layout = QVBoxLayout(self.inventory_file_block)
-        inv_layout.setContentsMargins(0, 4, 0, 4)
-        inv_layout.setSpacing(2)
+        inv_layout.setContentsMargins(0, 6, 0, 6)
+        inv_layout.setSpacing(4)
         self.inventory_file_heading = QLabel("✓ Updated Inventory")
         self.inventory_file_heading.setObjectName("completionInventoryFileHeading")
         self.inventory_file_heading.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.inventory_file_heading.setStyleSheet(
-            "font-weight: 600; color: #1a1a1a;"
+            theme.completion_file_heading_stylesheet()
         )
         self.inventory_file_name = QLabel()
         self.inventory_file_name.setObjectName("completionInventoryFileName")
         self.inventory_file_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.inventory_file_name.setWordWrap(True)
-        self.inventory_file_name.setStyleSheet("color: #333333;")
+        self.inventory_file_name.setStyleSheet(
+            theme.completion_filename_stylesheet()
+        )
         self.inventory_file_name.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse
             | Qt.TextInteractionFlag.TextSelectableByKeyboard
@@ -117,9 +122,10 @@ class CompletionView(QWidget):
         self.inventory_file_block.hide()
         root.addWidget(self.inventory_file_block)
 
-        root.addSpacing(12)
+        root.addSpacing(16)
 
         actions = QHBoxLayout()
+        actions.setObjectName("completionActionsRow")
         actions.setSpacing(12)
         actions.addStretch(1)
 
@@ -194,9 +200,10 @@ class CompletionView(QWidget):
             self.inventory_file_name.setText(summary.updated_inventory_name)
             self.inventory_file_name.setToolTip(str(summary.updated_inventory_path))
 
-        color = "#9a6700" if summary.requires_attention else "#0b6a0b"
         self.headline_label.setStyleSheet(
-            f"font-size: 28px; font-weight: 700; color: {color};"
+            theme.completion_headline_stylesheet(
+                attention=summary.requires_attention
+            )
         )
         self.done_button.setFocus(Qt.FocusReason.OtherFocusReason)
 
@@ -212,6 +219,4 @@ class CompletionView(QWidget):
         self.open_inventory_button.hide()
         self.open_label_button.setEnabled(False)
         self.headline_label.setText("✔ Ready to Print")
-        self.headline_label.setStyleSheet(
-            "font-size: 28px; font-weight: 700; color: #0b6a0b;"
-        )
+        self.headline_label.setStyleSheet(theme.completion_headline_stylesheet())

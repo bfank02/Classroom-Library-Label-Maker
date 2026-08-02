@@ -482,6 +482,7 @@ on Windows), then `logo.png`.
 |--------|------|
 | `gui/app.py` | `QApplication` bootstrap + event loop + icon |
 | `gui/icons.py` | Application icon discovery (empty placeholders ignored) |
+| `gui/theme.py` | Shared colors / typography / page margins (presentation) |
 | `gui/main_window.py` | Home + Ready to Print stack / accessibility / Esc |
 | `gui/completion_view.py` | Ready to Print completion page widgets |
 | `gui/controller.py` | Form actions, validation, start/finish generation |

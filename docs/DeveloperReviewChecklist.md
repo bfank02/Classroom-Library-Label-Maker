@@ -33,6 +33,9 @@ Copy into a PR description or a filled
       unchanged
 - [ ] Home layout remains stable under resize (minimum size, form policies,
       no overlapping Files/Options/Actions sections)
+- [ ] Home header and Ready to Print share `gui/theme.py` colors/typography
+      (presentation only; no workflow changes); headings remain higher
+      contrast than secondary text and filenames
 - [ ] Reviewed ISBNs must flow through one authoritative book list into
       barcode generation, label layout, and inventory update
       (`prepare` → review → `produce`; no parallel collections). Filter

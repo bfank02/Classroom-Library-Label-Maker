@@ -6,6 +6,7 @@ owned by :class:`~classroom_library_label_maker.gui.controller.GuiController`.
 Version 1.4 Phase 5 organizes Home into Files / Options / Actions with a
 subtle header and version footer (presentation only). Version 1.4.2 Phase 1
 adds dirty-field ownership for editable controls and layout stability.
+Version 1.4.2 Phase 3 improves header contrast via shared ``gui.theme`` tokens.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from PySide6.QtWidgets import (
 )
 
 from classroom_library_label_maker.constants import DEFAULT_LABEL_FILENAME
+from classroom_library_label_maker.gui import theme
 from classroom_library_label_maker.gui.completion_view import CompletionView
 from classroom_library_label_maker.metadata import APP_NAME, APP_VERSION
 
@@ -116,9 +118,15 @@ class MainWindow(QMainWindow):
     def _build_home_page(self) -> QWidget:
         home = QWidget()
         home.setObjectName("homePage")
+        home.setStyleSheet(theme.home_group_box_stylesheet())
         root = QVBoxLayout(home)
-        root.setContentsMargins(32, 28, 32, 20)
-        root.setSpacing(18)
+        root.setContentsMargins(
+            theme.PAGE_MARGIN_H,
+            theme.PAGE_MARGIN_TOP,
+            theme.PAGE_MARGIN_H,
+            theme.PAGE_MARGIN_BOTTOM,
+        )
+        root.setSpacing(theme.PAGE_SECTION_SPACING)
 
         header = self._build_header()
         files = self._build_files_section()
@@ -142,14 +150,12 @@ class MainWindow(QMainWindow):
         header.setObjectName("homeHeader")
         header.setAccessibleName("Application header")
         layout = QVBoxLayout(header)
-        layout.setContentsMargins(0, 0, 0, 4)
-        layout.setSpacing(6)
+        layout.setContentsMargins(0, 0, 0, 8)
+        layout.setSpacing(8)
 
         self.header_title_label = QLabel(APP_NAME)
         self.header_title_label.setObjectName("homeHeaderTitle")
-        self.header_title_label.setStyleSheet(
-            "font-size: 22px; font-weight: 700; color: #111111;"
-        )
+        self.header_title_label.setStyleSheet(theme.product_title_stylesheet())
         self.header_title_label.setAccessibleName(APP_NAME)
         layout.addWidget(self.header_title_label)
 
@@ -157,7 +163,7 @@ class MainWindow(QMainWindow):
         self.header_subtitle_label.setObjectName("homeHeaderSubtitle")
         self.header_subtitle_label.setWordWrap(True)
         self.header_subtitle_label.setStyleSheet(
-            "font-size: 13px; color: #555555;"
+            theme.product_subtitle_stylesheet()
         )
         self.header_subtitle_label.setAccessibleName("Application description")
         layout.addWidget(self.header_subtitle_label)
@@ -379,8 +385,7 @@ class MainWindow(QMainWindow):
         self.generate_button.setMinimumWidth(200)
         self.generate_button.setMinimumHeight(40)
         self.generate_button.setStyleSheet(
-            "QPushButton#generateButton {"
-            "font-size: 14px; font-weight: 600; padding: 8px 20px;}"
+            theme.primary_action_stylesheet("generateButton")
         )
         self.generate_button.setToolTip(
             "Create the printable label workbook from your selections."
@@ -404,9 +409,7 @@ class MainWindow(QMainWindow):
         self.version_label.setAlignment(
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
         )
-        self.version_label.setStyleSheet(
-            "font-size: 11px; color: #888888;"
-        )
+        self.version_label.setStyleSheet(theme.version_footer_stylesheet())
         self.version_label.setAccessibleName("Application version")
         self.version_label.setAccessibleDescription(
             "Application version for support and troubleshooting"

@@ -45,6 +45,7 @@ from classroom_library_label_maker.gui.generation_worker import (
     _supports_phases,
 )
 from classroom_library_label_maker.gui.review_wizard import ReviewWizardDialog
+from classroom_library_label_maker.gui import theme
 from classroom_library_label_maker.gui_preferences import (
     GuiPreferences,
     default_gui_preferences_path,
@@ -936,13 +937,9 @@ class GuiController(QObject):
         self._window.status_label.setText(message)
         self._window.status_label.setProperty("statusLevel", level)
         self._window.status_label.setProperty("error", level == "error")
-        colors = {
-            "ok": "#0b6a0b",
-            "warning": "#9a6700",
-            "error": "#a1260d",
-        }
-        color = colors.get(level, colors["ok"])
-        self._window.status_label.setStyleSheet(f"color: {color};")
+        self._window.status_label.setStyleSheet(
+            theme.status_label_stylesheet(level)
+        )
 
     def _preferences_file(self) -> Path:
         if self._preferences_path is not None:

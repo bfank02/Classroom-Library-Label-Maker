@@ -211,7 +211,7 @@ Root package `__init__` exports a narrow public API (models + exceptions +
 | `main` | Startup: parse → configure → log → dispatch |
 | `cli` | CLI parsing and command handlers |
 | `progress` | Qt-free generation stage events for GUI/CLI adapters |
-| `gui` | Desktop presentation (PySide6); thin adapter only |
+| `gui` | Desktop presentation (PySide6); thin adapter only; `theme.py` tokens |
 | `gui.generation_worker` | Background `QObject` that runs the generation service |
 | `gui.review_wizard` | `ReviewWizardDialog` over `ReviewSession` |
 | `gui.form_state` | Immutable GUI selections + field validation messages |
@@ -1160,11 +1160,13 @@ MainWindow (QStackedWidget: Home | Ready to Print)
 UX notes:
 
 * Window title is the product name; Esc closes the window
-* Home (Version 1.4 Phase 5 + 1.4.2 Phase 1): subtle header (product name +
+* Home (Version 1.4 Phase 5 + 1.4.2): subtle header (product name +
   tagline), then labeled **Files** / **Options** / **Actions** sections top
   to bottom, with a muted `Version x.y.z` footer for support. Minimum window
   size, tighter wrapping, and size policies keep sections from overlapping on
-  macOS/Windows.
+  macOS/Windows. Shared presentation tokens in `gui/theme.py` (colors,
+  typography scale, page margins) keep Home and Ready to Print readable and
+  visually consistent (Phase 3 contrast/hierarchy polish; presentation only).
 * **State ownership (1.4.2):** editable Home controls own their in-progress
   values until committed. `GuiController` keeps a session
   `DirtyFieldTracker` so `_refresh_ui` sync helpers never overwrite dirty
@@ -1188,9 +1190,10 @@ UX notes:
 * Status wording during generate/fail is concise and actionable (no Python
   tracebacks)
 * Successful runs replace the Home form with **✔ Ready to Print**
-  (`GuiCompletionSummary` from existing result fields). Warning runs still
-  use that page and note “review before printing”. Failures stay on Home.
-  Warning details remain on `result.warnings` for CLI listing.
+  (`GuiCompletionSummary` from existing result fields). Hierarchy:
+  success headline → short summary → **Files Created** → actions. Warning
+  runs still use that page and note “review before printing”. Failures stay
+  on Home. Warning details remain on `result.warnings` for CLI listing.
 * Application icon loads from `assets/icons/` when a non-empty file is present
 * Teacher quick start: `docs/Quick Start.md`; sample inventory:
   `samples/Sample Books.xlsx`

@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Home header and Ready to Print readability: shared `gui/theme.py` contrast
+  and typography tokens; clearer heading hierarchy and secondary/filename
+  styling without workflow changes (Version 1.4.2)
 - Label titles: second wrapped line no longer clips — title band uses three
   worksheet rows when a barcode is present, and Excel/PDF share font-metrics
   adaptive fitting (shrink then ellipsis; max two lines) (Version 1.4.2)
@@ -25,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `gui/theme.py` shared presentation colors and typography helpers for Home
+  and Ready to Print
 - `fit_label_title` / `FittedTitle` reusable title-fitting helper
   (`rendering/title_fitter.py`) for Excel and PDF label renderers
 - `DirtyFieldTracker` for generic Home editable-field dirty state

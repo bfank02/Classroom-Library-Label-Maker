@@ -820,6 +820,9 @@ Package: `classroom_library_label_maker.gui`
 
 Presentation-only. Domain review state stays on `ReviewSession`.
 
+Shared presentation tokens live in `gui/theme.py` (colors, typography scale,
+page margins) and are used by Home and Ready to Print for consistent contrast.
+
 ### `ReviewWizardDialog` — Experimental — External
 
 Module: `classroom_library_label_maker.gui.review_wizard`
