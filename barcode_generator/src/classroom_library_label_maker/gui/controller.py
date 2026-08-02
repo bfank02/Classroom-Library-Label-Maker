@@ -68,9 +68,11 @@ from classroom_library_label_maker.progress import GenerationProgress
 from classroom_library_label_maker.services.book_review_service import (
     BookReviewService,
     ReviewSession,
+    books_eligible_for_produce,
     books_with_review_applied,
     review_session_from_enrichment,
     review_session_from_generation_result,
+    source_rows_for_books,
 )
 from classroom_library_label_maker.services.inventory_update_service import (
     InventoryUpdateService,
@@ -184,6 +186,7 @@ class GuiController(QObject):
         self._open_path = open_path or self._default_open_path
         self._save_updated_inventory_on_review = True
         self._last_review_result: ReviewSessionResult | None = None
+        self._last_manual_isbn_count: int = 0
         self._last_updated_inventory_path: Path | None = None
         self._pending_preparation: PreparedGeneration | None = None
         self._pending_review_outcome: ReviewWizardOutcome | None = None
@@ -418,6 +421,7 @@ class GuiController(QObject):
 
         self._is_generating = True
         self._last_review_result = None
+        self._last_manual_isbn_count = 0
         self._last_updated_inventory_path = None
         self._pending_preparation = None
         self._pending_review_outcome = None
@@ -486,16 +490,18 @@ class GuiController(QObject):
                 self._logger.info("ISBN review wizard dismissed without Finish")
             else:
                 self._last_review_result = outcome.review_result
+                self._last_manual_isbn_count = outcome.session.manual_decision_count()
                 self._save_updated_inventory_on_review = (
                     outcome.save_updated_inventory
                 )
                 self._persist_preferences()
                 self._logger.info(
                     "ISBN review finished: resolved=%s skipped=%s unresolved=%s "
-                    "save_inventory=%s",
+                    "manual=%s save_inventory=%s",
                     outcome.review_result.resolved_count,
                     outcome.review_result.skipped_count,
                     outcome.review_result.unresolved_count,
+                    self._last_manual_isbn_count,
                     outcome.save_updated_inventory,
                 )
                 books = books_with_review_applied(
@@ -506,6 +512,16 @@ class GuiController(QObject):
 
         self._pending_review_outcome = outcome
         self._authoritative_books = tuple(books)
+        review_session = outcome.session if outcome is not None else None
+        produce_books = books_eligible_for_produce(
+            self._authoritative_books,
+            review_session,
+        )
+        produce_rows = source_rows_for_books(
+            self._authoritative_books,
+            prepared.source_rows,
+            produce_books,
+        )
         inventory = self._state.inventory_workbook
         output = self._state.output_workbook
         assert inventory is not None
@@ -519,13 +535,18 @@ class GuiController(QObject):
             return
 
         self._set_status("Generating labels…", level="ok")
+        self._logger.info(
+            "Produce eligible books: %s of %s authoritative",
+            len(produce_books),
+            len(self._authoritative_books),
+        )
         produce_job = GenerationJob(
             settings=settings,
             workbook_path=inventory,
             output_path=output,
             phase=GenerationPhase.PRODUCE,
-            books=self._authoritative_books,
-            source_rows=prepared.source_rows,
+            books=produce_books,
+            source_rows=produce_rows,
             enrichment=prepared.enrichment,
             prior_warnings=prepared.warnings,
             books_imported=prepared.books_imported,
@@ -568,13 +589,14 @@ class GuiController(QObject):
         inventory_path: Path | None,
     ) -> None:
         """Replace the home form with the Ready to Print completion page."""
-        books_reviewed = 0
+        skipped = 0
         if self._last_review_result is not None:
-            books_reviewed = self._last_review_result.total_reviewed
+            skipped = self._last_review_result.skipped_count
         summary = build_gui_completion_summary(
             result,
             updated_inventory_path=inventory_path,
-            books_reviewed=books_reviewed,
+            isbns_entered_manually=self._last_manual_isbn_count,
+            labels_intentionally_skipped=skipped,
         )
         self._window.completion_view.populate(summary)
         self._window.show_completion()
@@ -628,14 +650,16 @@ class GuiController(QObject):
             self._logger.info("ISBN review wizard dismissed without Finish")
             return None
         self._last_review_result = outcome.review_result
+        self._last_manual_isbn_count = outcome.session.manual_decision_count()
         self._save_updated_inventory_on_review = outcome.save_updated_inventory
         self._persist_preferences()
         self._logger.info(
             "ISBN review finished: resolved=%s skipped=%s unresolved=%s "
-            "save_inventory=%s",
+            "manual=%s save_inventory=%s",
             outcome.review_result.resolved_count,
             outcome.review_result.skipped_count,
             outcome.review_result.unresolved_count,
+            self._last_manual_isbn_count,
             outcome.save_updated_inventory,
         )
         if not outcome.save_updated_inventory:
@@ -654,7 +678,15 @@ class GuiController(QObject):
                 "Cannot write updated inventory: no inventory workbook selected"
             )
             return None
-        if not result.books or not result.source_rows:
+        books = self._authoritative_books
+        source_rows: tuple[int, ...] | None = None
+        if self._pending_preparation is not None:
+            source_rows = self._pending_preparation.source_rows
+        if books is None:
+            books = result.books
+        if source_rows is None:
+            source_rows = result.source_rows
+        if not books or not source_rows:
             self._logger.warning(
                 "Cannot write updated inventory: generation result has no "
                 "book/source_row data"
@@ -665,8 +697,8 @@ class GuiController(QObject):
             written = self._inventory_update_service.write_updated_inventory(
                 source_path=source,
                 settings=settings,
-                books=result.books,
-                source_rows=result.source_rows,
+                books=books,
+                source_rows=source_rows,
                 session=outcome.session,
                 review_result=outcome.review_result,
             )

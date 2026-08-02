@@ -493,8 +493,11 @@ Ready to Print completion page (GuiCompletionSummary / CompletionView)
 
 * **Version 1.4.1:** barcodes/labels are produced **after** review from a
   single authoritative post-review book collection (`prepare` → review →
-  `produce`). Inventory update uses that same collection. CLI
-  `generate()` remains prepare+produce with no review pause.
+  `produce`). Immediately before produce, intentionally skipped books (and
+  any remaining missing-ISBN placeholders) are filtered out so barcode
+  generation and label layout only receive eligible books. Inventory update
+  still uses the full authoritative collection. CLI `generate()` remains
+  prepare+produce with no review pause.
 * `ReviewWizardDialog` is organized into Progress, Book Information, and
   Candidate Selection sections with clearer spacing and typography
   (Version 1.4 Phase 4 presentation polish).
@@ -514,17 +517,18 @@ Ready to Print completion page (GuiCompletionSummary / CompletionView)
   ISBN-13), show **✓ Manual ISBN Accepted**, and auto-advance like a card
   selection (~250 ms). Previous restores the accepted manual ISBN or the
   expanded draft editor.
-* Returning to a skipped book shows **This book will be skipped.**; choosing
-  a candidate or applying a manual ISBN clears that state automatically.
-* Streamlined workflow (Version 1.4 Phase 2) is unchanged: **Skip** advances
-  immediately; selection auto-advances after ~250 ms; buttons are
-  **Previous** / **Skip** / **Cancel**; **Finish Review** replaces Skip on
-  the final item after a decision. No **Next** button.
+* **Don't Generate Label** (formerly Skip) records an intentional skip,
+  shows **✓ Label will not be generated**, and auto-advances after ~250 ms
+  like other resolutions. Skipped books remain in the updated inventory
+  (ISBN cells left blank) but are excluded from produce.
+* Streamlined workflow (Version 1.4 Phase 2) buttons are **Previous** /
+  **Don't Generate Label** / **Cancel**; **Finish Review** replaces Don't
+  Generate Label on the final item after a decision. No **Next** button.
 * Buttons call `ReviewSession` (`previous` / `skip_current` /
   `select_candidate` / `select_manual_isbn` / `next` for auto-advance /
   `finish`). Qt does not own the review index.
 * Single **Very High** candidate is pre-selected without auto-advancing
-  (teacher may still Skip or change the choice).
+  (teacher may still choose Don't Generate Label or change the choice).
 * Checkbox **Save updated inventory workbook when review is complete**
   (default on) is persisted in `GuiPreferences`. When checked on Finish,
   `InventoryUpdateService` writes a new workbook
@@ -533,10 +537,11 @@ Ready to Print completion page (GuiCompletionSummary / CompletionView)
   review-accepted ISBNs are written; skipped rows stay unchanged.
 * After review (or when no review is needed), the GUI shows a full-page
   **✔ Ready to Print** completion view (`CompletionView` +
-  `build_gui_completion_summary`) with label/page counts, optional ISBN and
-  books-reviewed lines, Files Created (label workbook; updated inventory only
-  when written), and **Open Label Workbook** / **Open Updated Inventory** /
-  **Done**. **Done** returns to Home with Files settings preserved.
+  `build_gui_completion_summary`) with label/page counts, optional
+  automatically found / manually entered / intentionally skipped lines,
+  Files Created (label workbook; updated inventory only when written), and
+  **Open Label Workbook** / **Open Updated Inventory** / **Done**. **Done**
+  returns to Home with Files settings preserved.
 * No review items → wizard is skipped; Ready to Print still appears on success.
 
 **Inventory workbook update (Phase 4.4)**

@@ -428,8 +428,10 @@ catalog provider calls.
 | `current_item()` / `current_book()` / `current_index()` | What the UI should show |
 | `item_count()` / `remaining_count()` / `is_complete()` | Progress |
 | `next()` / `previous()` | Navigation (`bool` if moved) |
-| `select_candidate(candidate)` / `select_manual_isbn(raw)` / `skip_current()` | Record one decision per slot (manual ISBN → ordinary accepted decision) |
-| `current_decision_is_manual()` | True when current decision is a teacher-entered ISBN |
+| `select_candidate(candidate)` / `select_manual_isbn(raw)` / `skip_current()` | Record one decision per slot (manual ISBN → ordinary accepted decision; skip → don't generate label) |
+| `current_decision_is_manual()` / `manual_decision_count()` | Manual ISBN inspection |
+| `books_eligible_for_produce(books, session=None)` | Filter skipped / missing-ISBN books before produce |
+
 | `finish()` / `is_finished()` | Seal against further edits |
 | `decisions()` / `decision_at(i)` / `books()` / `items()` | Inspection |
 
@@ -834,9 +836,11 @@ open/Done actions.
 
 After a successful `GenerationWorker.completed` signal, the controller builds
 a session after `prepare` via `review_session_from_enrichment`. Accepted
-ISBNs are merged with `books_with_review_applied`, then `produce` writes
-barcodes/labels from that authoritative list (inventory uses the same list).
-Empty queues skip the wizard and produce immediately. Ready to Print follows.
+ISBNs are merged with `books_with_review_applied` into one authoritative
+collection. `books_eligible_for_produce` filters intentionally skipped /
+missing-ISBN books immediately before `produce`; inventory update uses the
+full authoritative list. Empty queues skip the wizard and produce immediately.
+Ready to Print follows (with manual / skipped summary lines when applicable).
 
 ---
 

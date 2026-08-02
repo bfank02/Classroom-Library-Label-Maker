@@ -31,7 +31,12 @@ Copy into a PR description or a filled
       header and version footer; workflow and generation unchanged
 - [ ] Reviewed ISBNs must flow through one authoritative book list into
       barcode generation, label layout, and inventory update
-      (`prepare` → review → `produce`; no parallel collections)
+      (`prepare` → review → `produce`; no parallel collections). Filter
+      intentionally skipped / missing-ISBN books immediately before produce
+      only; inventory keeps the full authoritative collection
+- [ ] Don't Generate Label / manual ISBN / catalog selection are ordinary
+      `ReviewSession` decisions; produce must not understand skip semantics
+      beyond receiving the filtered eligible list
 - [ ] New work uses `WorkbookGenerationService` (or its collaborators),
       not deprecated `BatchProcessor` / `BarcodeGenerator`
 - [ ] Unexpected failures map to the existing exception hierarchy where

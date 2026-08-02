@@ -128,7 +128,7 @@ def test_wizard_progress_and_navigation(qapp) -> None:
     dialog.skip_button.click()
     QApplication.processEvents()
     assert dialog.finish_button.isVisible() is True
-    assert "1 skip" in dialog.finish_button.text()
+    assert "1 without a label" in dialog.finish_button.text()
     assert dialog.skip_button.isVisible() is False
 
     dialog.previous_button.click()

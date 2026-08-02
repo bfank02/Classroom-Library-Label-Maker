@@ -45,6 +45,8 @@ def build_gui_completion_summary(
     *,
     updated_inventory_path: Path | None = None,
     books_reviewed: int = 0,
+    isbns_entered_manually: int = 0,
+    labels_intentionally_skipped: int = 0,
 ) -> GuiCompletionSummary:
     """Build presentation data for the Ready to Print completion view."""
     details: list[str] = []
@@ -61,8 +63,19 @@ def build_gui_completion_summary(
         isbn_word = "ISBN" if found == 1 else "ISBNs"
         details.append(f"{found} {isbn_word} found automatically")
 
+    manual = max(0, int(isbns_entered_manually))
+    if manual > 0:
+        isbn_word = "ISBN" if manual == 1 else "ISBNs"
+        details.append(f"{manual} {isbn_word} entered manually")
+
+    skipped = max(0, int(labels_intentionally_skipped))
+    if skipped > 0:
+        label_word_skipped = "label" if skipped == 1 else "labels"
+        details.append(f"{skipped} {label_word_skipped} intentionally skipped")
+
+    # Legacy aggregate line when callers only pass books_reviewed.
     reviewed = max(0, int(books_reviewed))
-    if reviewed > 0:
+    if reviewed > 0 and manual == 0 and skipped == 0:
         book_word = "book" if reviewed == 1 else "books"
         details.append(f"{reviewed} {book_word} reviewed")
 

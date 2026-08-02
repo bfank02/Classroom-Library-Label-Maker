@@ -154,20 +154,19 @@ def test_skipped_state_presentation(qapp) -> None:
 
     dialog.skip_button.click()
     QApplication.processEvents()
-    dialog.previous_button.click()
-    QApplication.processEvents()
 
-    assert dialog.decision_status_label.text() == "This book will be skipped."
+    assert dialog.decision_status_label.text() == "✓ Label will not be generated"
     assert dialog.decision_status_label.isVisible() is True
-    assert "#fff8db" in dialog.decision_status_label.styleSheet()
+    assert "#e8f5ee" in dialog.decision_status_label.styleSheet()
     assert all(card.property("selected") is not True for card in dialog._cards)
+    assert dialog._advance_timer.isActive() is True
 
     dialog._cards[0].clicked.emit(dialog._cards[0].candidate)
     QApplication.processEvents()
     # Keep auto-advance pending so we stay on this book for the assertion.
     assert dialog._advance_timer.isActive() is True
     assert dialog.decision_status_label.text() == "Selected"
-    assert "This book will be skipped." not in dialog.decision_status_label.text()
+    assert "Label will not be generated" not in dialog.decision_status_label.text()
     assert dialog._cards[0].property("selected") is True
     dialog.close()
 
@@ -184,7 +183,7 @@ def test_accessibility_names_preserved(qapp) -> None:
     assert dialog.reason_label.accessibleName() == "Review guidance"
     assert dialog.decision_status_label.accessibleName() == "Review decision status"
     assert dialog.previous_button.accessibleName() == "Previous"
-    assert dialog.skip_button.accessibleName() == "Skip"
+    assert dialog.skip_button.accessibleName() == "Don't Generate Label"
     assert dialog.cancel_button.accessibleName() == "Cancel"
     assert "Recommended Match" in dialog._cards[0].accessibleName()
     dialog.close()

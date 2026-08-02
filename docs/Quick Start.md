@@ -81,12 +81,15 @@ In **Actions**, click **Generate Labels**.
 If books still need ISBN choices, the **Review ISBN Matches** wizard appears.
 Choose a catalog match (it highlights, then moves on after a brief pause),
 enter an ISBN yourself under **Enter ISBN Manually** (ISBN-10 or ISBN-13), or
-click **Skip** to leave that book unchanged and continue. Use **Previous** to
-go back; your prior choice (or an unfinished manual entry) is restored. On the
-last book, **Finish Review** replaces **Skip** once you have selected, entered,
-or skipped. Leave **Save updated inventory workbook when review is complete**
-checked to write a new `Inventory (Updated ISBNs).xlsx` next to your original
-inventory (your original file is never changed).
+click **Don't Generate Label** when you intentionally want no label for that
+book (you'll see **✓ Label will not be generated**, then move on after a brief
+pause). Use **Previous** to go back; your prior choice (or an unfinished manual
+entry) is restored. On the last book, **Finish Review** replaces **Don't
+Generate Label** once you have selected, entered, or opted out. Leave **Save
+updated inventory workbook when review is complete** checked to write a new
+`Inventory (Updated ISBNs).xlsx` next to your original inventory (your
+original file is never changed). Skipped books stay in that inventory with
+blank ISBNs and never appear on labels.
 
 When generation finishes, the main window shows a **✔ Ready to Print** page
 (not a dialog): label/page counts, optional ISBN and review totals, the

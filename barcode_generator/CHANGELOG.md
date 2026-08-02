@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ordinary `ReviewDecision`s (Version 1.4.1 Phase 2)
 - `IsbnValidator` accepts ISBN-10 and converts valid values to ISBN-13
 - `ReviewSession.select_manual_isbn` / `current_decision_is_manual`
+- Intentional label skipping: **Don't Generate Label** with confirmation and
+  ~250 ms auto-advance; skipped books are filtered before produce and remain
+  in the updated inventory; Ready to Print shows manual / skipped counts
+  (Version 1.4.1 Phase 3)
+- `books_eligible_for_produce` filters skipped / missing-ISBN books at the
+  produce boundary
 - Google Books API key integration: `GOOGLE_BOOKS_API_KEY` resolved once in
   `config.load_google_books_auth_config()`, stored on `ApplicationSettings`,
   injected into `GoogleBooksEnrichmentProvider` (provider never reads env)

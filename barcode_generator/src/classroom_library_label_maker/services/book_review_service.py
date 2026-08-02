@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from classroom_library_label_maker.constants import MISSING_ISBN_PLACEHOLDER
 from classroom_library_label_maker.models import (
     Book,
     EnrichmentSummary,
@@ -84,6 +85,52 @@ def books_with_review_applied(
         )
     }
     return tuple(replacements.get(id(book), book) for book in books)
+
+
+def books_eligible_for_produce(
+    books: Sequence[Book],
+    session: ReviewSession | None = None,
+) -> tuple[Book, ...]:
+    """Return books that may enter barcode generation and label layout.
+
+    Intentionally skipped review books are excluded. Books without a usable
+    ISBN (empty / missing placeholder) are also excluded so produce never
+    creates placeholder labels. The full post-review collection remains the
+    authority for inventory updates — callers filter only at the produce
+    boundary.
+    """
+    skipped_ids: set[int] = set()
+    if session is not None:
+        for decision in session.decisions():
+            if decision.skipped:
+                skipped_ids.add(id(decision.book))
+
+    eligible: list[Book] = []
+    for book in books:
+        if id(book) in skipped_ids:
+            continue
+        isbn = (book.isbn or "").strip()
+        if not isbn:
+            continue
+        if isbn.casefold() == MISSING_ISBN_PLACEHOLDER.casefold():
+            continue
+        eligible.append(book)
+    return tuple(eligible)
+
+
+def source_rows_for_books(
+    books: Sequence[Book],
+    source_rows: Sequence[int],
+    selected: Sequence[Book],
+) -> tuple[int, ...]:
+    """Return ``source_rows`` entries aligned to ``selected`` (subset of ``books``)."""
+    if len(books) != len(source_rows):
+        raise ValueError(
+            "books and source_rows must have the same length "
+            f"(got {len(books)} books and {len(source_rows)} rows)"
+        )
+    by_id = {id(book): int(row) for book, row in zip(books, source_rows, strict=True)}
+    return tuple(by_id[id(book)] for book in selected)
 
 
 class ReviewSession:
@@ -282,6 +329,21 @@ class ReviewSession:
         ):
             return False
         return decision.candidate not in item.candidates
+
+    def manual_decision_count(self) -> int:
+        """Return how many queue entries were resolved with a manual ISBN."""
+        count = 0
+        for index, decision in enumerate(self.decisions()):
+            if (
+                decision is None
+                or decision.skipped
+                or decision.candidate is None
+            ):
+                continue
+            item = self._items[index]
+            if decision.candidate not in item.candidates:
+                count += 1
+        return count
 
     def skip_current(self) -> ReviewDecision:
         """Record a skip for the current entry (book left unchanged)."""

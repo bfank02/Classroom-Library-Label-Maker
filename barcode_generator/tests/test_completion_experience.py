@@ -162,6 +162,7 @@ def test_updated_inventory_shown_conditionally(qapp, tmp_path: Path) -> None:
         skipped_count=1,
         total_reviewed=3,
     )
+    controller._last_manual_isbn_count = 2
     controller._show_ready_to_print(
         _result(output),
         inventory_out,
@@ -174,7 +175,8 @@ def test_updated_inventory_shown_conditionally(qapp, tmp_path: Path) -> None:
     assert view.inventory_file_block.isVisible() is True
     assert view.inventory_file_name.text() == inventory_out.name
     assert view.open_inventory_button.isVisible() is True
-    assert "3 books reviewed" in view.details_label.text()
+    assert "2 ISBNs entered manually" in view.details_label.text()
+    assert "1 label intentionally skipped" in view.details_label.text()
     window.close()
 
 

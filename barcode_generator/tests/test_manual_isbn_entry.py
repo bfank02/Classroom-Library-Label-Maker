@@ -300,6 +300,7 @@ def test_previous_restores_expanded_editor_draft(qapp) -> None:
     dialog.manual_isbn_edit.setText("978006440055")
     dialog.skip_button.click()
     QApplication.processEvents()
+    _wait_advance(dialog)
     assert session.current_index() == 1
 
     dialog.previous_button.click()

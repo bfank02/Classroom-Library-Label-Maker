@@ -97,7 +97,7 @@ def _wait_advance(dialog: ReviewWizardDialog) -> None:
         return
 
 
-def test_skip_auto_advances_immediately(qapp) -> None:
+def test_skip_auto_advances_after_timer(qapp) -> None:
     session, _, _, _ = _three_book_session()
     dialog = ReviewWizardDialog(session, auto_advance_ms=250)
     dialog.show()
@@ -106,11 +106,16 @@ def test_skip_auto_advances_immediately(qapp) -> None:
     dialog.skip_button.click()
     QApplication.processEvents()
 
-    assert session.current_index() == 1
+    assert session.current_index() == 0
     assert session.decision_at(0) is not None
     assert session.decision_at(0).skipped is True
+    assert dialog.decision_status_label.text() == "✓ Label will not be generated"
+    assert dialog._advance_timer.isActive() is True
+
+    _wait_advance(dialog)
+
+    assert session.current_index() == 1
     assert dialog.progress_label.text() == "Book 2 of 3"
-    assert dialog._advance_timer.isActive() is False
     dialog.close()
 
 
@@ -176,7 +181,7 @@ def test_previous_restores_skipped_state(qapp) -> None:
     assert session.current_index() == 0
     assert session.decision_for_current().skipped is True
     assert all(card.property("selected") is not True for card in dialog._cards)
-    assert dialog.decision_status_label.text() == "This book will be skipped."
+    assert dialog.decision_status_label.text() == "✓ Label will not be generated"
     dialog.close()
 
 
@@ -248,7 +253,7 @@ def test_final_finish_review_after_skip(qapp) -> None:
     QApplication.processEvents()
 
     assert dialog.finish_button.isVisible() is True
-    assert "1 skip" in dialog.finish_button.text()
+    assert "1 without a label" in dialog.finish_button.text()
     assert dialog.skip_button.isVisible() is False
     dialog.close()
 
@@ -302,6 +307,7 @@ def test_previous_cancels_pending_auto_advance(qapp) -> None:
 
     dialog.skip_button.click()
     QApplication.processEvents()
+    _wait_advance(dialog)
     assert session.current_index() == 1
 
     dialog._cards[0].clicked.emit(dialog._cards[0].candidate)

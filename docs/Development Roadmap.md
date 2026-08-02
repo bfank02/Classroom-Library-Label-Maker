@@ -104,5 +104,7 @@ Phase 3 is printing only.
       produce (single authoritative book collection)
 - [x] Manual ISBN entry in Review Wizard (ordinary `ReviewDecision`; ISBN-10/13
       via `IsbnValidator`; no produce/inventory branching)
+- [x] Intentional label skipping: Don't Generate Label; filter skipped books
+      before produce; inventory retains rows; Ready to Print summary counts
 
 See also: [`Architecture.md`](Architecture.md), [`../TASKS.md`](../TASKS.md).

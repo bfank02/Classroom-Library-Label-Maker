@@ -76,14 +76,14 @@ def friendly_review_reason(item: ReviewItem) -> str:
     if item.status is BookEnrichmentStatus.NOT_FOUND:
         return (
             "We couldn't find a clear ISBN match for this book.\n"
-            "You can enter an ISBN manually, skip it, or choose a catalog "
-            "match if one is listed."
+            "You can enter an ISBN manually, choose not to generate a label, "
+            "or choose a catalog match if one is listed."
         )
     if item.status is BookEnrichmentStatus.ERROR:
         return (
             "We had trouble looking up this book.\n"
-            "You can enter an ISBN manually, skip it, or choose a catalog "
-            "match if one is listed."
+            "You can enter an ISBN manually, choose not to generate a label, "
+            "or choose a catalog match if one is listed."
         )
     message = (item.message or "").strip()
     return message or (
@@ -458,12 +458,13 @@ class ReviewWizardDialog(QDialog):
         self.previous_button.clicked.connect(self._on_previous)
         nav.addWidget(self.previous_button)
 
-        self.skip_button = QPushButton("Skip")
+        self.skip_button = QPushButton("Don't Generate Label")
         self.skip_button.setObjectName("reviewSkipButton")
         self.skip_button.setMinimumHeight(32)
-        self.skip_button.setAccessibleName("Skip")
+        self.skip_button.setAccessibleName("Don't Generate Label")
         self.skip_button.setAccessibleDescription(
-            "Skip this book and continue to the next review item"
+            "Do not generate a label for this book and continue to the next "
+            "review item"
         )
         self.skip_button.clicked.connect(self._on_skip)
         nav.addWidget(self.skip_button)
@@ -706,13 +707,16 @@ class ReviewWizardDialog(QDialog):
             self._refresh()
 
     def _on_skip(self) -> None:
-        self._cancel_auto_advance()
+        if self._refreshing:
+            return
         self._persist_manual_draft()
         self._session.skip_current()
-        if self._session.next():
-            self._refresh()
-            return
-        self._refresh()
+        self._update_remaining_label()
+        self._refresh_selection_styles(animate=False)
+        self._update_decision_status()
+        self._sync_manual_entry_ui()
+        self._update_nav_enabled()
+        self._schedule_auto_advance()
 
     def _on_finish(self) -> None:
         self._cancel_auto_advance()
@@ -806,7 +810,7 @@ class ReviewWizardDialog(QDialog):
         if not candidates:
             empty = QLabel(
                 "No catalog matches to choose from. Enter an ISBN manually "
-                "or skip this book."
+                "or choose Don't Generate Label."
             )
             empty.setObjectName("reviewCandidatesEmpty")
             empty.setWordWrap(True)
@@ -866,16 +870,16 @@ class ReviewWizardDialog(QDialog):
             )
             return
         if decision.skipped:
-            self.decision_status_label.setText("This book will be skipped.")
+            self.decision_status_label.setText("✓ Label will not be generated")
             self.decision_status_label.setStyleSheet(
-                "font-size: 13px; font-weight: 600; color: #6b5b00;"
-                "background: #fff8db; border: 1px solid #e6d98a;"
+                "font-size: 13px; font-weight: 600; color: #0f5132;"
+                "background: #e8f5ee; border: 1px solid #a3cfbb;"
                 "border-radius: 6px; padding: 8px 10px; margin-top: 4px;"
             )
             self.decision_status_label.show()
             self._book_section.setStyleSheet(
                 "QFrame#reviewBookSection {"
-                "background: #fffdf5; border: 1px solid #e6d98a;"
+                "background: #f4fbf7; border: 1px solid #a3cfbb;"
                 "border-radius: 8px;}"
             )
             return
@@ -907,7 +911,7 @@ class ReviewWizardDialog(QDialog):
 
         skipped = sum(1 for decision in self._session.decisions() if decision.skipped)
         if skipped > 0:
-            skip_word = "skip" if skipped == 1 else "skips"
-            self.finish_button.setText(f"Finish Review ({skipped} {skip_word})")
+            label_word = "without a label" if skipped == 1 else "without labels"
+            self.finish_button.setText(f"Finish Review ({skipped} {label_word})")
         else:
             self.finish_button.setText("Finish Review")
