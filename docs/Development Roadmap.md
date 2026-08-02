@@ -107,4 +107,10 @@ Phase 3 is printing only.
 - [x] Intentional label skipping: Don't Generate Label; filter skipped books
       before produce; inventory retains rows; Ready to Print summary counts
 
+## Version 1.4.2 — Home stability
+
+- [x] Home dirty-field tracking so Label File Name and future edits survive
+      Options/UI refreshes; commit at Generate / editingFinished
+- [x] Home layout stability (minimum size, form row policy, no section overlap)
+
 See also: [`Architecture.md`](Architecture.md), [`../TASKS.md`](../TASKS.md).

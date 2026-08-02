@@ -30,6 +30,10 @@ from classroom_library_label_maker.exceptions import ApplicationError
 from classroom_library_label_maker.generation_summary import (
     build_gui_completion_summary,
 )
+from classroom_library_label_maker.gui.dirty_fields import (
+    FIELD_LABEL_FILENAME,
+    DirtyFieldTracker,
+)
 from classroom_library_label_maker.gui.form_state import GenerationFormState
 from classroom_library_label_maker.gui.generation_worker import (
     GenerationJob,
@@ -191,6 +195,7 @@ class GuiController(QObject):
         self._pending_preparation: PreparedGeneration | None = None
         self._pending_review_outcome: ReviewWizardOutcome | None = None
         self._authoritative_books: tuple[Book, ...] | None = None
+        self._dirty_fields = DirtyFieldTracker()
         self._state = GenerationFormState()
         self._is_generating = False
         self._active_thread: QThread | None = None
@@ -241,6 +246,7 @@ class GuiController(QObject):
         self._state = self._state.with_label_filename(
             cleaned if cleaned else DEFAULT_LABEL_FILENAME
         )
+        self._dirty_fields.clear(FIELD_LABEL_FILENAME)
         self._persist_preferences()
         self._refresh_ui()
 
@@ -251,6 +257,7 @@ class GuiController(QObject):
         else:
             resolved = path.resolve()
             self._state = self._state.with_output_workbook(resolved)
+        self._dirty_fields.clear(FIELD_LABEL_FILENAME)
         self._persist_preferences()
         self._refresh_ui()
 
@@ -338,6 +345,12 @@ class GuiController(QObject):
             return
         self.set_label_filename(self._window.filename_edit.text())
 
+    def on_filename_text_edited(self, _text: str) -> None:
+        """Mark the filename dirty so refreshes do not overwrite the draft."""
+        if self._is_generating:
+            return
+        self._dirty_fields.mark(FIELD_LABEL_FILENAME)
+
     def on_template_changed(self, index: int) -> None:
         """Handle label-template combo selection changes."""
         if self._is_generating:
@@ -382,6 +395,8 @@ class GuiController(QObject):
         if self._is_generating:
             return
 
+        self._commit_dirty_edits()
+
         messages = self._state.validation_messages()
         if messages:
             self._set_status(" ".join(messages), level="error")
@@ -420,6 +435,7 @@ class GuiController(QObject):
         )
 
         self._is_generating = True
+        self._dirty_fields.clear()
         self._last_review_result = None
         self._last_manual_isbn_count = 0
         self._last_updated_inventory_path = None
@@ -608,6 +624,7 @@ class GuiController(QObject):
         self._window.completion_view.clear()
         self._window.show_home()
         self._last_updated_inventory_path = None
+        self._dirty_fields.clear()
         self._refresh_ui()
 
     def on_open_label_workbook(self) -> None:
@@ -793,6 +810,7 @@ class GuiController(QObject):
         window.barcode_browse_button.clicked.connect(self.browse_barcode_folder)
         window.output_browse_button.clicked.connect(self.browse_output_workbook)
         window.filename_edit.editingFinished.connect(self.on_filename_editing_finished)
+        window.filename_edit.textEdited.connect(self.on_filename_text_edited)
         window.label_template_combo.currentIndexChanged.connect(self.on_template_changed)
         window.show_title_checkbox.toggled.connect(self.on_label_content_changed)
         window.show_author_checkbox.toggled.connect(self.on_label_content_changed)
@@ -841,12 +859,24 @@ class GuiController(QObject):
             self._set_status("Ready to generate labels.", level="ok")
 
     def _sync_filename_edit(self) -> None:
+        if self._dirty_fields.is_dirty(FIELD_LABEL_FILENAME):
+            return
         edit = self._window.filename_edit
         desired = self._state.label_filename or DEFAULT_LABEL_FILENAME
         if edit.text() != desired:
             edit.blockSignals(True)
             edit.setText(desired)
             edit.blockSignals(False)
+
+    def _commit_dirty_edits(self) -> None:
+        """Pull dirty widget values into form state before generation."""
+        if self._dirty_fields.is_dirty(FIELD_LABEL_FILENAME):
+            cleaned = normalize_label_filename(self._window.filename_edit.text())
+            self._state = self._state.with_label_filename(
+                cleaned if cleaned else DEFAULT_LABEL_FILENAME
+            )
+            self._dirty_fields.clear(FIELD_LABEL_FILENAME)
+            self._persist_preferences()
     def _sync_content_checkboxes(self) -> None:
         content = self._state.label_content
         window = self._window
@@ -921,6 +951,7 @@ class GuiController(QObject):
 
     def _restore_preferences(self) -> None:
         """Seed Files paths and review prefs from disk."""
+        self._dirty_fields.clear()
         preferences = load_gui_preferences(path=self._preferences_file())
         inventory = usable_inventory_workbook(preferences.inventory_workbook)
         barcode = usable_barcode_folder(preferences.barcode_folder)

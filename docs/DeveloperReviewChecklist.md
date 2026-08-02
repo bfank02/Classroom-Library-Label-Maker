@@ -27,8 +27,12 @@ Copy into a PR description or a filled
       (ordinary `ReviewDecision`; no provider-specific branching downstream)
 - [ ] Successful generation ends on Ready to Print (`CompletionView`); Done
       returns Home without clearing Files settings; no new generation logic
-- [ ] Home screen presentation uses Files / Options / Actions sections with
-      header and version footer; workflow and generation unchanged
+- [ ] Home editable fields use session dirty tracking so `_refresh_ui` does
+      not overwrite in-progress edits (Label File Name and future fields);
+      drafts commit at editingFinished / Generate; preference semantics
+      unchanged
+- [ ] Home layout remains stable under resize (minimum size, form policies,
+      no overlapping Files/Options/Actions sections)
 - [ ] Reviewed ISBNs must flow through one authoritative book list into
       barcode generation, label layout, and inventory update
       (`prepare` → review → `produce`; no parallel collections). Filter

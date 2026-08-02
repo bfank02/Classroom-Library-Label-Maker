@@ -61,4 +61,4 @@ def test_package_version_aligned_with_metadata() -> None:
     """Installed/package __version__ should match APP_VERSION when resolvable."""
     assert __version__ == APP_VERSION or __version__
     # Prefer exact match against the canonical constant.
-    assert APP_VERSION == "1.4.1"
+    assert APP_VERSION == "1.4.2"

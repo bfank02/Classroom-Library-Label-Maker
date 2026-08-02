@@ -4,7 +4,8 @@ Widgets and layout live here. Form state, validation, and user actions are
 owned by :class:`~classroom_library_label_maker.gui.controller.GuiController`.
 
 Version 1.4 Phase 5 organizes Home into Files / Options / Actions with a
-subtle header and version footer (presentation only).
+subtle header and version footer (presentation only). Version 1.4.2 Phase 1
+adds dirty-field ownership for editable controls and layout stability.
 """
 
 from __future__ import annotations
@@ -40,6 +41,13 @@ _HOME_TAGLINE = (
     "Generate printable barcode labels for your classroom library."
 )
 
+# Minimum size chosen so Files / Options / Actions fit without overlap on
+# typical laptop displays; scroll area covers smaller windows.
+_HOME_MIN_WIDTH = 680
+_HOME_MIN_HEIGHT = 640
+_HOME_DEFAULT_WIDTH = 780
+_HOME_DEFAULT_HEIGHT = 720
+
 
 class FilenameLineEdit(QLineEdit):
     """Line edit that selects the basename (without extension) on focus.
@@ -70,8 +78,8 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle(APP_NAME)
-        self.setMinimumSize(600, 560)
-        self.resize(740, 640)
+        self.setMinimumSize(_HOME_MIN_WIDTH, _HOME_MIN_HEIGHT)
+        self.resize(_HOME_DEFAULT_WIDTH, _HOME_DEFAULT_HEIGHT)
         self.setAccessibleName(APP_NAME)
 
         central = QWidget(self)
@@ -110,12 +118,21 @@ class MainWindow(QMainWindow):
         home.setObjectName("homePage")
         root = QVBoxLayout(home)
         root.setContentsMargins(32, 28, 32, 20)
-        root.setSpacing(22)
+        root.setSpacing(18)
 
-        root.addWidget(self._build_header())
-        root.addWidget(self._build_files_section())
-        root.addWidget(self._build_options_section())
-        root.addWidget(self._build_actions_section())
+        header = self._build_header()
+        files = self._build_files_section()
+        options = self._build_options_section()
+        actions = self._build_actions_section()
+        for section in (header, files, options, actions):
+            section.setSizePolicy(
+                QSizePolicy.Policy.Preferred,
+                QSizePolicy.Policy.Maximum,
+            )
+        root.addWidget(header)
+        root.addWidget(files)
+        root.addWidget(options)
+        root.addWidget(actions)
         root.addStretch(1)
         root.addLayout(self._build_version_row())
         return home
@@ -167,9 +184,9 @@ class MainWindow(QMainWindow):
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
         )
         form.setFormAlignment(
-            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter
+            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft
         )
-        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)
 
         (
             self.inventory_label,
@@ -340,6 +357,10 @@ class MainWindow(QMainWindow):
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
         )
         self.status_label.setMinimumHeight(40)
+        self.status_label.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Minimum,
+        )
         self.status_label.setAccessibleName("Status")
         self.status_label.setAccessibleDescription(
             "Shows guidance, progress, and error messages for generation."
@@ -437,7 +458,8 @@ class MainWindow(QMainWindow):
         )
         path.setWordWrap(True)
         path.setMinimumWidth(200)
-        path.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        path.setMinimumHeight(28)
+        path.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         path.setAccessibleName(path_accessible)
         path.setToolTip(empty_text)
 

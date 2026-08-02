@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Home Label File Name no longer reverts when changing template, label
+  contents, or lookup options: editable controls use session dirty tracking
+  so UI refreshes do not overwrite in-progress edits (Version 1.4.2)
+- Home layout stability: larger minimum size, non-wrapping form rows, and size
+  policies to avoid overlapping Files / Options / Actions on resize
 - Reviewed ISBNs now generate barcodes and labels: GUI runs
   `prepare` → Review Wizard → `produce` so barcode generation, label layout,
   workbook save, and inventory update share one authoritative post-review
@@ -17,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `DirtyFieldTracker` for generic Home editable-field dirty state
 - Manual ISBN entry in the Review Wizard: teachers can enter ISBN-10 or ISBN-13
   inline when catalog matches are wrong or missing; accepted values become
   ordinary `ReviewDecision`s (Version 1.4.1 Phase 2)

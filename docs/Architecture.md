@@ -1135,9 +1135,18 @@ MainWindow (QStackedWidget: Home | Ready to Print)
 UX notes:
 
 * Window title is the product name; Esc closes the window
-* Home (Version 1.4 Phase 5): subtle header (product name + tagline), then
-  labeled **Files** / **Options** / **Actions** sections top to bottom, with
-  a muted `Version x.y.z` footer for support
+* Home (Version 1.4 Phase 5 + 1.4.2 Phase 1): subtle header (product name +
+  tagline), then labeled **Files** / **Options** / **Actions** sections top
+  to bottom, with a muted `Version x.y.z` footer for support. Minimum window
+  size, tighter wrapping, and size policies keep sections from overlapping on
+  macOS/Windows.
+* **State ownership (1.4.2):** editable Home controls own their in-progress
+  values until committed. `GuiController` keeps a session
+  `DirtyFieldTracker` so `_refresh_ui` sync helpers never overwrite dirty
+  fields (e.g. Label File Name) when unrelated Options change. Dirty drafts
+  commit on editing finished or when **Generate Labels** starts; they clear
+  on generate, intentional preference restore, and Done → Home. Preferences
+  persistence semantics are unchanged.
 * **Files** section: Inventory Workbook, Barcode Folder, Label Folder (Browse
   preserves filename), and editable Label File Name (stem selected on focus;
   `.xlsx` / `.xlsm` normalized). Generation still receives a full
