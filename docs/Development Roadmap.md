@@ -117,5 +117,12 @@ Phase 3 is printing only.
       Excel + PDF; max two lines without clipping/overlap
 - [x] Visual accessibility polish: shared `gui/theme.py` tokens; Home header
       and Ready to Print contrast/typography hierarchy (presentation only)
+- [x] Google Books rate-limit resilience: authenticated pacing ~0.65s,
+      429 wait status in progress UI, persistent enrichment cache
+
+## Version 1.4.3 — Review Wizard Manual ISBN polish
+
+- [x] Manual ISBN restored as a full review state (Next / Finish, Edit ISBN,
+      Back to Matches, layout aligned with candidate cards)
 
 See also: [`Architecture.md`](Architecture.md), [`../TASKS.md`](../TASKS.md).

@@ -24,7 +24,9 @@ Copy into a PR description or a filled
       visual polish, and manual ISBN entry UI are presentation/session actions
       and must not invent a parallel review state or change produce/inventory)
 - [ ] Manual ISBN entry uses `IsbnValidator` + `ReviewSession.select_manual_isbn`
-      (ordinary `ReviewDecision`; no provider-specific branching downstream)
+      (ordinary `ReviewDecision`; no provider-specific branching downstream).
+      Previous restores accepted/edit state; resolved books show Next or
+      Finish Review so the wizard never dead-ends
 - [ ] Successful generation ends on Ready to Print (`CompletionView`); Done
       returns Home without clearing Files settings; no new generation logic
 - [ ] Home editable fields use session dirty tracking so `_refresh_ui` does

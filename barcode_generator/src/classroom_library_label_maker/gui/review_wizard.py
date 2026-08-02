@@ -7,7 +7,8 @@ This dialog only renders the current item and forwards teacher actions.
 Version 1.4 Phase 2 streamlines the click path; Phase 4 polishes presentation
 (hierarchy, cards, badges, spacing) without changing workflow or domain logic.
 Version 1.4.1 Phase 2 adds inline manual ISBN entry as an ordinary
-``ReviewDecision`` (not a separate review state).
+``ReviewDecision`` (not a separate review state). Version 1.4.3 restores the
+full interaction state for manual ISBN (Next / Finish, Edit ISBN, layout).
 """
 
 from __future__ import annotations
@@ -303,6 +304,7 @@ class ReviewWizardDialog(QDialog):
         self._auto_advance_ms = max(0, int(auto_advance_ms))
         self._manual_expanded: dict[int, bool] = {}
         self._manual_draft: dict[int, str] = {}
+        self._manual_editing: dict[int, bool] = {}
 
         self.setWindowTitle("Review ISBN Matches")
         self.setObjectName("reviewWizardDialog")
@@ -469,6 +471,17 @@ class ReviewWizardDialog(QDialog):
         self.skip_button.clicked.connect(self._on_skip)
         nav.addWidget(self.skip_button)
 
+        self.next_button = QPushButton("Next")
+        self.next_button.setObjectName("reviewNextButton")
+        self.next_button.setMinimumHeight(32)
+        self.next_button.setAccessibleName("Next")
+        self.next_button.setAccessibleDescription(
+            "Continue to the next review book after a selection or skip"
+        )
+        self.next_button.clicked.connect(self._on_next)
+        self.next_button.hide()
+        nav.addWidget(self.next_button)
+
         self.finish_button = QPushButton("Finish Review")
         self.finish_button.setObjectName("reviewFinishButton")
         self.finish_button.setMinimumHeight(32)
@@ -514,7 +527,7 @@ class ReviewWizardDialog(QDialog):
         super().reject()
 
     def _build_manual_entry_section(self) -> QFrame:
-        """Build the alternative manual ISBN resolution path (not a candidate card)."""
+        """Build the alternative manual ISBN path (aligned with candidate cards)."""
         section = QFrame()
         section.setObjectName("reviewManualIsbnSection")
         section.setStyleSheet(
@@ -523,58 +536,66 @@ class ReviewWizardDialog(QDialog):
             "border-radius: 8px;}"
         )
         layout = QVBoxLayout(section)
-        layout.setContentsMargins(14, 12, 14, 12)
+        # Match CandidateCard margins / rhythm.
+        layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(8)
 
         self.manual_prompt_label = QLabel("Can't find the correct edition?")
         self.manual_prompt_label.setObjectName("reviewManualIsbnPrompt")
         self.manual_prompt_label.setStyleSheet(
-            "font-size: 13px; color: #555555;"
+            "font-size: 13px; font-weight: 600; color: #555555;"
         )
         layout.addWidget(self.manual_prompt_label)
 
         self.manual_toggle_button = QPushButton("Enter ISBN Manually")
         self.manual_toggle_button.setObjectName("reviewManualIsbnToggle")
         self.manual_toggle_button.setMinimumHeight(32)
+        self.manual_toggle_button.setMaximumWidth(220)
         self.manual_toggle_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.manual_toggle_button.setAccessibleName("Enter ISBN Manually")
         self.manual_toggle_button.setAccessibleDescription(
             "Expand the manual ISBN entry panel"
         )
         self.manual_toggle_button.clicked.connect(self._on_manual_toggle)
-        layout.addWidget(self.manual_toggle_button)
+        layout.addWidget(self.manual_toggle_button, alignment=Qt.AlignmentFlag.AlignLeft)
 
         self.manual_editor_panel = QWidget()
         self.manual_editor_panel.setObjectName("reviewManualIsbnEditor")
         editor_layout = QVBoxLayout(self.manual_editor_panel)
         editor_layout.setContentsMargins(0, 4, 0, 0)
-        editor_layout.setSpacing(6)
+        editor_layout.setSpacing(8)
 
         isbn_row = QHBoxLayout()
-        isbn_row.setSpacing(8)
+        isbn_row.setSpacing(10)
         self.manual_isbn_field_label = QLabel("ISBN")
         self.manual_isbn_field_label.setObjectName("reviewManualIsbnFieldLabel")
+        self.manual_isbn_field_label.setMinimumWidth(44)
         self.manual_isbn_field_label.setStyleSheet(
-            "font-size: 13px; font-weight: 600; color: #333333;"
+            "font-size: 13px; font-weight: 600; color: #1a1a1a;"
         )
-        isbn_row.addWidget(self.manual_isbn_field_label)
+        isbn_row.addWidget(
+            self.manual_isbn_field_label,
+            alignment=Qt.AlignmentFlag.AlignVCenter,
+        )
         self.manual_isbn_edit = QLineEdit()
         self.manual_isbn_edit.setObjectName("reviewManualIsbnEdit")
         self.manual_isbn_edit.setPlaceholderText("ISBN-10 or ISBN-13")
         self.manual_isbn_edit.setClearButtonEnabled(True)
         self.manual_isbn_edit.setMinimumHeight(32)
+        self.manual_isbn_edit.setMaximumWidth(320)
         self.manual_isbn_edit.setAccessibleName("ISBN")
         self.manual_isbn_edit.setAccessibleDescription(
             "Paste or type an ISBN-10 or ISBN-13"
         )
         self.manual_isbn_edit.returnPressed.connect(self._on_apply_manual_isbn)
         self.manual_isbn_edit.textChanged.connect(self._on_manual_isbn_text_changed)
-        isbn_row.addWidget(self.manual_isbn_edit, stretch=1)
+        isbn_row.addWidget(self.manual_isbn_edit, 0)
+        isbn_row.addStretch(1)
         editor_layout.addLayout(isbn_row)
 
         self.manual_help_label = QLabel("Paste or type an ISBN-10 or ISBN-13.")
         self.manual_help_label.setObjectName("reviewManualIsbnHelp")
-        self.manual_help_label.setStyleSheet("font-size: 12px; color: #666666;")
+        self.manual_help_label.setStyleSheet("font-size: 12px; color: #555555;")
         editor_layout.addWidget(self.manual_help_label)
 
         self.manual_error_label = QLabel()
@@ -587,15 +608,32 @@ class ReviewWizardDialog(QDialog):
         self.manual_error_label.hide()
         editor_layout.addWidget(self.manual_error_label)
 
+        action_row = QHBoxLayout()
+        action_row.setSpacing(10)
         self.manual_apply_button = QPushButton("Apply ISBN")
         self.manual_apply_button.setObjectName("reviewManualIsbnApply")
         self.manual_apply_button.setMinimumHeight(32)
+        self.manual_apply_button.setMaximumWidth(140)
         self.manual_apply_button.setAccessibleName("Apply ISBN")
         self.manual_apply_button.setAccessibleDescription(
             "Validate and accept the entered ISBN"
         )
         self.manual_apply_button.clicked.connect(self._on_apply_manual_isbn)
-        editor_layout.addWidget(self.manual_apply_button)
+        action_row.addWidget(self.manual_apply_button)
+
+        self.manual_cancel_edit_button = QPushButton("Cancel Edit")
+        self.manual_cancel_edit_button.setObjectName("reviewManualIsbnCancelEdit")
+        self.manual_cancel_edit_button.setMinimumHeight(32)
+        self.manual_cancel_edit_button.setMaximumWidth(140)
+        self.manual_cancel_edit_button.setAccessibleName("Cancel Edit")
+        self.manual_cancel_edit_button.setAccessibleDescription(
+            "Return to the accepted manual ISBN without changing it"
+        )
+        self.manual_cancel_edit_button.clicked.connect(self._on_cancel_manual_edit)
+        self.manual_cancel_edit_button.hide()
+        action_row.addWidget(self.manual_cancel_edit_button)
+        action_row.addStretch(1)
+        editor_layout.addLayout(action_row)
 
         self.manual_editor_panel.hide()
         layout.addWidget(self.manual_editor_panel)
@@ -604,7 +642,7 @@ class ReviewWizardDialog(QDialog):
         self.manual_accepted_panel.setObjectName("reviewManualIsbnAccepted")
         accepted_layout = QVBoxLayout(self.manual_accepted_panel)
         accepted_layout.setContentsMargins(0, 4, 0, 0)
-        accepted_layout.setSpacing(4)
+        accepted_layout.setSpacing(6)
 
         self.manual_accepted_title = QLabel("✓ Manual ISBN Accepted")
         self.manual_accepted_title.setObjectName("reviewManualIsbnAcceptedTitle")
@@ -619,8 +657,27 @@ class ReviewWizardDialog(QDialog):
         self.manual_accepted_isbn.setStyleSheet(
             "font-size: 14px; font-weight: 600; color: #111111;"
         )
+        self.manual_accepted_isbn.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.TextSelectableByKeyboard
+        )
         self.manual_accepted_isbn.setAccessibleName("Accepted manual ISBN")
         accepted_layout.addWidget(self.manual_accepted_isbn)
+
+        self.manual_edit_button = QPushButton("Edit ISBN")
+        self.manual_edit_button.setObjectName("reviewManualIsbnEditButton")
+        self.manual_edit_button.setMinimumHeight(32)
+        self.manual_edit_button.setMaximumWidth(140)
+        self.manual_edit_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.manual_edit_button.setAccessibleName("Edit ISBN")
+        self.manual_edit_button.setAccessibleDescription(
+            "Edit the accepted manual ISBN"
+        )
+        self.manual_edit_button.clicked.connect(self._on_edit_manual_isbn)
+        accepted_layout.addWidget(
+            self.manual_edit_button,
+            alignment=Qt.AlignmentFlag.AlignLeft,
+        )
 
         self.manual_accepted_panel.hide()
         layout.addWidget(self.manual_accepted_panel)
@@ -633,9 +690,40 @@ class ReviewWizardDialog(QDialog):
         self._persist_manual_draft()
         expanded = not self._manual_expanded.get(index, False)
         self._manual_expanded[index] = expanded
+        if not expanded:
+            self._manual_editing[index] = False
         self._sync_manual_entry_ui()
         if expanded:
             self.manual_isbn_edit.setFocus(Qt.FocusReason.TabFocusReason)
+
+    def _on_edit_manual_isbn(self) -> None:
+        """Open the editor with the accepted ISBN pre-filled (presentation only)."""
+        if self._refreshing:
+            return
+        if not self._session.current_decision_is_manual():
+            return
+        decision = self._session.decision_for_current()
+        assert decision is not None and decision.candidate is not None
+        index = self._session.current_index()
+        isbn = _candidate_isbn_text(decision.candidate)
+        self._manual_editing[index] = True
+        self._manual_expanded[index] = True
+        self._manual_draft[index] = isbn
+        self._sync_manual_entry_ui()
+        self.manual_isbn_edit.setFocus(Qt.FocusReason.TabFocusReason)
+        self.manual_isbn_edit.selectAll()
+
+    def _on_cancel_manual_edit(self) -> None:
+        """Leave the editor and restore the accepted manual ISBN view."""
+        if self._refreshing:
+            return
+        index = self._session.current_index()
+        self._manual_editing[index] = False
+        self._manual_expanded[index] = False
+        self._manual_draft.pop(index, None)
+        self.manual_error_label.clear()
+        self.manual_error_label.hide()
+        self._sync_manual_entry_ui()
 
     def _on_manual_isbn_text_changed(self, _text: str) -> None:
         if self._refreshing:
@@ -658,6 +746,7 @@ class ReviewWizardDialog(QDialog):
 
         index = self._session.current_index()
         self._manual_expanded[index] = False
+        self._manual_editing[index] = False
         self._manual_draft.pop(index, None)
         self.manual_error_label.clear()
         self.manual_error_label.hide()
@@ -674,13 +763,18 @@ class ReviewWizardDialog(QDialog):
             self._manual_draft[index] = self.manual_isbn_edit.text()
 
     def _sync_manual_entry_ui(self) -> None:
+        """Render manual ISBN UI from session decision + local expand/edit flags."""
         index = self._session.current_index()
-        if self._session.current_decision_is_manual():
+        is_manual = self._session.current_decision_is_manual()
+        editing = bool(self._manual_editing.get(index, False))
+
+        if is_manual and not editing:
             decision = self._session.decision_for_current()
             assert decision is not None and decision.candidate is not None
             isbn = _candidate_isbn_text(decision.candidate)
             self.manual_toggle_button.hide()
             self.manual_editor_panel.hide()
+            self.manual_cancel_edit_button.hide()
             self.manual_accepted_panel.show()
             self.manual_accepted_isbn.setText(isbn)
             self.manual_error_label.clear()
@@ -688,12 +782,29 @@ class ReviewWizardDialog(QDialog):
             return
 
         self.manual_accepted_panel.hide()
-        self.manual_toggle_button.show()
-        expanded = self._manual_expanded.get(index, False)
-        self.manual_editor_panel.setVisible(expanded)
-        self.manual_toggle_button.setText(
-            "Hide Manual Entry" if expanded else "Enter ISBN Manually"
-        )
+        if is_manual and editing:
+            # Editing an accepted ISBN — keep decision; show editor + Cancel Edit.
+            self.manual_toggle_button.hide()
+            self.manual_editor_panel.show()
+            self.manual_cancel_edit_button.show()
+        else:
+            expanded = self._manual_expanded.get(index, False)
+            self.manual_toggle_button.show()
+            self.manual_editor_panel.setVisible(expanded)
+            self.manual_cancel_edit_button.hide()
+            if expanded:
+                self.manual_toggle_button.setText("Back to Matches")
+                self.manual_toggle_button.setAccessibleName("Back to Matches")
+                self.manual_toggle_button.setAccessibleDescription(
+                    "Collapse manual ISBN entry and return to catalog matches"
+                )
+            else:
+                self.manual_toggle_button.setText("Enter ISBN Manually")
+                self.manual_toggle_button.setAccessibleName("Enter ISBN Manually")
+                self.manual_toggle_button.setAccessibleDescription(
+                    "Expand the manual ISBN entry panel"
+                )
+
         draft = self._manual_draft.get(index, "")
         if self.manual_isbn_edit.text() != draft:
             self.manual_isbn_edit.setText(draft)
@@ -706,10 +817,19 @@ class ReviewWizardDialog(QDialog):
         if self._session.previous():
             self._refresh()
 
+    def _on_next(self) -> None:
+        """Advance when the current book already has a restored decision."""
+        self._cancel_auto_advance()
+        self._persist_manual_draft()
+        if self._session.next():
+            self._refresh()
+
     def _on_skip(self) -> None:
         if self._refreshing:
             return
         self._persist_manual_draft()
+        index = self._session.current_index()
+        self._manual_editing[index] = False
         self._session.skip_current()
         self._update_remaining_label()
         self._refresh_selection_styles(animate=False)
@@ -730,6 +850,7 @@ class ReviewWizardDialog(QDialog):
         self._persist_manual_draft()
         index = self._session.current_index()
         self._manual_expanded[index] = False
+        self._manual_editing[index] = False
         self._session.select_candidate(candidate)
         self._update_remaining_label()
         self._refresh_selection_styles(animate=True)
@@ -895,16 +1016,22 @@ class ReviewWizardDialog(QDialog):
         )
 
     def _update_nav_enabled(self) -> None:
+        """Render nav from session state: unresolved → Skip; resolved → Next/Finish."""
         index = self._session.current_index()
         total = self._session.item_count()
         has_decision = self._session.has_decision_for_current()
         on_last = total > 0 and index >= total - 1
         show_finish = on_last and has_decision
+        show_next = has_decision and not on_last
 
         self.previous_button.setEnabled(index > 0)
         self.skip_button.setVisible(not show_finish)
         self.skip_button.setEnabled(
             total > 0 and not self._session.is_finished() and not show_finish
+        )
+        self.next_button.setVisible(show_next)
+        self.next_button.setEnabled(
+            show_next and not self._session.is_finished()
         )
         self.finish_button.setVisible(show_finish)
         self.finish_button.setEnabled(show_finish)

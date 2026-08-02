@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Review Wizard Manual ISBN: Previous no longer dead-ends — restored accepted
+  state shows **Next** (or **Finish Review** on the last book); **Edit ISBN**
+  reopens the editor pre-filled; layout and **Back to Matches** wording
+  (Version 1.4.3)
+- Google Books authenticated pacing slowed to ~0.65s (~92/min) to stay under
+  the common 100 queries/minute quota and reduce 429 backoff hangs on large
+  ISBN lookups (Version 1.4.2)
 - Home header and Ready to Print readability: shared `gui/theme.py` contrast
   and typography tokens; clearer heading hierarchy and secondary/filename
   styling without workflow changes (Version 1.4.2)
@@ -28,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Review Wizard **Next** when the current book already has a decision
+  (presentation; session `next()` unchanged) (Version 1.4.3)
+- Manual ISBN **Edit ISBN** / **Cancel Edit** and accepted-state restore
+  (Version 1.4.3)
 - `gui/theme.py` shared presentation colors and typography helpers for Home
   and Ready to Print
 - `fit_label_title` / `FittedTitle` reusable title-fitting helper

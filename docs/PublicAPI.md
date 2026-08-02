@@ -832,15 +832,17 @@ with attached books. Renders Progress / Book Information / Candidate
 Selection sections with polished cards and badges; forwards Previous / Skip /
 candidate clicks / Finish to the session.
 
-**Presentation (v1.4 Phase 4):** Clear section hierarchy, friendly amber
+**Presentation (v1.4 Phase 4 + 1.4.3):** Clear section hierarchy, friendly amber
 guidance, **⭐ Recommended Match** with confidence beneath, stronger selected
 card styling, and **This book will be skipped.** when restoring a skip.
+Manual ISBN section matches candidate-card spacing; accepted state shows
+**Edit ISBN**.
 
-**Workflow (v1.4 Phase 2):** Skip advances immediately. Candidate selection
-highlights immediately and auto-advances after ~250 ms (timer restarts on
-reselection). **Finish Review** replaces Skip on the final item once a
-selection or skip is recorded. Cancel rejects without applying. No Next
-button.
+**Workflow (v1.4 Phase 2 + 1.4.3):** Skip / candidate / manual apply
+auto-advance after ~250 ms. **Next** appears when the current book already
+has a decision (including after Previous restores a manual ISBN). **Finish
+Review** replaces Don't Generate Label on the final item once a decision is
+recorded. Cancel rejects without applying.
 
 **Finish:** seals the session (`finish()`); `GuiController` then calls
 `BookReviewService.apply` and, when the save checkbox is checked,

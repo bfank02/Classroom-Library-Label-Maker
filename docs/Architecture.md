@@ -537,19 +537,22 @@ Ready to Print completion page (GuiCompletionSummary / CompletionView)
   help text, **Apply ISBN**) — not a candidate card. Invalid values show an
   inline message; valid ISBN-10/13 values become ordinary
   `ReviewDecision`s via `ReviewSession.select_manual_isbn` (normalized to
-  ISBN-13), show **✓ Manual ISBN Accepted**, and auto-advance like a card
-  selection (~250 ms). Previous restores the accepted manual ISBN or the
-  expanded draft editor.
+  ISBN-13), show **✓ Manual ISBN Accepted** with **Edit ISBN**, and
+  auto-advance like a card selection (~250 ms). Collapse control reads
+  **Back to Matches**. Previous restores the accepted manual ISBN (or the
+  expanded draft editor); **Next** (or **Finish Review** on the last book)
+  continues without requiring Don't Generate Label (Version 1.4.3).
 * **Don't Generate Label** (formerly Skip) records an intentional skip,
   shows **✓ Label will not be generated**, and auto-advances after ~250 ms
   like other resolutions. Skipped books remain in the updated inventory
   (ISBN cells left blank) but are excluded from produce.
-* Streamlined workflow (Version 1.4 Phase 2) buttons are **Previous** /
-  **Don't Generate Label** / **Cancel**; **Finish Review** replaces Don't
-  Generate Label on the final item after a decision. No **Next** button.
-* Buttons call `ReviewSession` (`previous` / `skip_current` /
-  `select_candidate` / `select_manual_isbn` / `next` for auto-advance /
-  `finish`). Qt does not own the review index.
+* Navigation renders from session state: unresolved books show **Don't
+  Generate Label**; resolved non-final books show **Next**; the final book
+  with a decision shows **Finish Review**. Previous restores decisions and
+  presentation; the UI does not invent a parallel review index.
+* Buttons call `ReviewSession` (`previous` / `next` / `skip_current` /
+  `select_candidate` / `select_manual_isbn` / `finish`). Qt does not own
+  the review index.
 * Single **Very High** candidate is pre-selected without auto-advancing
   (teacher may still choose Don't Generate Label or change the choice).
 * Checkbox **Save updated inventory workbook when review is complete**

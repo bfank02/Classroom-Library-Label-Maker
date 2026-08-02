@@ -113,9 +113,9 @@ def test_wizard_progress_and_navigation(qapp) -> None:
     assert "b45309" in dialog.reason_label.styleSheet()
     assert dialog.previous_button.isEnabled() is False
     assert dialog.skip_button.isVisible() is True
+    assert dialog.next_button.isVisible() is False
     assert dialog.finish_button.isVisible() is False
     assert dialog.cancel_button.isVisible() is True
-    assert not hasattr(dialog, "next_button")
 
     dialog._cards[0].clicked.emit(c1a)
     QApplication.processEvents()
@@ -130,11 +130,13 @@ def test_wizard_progress_and_navigation(qapp) -> None:
     assert dialog.finish_button.isVisible() is True
     assert "1 without a label" in dialog.finish_button.text()
     assert dialog.skip_button.isVisible() is False
+    assert dialog.next_button.isVisible() is False
 
     dialog.previous_button.click()
     QApplication.processEvents()
     assert dialog.progress_label.text() == "Book 1 of 2"
     assert dialog._cards[0].property("selected") is True
+    assert dialog.next_button.isVisible() is True
     dialog.close()
 
 
