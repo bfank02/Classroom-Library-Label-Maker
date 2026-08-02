@@ -829,9 +829,10 @@ open/Done actions.
 ### `GuiController` review hook
 
 After a successful `GenerationWorker.completed` signal, the controller builds
-a session via `review_session_from_generation_result`. Empty queues skip the
-wizard. Successful generation (with or without review) then shows the Ready
-to Print completion page instead of leaving Generate Labels on screen.
+a session after `prepare` via `review_session_from_enrichment`. Accepted
+ISBNs are merged with `books_with_review_applied`, then `produce` writes
+barcodes/labels from that authoritative list (inventory uses the same list).
+Empty queues skip the wizard and produce immediately. Ready to Print follows.
 
 ---
 

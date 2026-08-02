@@ -461,21 +461,31 @@ GUI (ReviewWizardDialog)  →  ReviewSession  →  BookReviewService  →  updat
 **Interactive review wizard (Phase 4.3 — GUI presentation)**
 
 ```
-GenerationWorker.completed
+GenerationWorker.prepare
         │
         ▼
-GuiController._on_generation_completed
+GuiController._on_generation_prepared
         │  if review items with books →
         ▼
 ReviewWizardDialog  (Qt)  ──actions──►  ReviewSession  (domain)
         │ Finish
         ▼
-BookReviewService.apply(finished session)
+BookReviewService.apply + books_with_review_applied
+        │ authoritative books
+        ▼
+GenerationWorker.produce (barcodes + labels + save)
+        │
+        ▼
+InventoryUpdateService (same authoritative books)
         │
         ▼
 Ready to Print completion page (GuiCompletionSummary / CompletionView)
 ```
 
+* **Version 1.4.1:** barcodes/labels are produced **after** review from a
+  single authoritative post-review book collection (`prepare` → review →
+  `produce`). Inventory update uses that same collection. CLI
+  `generate()` remains prepare+produce with no review pause.
 * `ReviewWizardDialog` is organized into Progress, Book Information, and
   Candidate Selection sections with clearer spacing and typography
   (Version 1.4 Phase 4 presentation polish).
@@ -995,13 +1005,15 @@ missing files become placeholders with warnings.
 
 `WorkbookGenerationService` is the end-to-end orchestrator:
 
-1. `ExcelImportService.import_books`
-2. Optional `BookEnrichmentService` (when `lookup_missing_isbns`)
-3. `BatchProcessingService.process_books` (validate + generate/reuse barcodes)
-4. `WorkbookWriter.create_workbook`
-5. `LabelLayoutService.layout_books` on `writer.get_label_sheet_target()`
-6. `WorkbookWriter.save`
+1. `prepare`: `ExcelImportService.import_books` → optional
+   `BookEnrichmentService` → `PreparedGeneration`
+2. (GUI only) interactive review merges accepted ISBNs via
+   `books_with_review_applied` into one authoritative book list
+3. `produce`: `BatchProcessingService.process_books` →
+   `WorkbookWriter.create_workbook` → `LabelLayoutService.layout_books` →
+   `WorkbookWriter.save`
 
+`generate()` is prepare+produce for CLI and callers without a review step.
 Returns immutable `WorkbookGenerationResult` (including `EnrichmentSummary`).
 Does **not** print or show UI. Default output path:
 `{project_root}/output/library_labels.xlsx`.
@@ -1088,13 +1100,13 @@ label-maker-gui   # same entry point after pip install
 MainWindow (QStackedWidget: Home | Ready to Print)
   Generate Labels
       → GuiController validates + build_application_settings()
-      → GenerationJob (immutable inputs)
-      → QThread + GenerationWorker.run()
-            → WorkbookGenerationService.generate(progress_reporter=…)
-                → GenerationProgress (stage + message)
-            → emit progress / completed(result) | failed(exc)
-      → progress updates Home status label
-      → on success: optional review wizard, then CompletionView
+      → GenerationJob(prepare) → QThread + GenerationWorker
+            → WorkbookGenerationService.prepare(progress_reporter=…)
+      → optional ReviewWizardDialog + books_with_review_applied
+      → GenerationJob(produce) with authoritative books
+            → WorkbookGenerationService.produce(…)
+      → optional InventoryUpdateService (same books)
+      → CompletionView
       → Done → Home (settings preserved)
 ```
 

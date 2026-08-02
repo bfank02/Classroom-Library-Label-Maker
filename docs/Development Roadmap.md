@@ -98,4 +98,9 @@ Phase 3 is printing only.
 - [x] Home screen organization & polish (Files / Options / Actions; header;
       version footer)
 
+## Version 1.4.1 — Correctness
+
+- [x] Reviewed ISBNs drive barcodes/labels/inventory via prepare → review →
+      produce (single authoritative book collection)
+
 See also: [`Architecture.md`](Architecture.md), [`../TASKS.md`](../TASKS.md).

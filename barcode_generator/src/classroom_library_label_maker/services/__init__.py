@@ -68,6 +68,7 @@ from classroom_library_label_maker.services.lookups import (
     OpenLibraryEnrichmentProvider,
 )
 from classroom_library_label_maker.services.workbook_generation_service import (
+    PreparedGeneration,
     WorkbookGenerationService,
 )
 
@@ -88,6 +89,7 @@ __all__ = [
     "NullBookEnrichmentProvider",
     "OpenLibraryEnrichmentProvider",
     "ReviewSession",
+    "PreparedGeneration",
     "WorkbookGenerationService",
     "create_default_enrichment_service",
     "review_session_from_enrichment",

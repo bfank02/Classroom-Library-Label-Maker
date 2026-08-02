@@ -26,6 +26,9 @@ Copy into a PR description or a filled
       returns Home without clearing Files settings; no new generation logic
 - [ ] Home screen presentation uses Files / Options / Actions sections with
       header and version footer; workflow and generation unchanged
+- [ ] Reviewed ISBNs must flow through one authoritative book list into
+      barcode generation, label layout, and inventory update
+      (`prepare` → review → `produce`; no parallel collections)
 - [ ] New work uses `WorkbookGenerationService` (or its collaborators),
       not deprecated `BatchProcessor` / `BarcodeGenerator`
 - [ ] Unexpected failures map to the existing exception hierarchy where

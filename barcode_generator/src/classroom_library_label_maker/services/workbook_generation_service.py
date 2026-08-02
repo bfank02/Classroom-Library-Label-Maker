@@ -6,10 +6,17 @@ output (never imports openpyxl). Does not print or display UI.
 
 Depends on :class:`BookEnrichmentService` for optional missing-ISBN lookup —
 never on catalog-specific providers.
+
+Interactive review (GUI) sits between :meth:`prepare` and :meth:`produce` so
+barcode generation, label layout, and inventory update share one authoritative
+post-review book collection. :meth:`generate` remains prepare+produce for CLI
+and callers that do not insert a review step.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 import time
 
@@ -73,6 +80,23 @@ _logger = get_logger("workbook_generation_service")
 _DEFAULT_OUTPUT_NAME = "library_labels.xlsx"
 
 
+@dataclass(frozen=True, slots=True)
+class PreparedGeneration:
+    """Import + enrichment outcome ready for review and/or produce.
+
+    ``books`` are post-enrichment (FOUND ISBNs applied; review-queue rows may
+    still use the missing-ISBN placeholder). GUI review must merge accepted
+    ISBNs into this collection before :meth:`WorkbookGenerationService.produce`.
+    """
+
+    books: tuple[Book, ...]
+    source_rows: tuple[int, ...]
+    enrichment: EnrichmentSummary
+    warnings: tuple[WorkbookGenerationWarning, ...]
+    books_imported: int
+    started_at: float
+
+
 class WorkbookGenerationService:
     """Generate a saved label workbook from an inventory spreadsheet.
 
@@ -80,6 +104,7 @@ class WorkbookGenerationService:
 
         ExcelImportService
             → (optional) BookEnrichmentService
+            → [optional interactive review — GUI]
             → BatchProcessingService
             → LabelLayoutService
             → WorkbookWriter.save
@@ -134,38 +159,49 @@ class WorkbookGenerationService:
         output_path: Path | None = None,
         progress_reporter: GenerationProgressReporter | None = None,
     ) -> WorkbookGenerationResult:
-        """Import books, optionally enrich ISBNs, generate barcodes, layout, save.
+        """Import, enrich, generate barcodes, layout, and save (no review pause).
 
-        Args:
-            workbook_path: Optional inventory workbook override.
-            output_path: Optional destination for the label workbook. Defaults to
-                ``{project_root}/output/library_labels.xlsx``.
-            progress_reporter: Optional per-call progress override. When omitted,
-                uses the reporter supplied at construction (if any).
+        For interactive review, call :meth:`prepare`, apply review decisions to
+        the book list, then :meth:`produce` with that authoritative collection.
+        """
+        prepared = self.prepare(
+            workbook_path=workbook_path,
+            progress_reporter=progress_reporter,
+        )
+        return self.produce(
+            prepared.books,
+            source_rows=prepared.source_rows,
+            enrichment=prepared.enrichment,
+            prior_warnings=prepared.warnings,
+            books_imported=prepared.books_imported,
+            output_path=output_path,
+            progress_reporter=progress_reporter,
+            started_at=prepared.started_at,
+        )
 
-        Returns:
-            Immutable :class:`WorkbookGenerationResult`.
+    def prepare(
+        self,
+        *,
+        workbook_path: Path | None = None,
+        progress_reporter: GenerationProgressReporter | None = None,
+    ) -> PreparedGeneration:
+        """Import the inventory and optionally enrich missing ISBNs.
 
-        Raises:
-            ConfigurationError: When required paths/settings are missing.
-            FileSystemError: When files cannot be read or written.
-            InvalidWorkbookError: When the inventory workbook is invalid.
-            LabelLayoutError: When layout fails unrecoverably.
-            WorkbookGenerationError: When orchestration fails unrecoverably.
+        Does not generate barcodes or write the label workbook. Callers that
+        need interactive review should merge accepted ISBNs into ``books``
+        before :meth:`produce`.
         """
         reporter = (
             progress_reporter if progress_reporter is not None else self._progress
         )
         started = time.perf_counter()
-        destination = self._resolve_output_path(output_path)
         warnings: list[WorkbookGenerationWarning] = []
         enrichment_summary = EnrichmentSummary(enabled=False)
 
         _logger.info(
-            "Workbook generation started: inventory=%s output=%s "
+            "Workbook generation prepare started: inventory=%s "
             "lookup_missing_isbns=%s",
             workbook_path or self._settings.workbook_path,
-            destination,
             self._settings.lookup_missing_isbns,
         )
 
@@ -200,7 +236,67 @@ class WorkbookGenerationService:
                     enrichment_summary.lookup_errors,
                     enrichment_summary.cache_hits,
                 )
+        except (
+            ConfigurationError,
+            FileSystemError,
+            InvalidWorkbookError,
+            LabelLayoutError,
+            WorkbookGenerationError,
+        ):
+            raise
+        except ApplicationError:
+            raise
+        except Exception as exc:
+            raise WorkbookGenerationError(
+                f"Workbook generation failed: {exc}",
+                cause=exc,
+            ) from exc
 
+        return PreparedGeneration(
+            books=tuple(books_for_batch),
+            source_rows=tuple(imported.source_rows),
+            enrichment=enrichment_summary,
+            warnings=tuple(warnings),
+            books_imported=len(imported.books),
+            started_at=started,
+        )
+
+    def produce(
+        self,
+        books: Sequence[Book],
+        *,
+        source_rows: Sequence[int],
+        enrichment: EnrichmentSummary | None = None,
+        prior_warnings: Sequence[WorkbookGenerationWarning] = (),
+        books_imported: int | None = None,
+        output_path: Path | None = None,
+        progress_reporter: GenerationProgressReporter | None = None,
+        started_at: float | None = None,
+    ) -> WorkbookGenerationResult:
+        """Generate barcodes, lay out labels, and save from an authoritative book list.
+
+        ``books`` must already include automatically found and review-accepted
+        ISBNs. Inventory updates should use this same collection.
+        """
+        reporter = (
+            progress_reporter if progress_reporter is not None else self._progress
+        )
+        started = started_at if started_at is not None else time.perf_counter()
+        destination = self._resolve_output_path(output_path)
+        warnings: list[WorkbookGenerationWarning] = list(prior_warnings)
+        enrichment_summary = enrichment or EnrichmentSummary(enabled=False)
+        books_for_batch = list(books)
+        imported_count = (
+            books_imported if books_imported is not None else len(books_for_batch)
+        )
+
+        _logger.info(
+            "Workbook generation produce started: books=%s output=%s",
+            len(books_for_batch),
+            destination,
+        )
+
+        try:
             self._report(reporter, GenerationStage.VALIDATING)
             self._report(reporter, GenerationStage.GENERATING_BARCODES)
             batch = self._batch.process_books(books_for_batch)
@@ -283,7 +379,7 @@ class WorkbookGenerationService:
 
         elapsed = time.perf_counter() - started
         result = WorkbookGenerationResult(
-            books_imported=len(imported.books),
+            books_imported=imported_count,
             books_processed=batch.total_processed,
             labels_created=layout.labels_placed,
             pages_created=layout.pages_created,
@@ -295,7 +391,7 @@ class WorkbookGenerationService:
             warnings=tuple(warnings),
             enrichment=enrichment_summary,
             books=tuple(books_for_batch),
-            source_rows=tuple(imported.source_rows),
+            source_rows=tuple(source_rows),
         )
         _logger.info(
             "Workbook generation complete: imported=%s labels=%s pages=%s "

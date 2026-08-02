@@ -931,7 +931,8 @@ class WorkbookGenerationResult:
         elapsed_seconds: Wall-clock duration of the full run.
         warnings: Recoverable issues from import, enrichment, batch, or layout.
         enrichment: Optional ISBN enrichment summary for this run.
-        books: Post-enrichment books in import order (for inventory updates).
+        books: Authoritative books used for barcodes/labels (post-enrichment,
+            and post-review when the GUI applied decisions), in import order.
         source_rows: Matching 1-based Excel row numbers from import.
     """
 

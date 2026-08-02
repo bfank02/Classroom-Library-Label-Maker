@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Reviewed ISBNs now generate barcodes and labels: GUI runs
+  `prepare` → Review Wizard → `produce` so barcode generation, label layout,
+  workbook save, and inventory update share one authoritative post-review
+  book collection (Version 1.4.1)
+
 ### Added
 
 - Google Books API key integration: `GOOGLE_BOOKS_API_KEY` resolved once in

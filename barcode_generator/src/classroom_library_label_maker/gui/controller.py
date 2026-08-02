@@ -33,10 +33,12 @@ from classroom_library_label_maker.generation_summary import (
 from classroom_library_label_maker.gui.form_state import GenerationFormState
 from classroom_library_label_maker.gui.generation_worker import (
     GenerationJob,
+    GenerationPhase,
     GenerationServiceFactory,
     GenerationWorker,
     WorkbookGenerator,
     _default_generation_service,
+    _supports_phases,
 )
 from classroom_library_label_maker.gui.review_wizard import ReviewWizardDialog
 from classroom_library_label_maker.gui_preferences import (
@@ -57,6 +59,7 @@ from classroom_library_label_maker.label_templates import (
 from classroom_library_label_maker.logger import get_logger
 from classroom_library_label_maker.models import (
     ApplicationSettings,
+    Book,
     LabelContentOptions,
     ReviewSessionResult,
     WorkbookGenerationResult,
@@ -65,10 +68,15 @@ from classroom_library_label_maker.progress import GenerationProgress
 from classroom_library_label_maker.services.book_review_service import (
     BookReviewService,
     ReviewSession,
+    books_with_review_applied,
+    review_session_from_enrichment,
     review_session_from_generation_result,
 )
 from classroom_library_label_maker.services.inventory_update_service import (
     InventoryUpdateService,
+)
+from classroom_library_label_maker.services.workbook_generation_service import (
+    PreparedGeneration,
 )
 from classroom_library_label_maker.constants import DEFAULT_LABEL_FILENAME
 from classroom_library_label_maker.user_paths import (
@@ -177,6 +185,9 @@ class GuiController(QObject):
         self._save_updated_inventory_on_review = True
         self._last_review_result: ReviewSessionResult | None = None
         self._last_updated_inventory_path: Path | None = None
+        self._pending_preparation: PreparedGeneration | None = None
+        self._pending_review_outcome: ReviewWizardOutcome | None = None
+        self._authoritative_books: tuple[Book, ...] | None = None
         self._state = GenerationFormState()
         self._is_generating = False
         self._active_thread: QThread | None = None
@@ -386,14 +397,19 @@ class GuiController(QObject):
             self._window.generate_button.setEnabled(False)
             return
 
+        probe = self._generation_service_factory(settings)
+        use_phases = _supports_phases(probe)
+        phase = GenerationPhase.PREPARE if use_phases else GenerationPhase.FULL
         job = GenerationJob(
             settings=settings,
             workbook_path=inventory,
             output_path=output,
+            phase=phase,
         )
         self._logger.info(
             "Running generate via WorkbookGenerationService "
-            "(inventory=%s, barcodes=%s, output=%s, template=%s)",
+            "(phase=%s, inventory=%s, barcodes=%s, output=%s, template=%s)",
+            phase.value,
             inventory,
             settings.barcode_output_directory,
             output,
@@ -403,10 +419,16 @@ class GuiController(QObject):
         self._is_generating = True
         self._last_review_result = None
         self._last_updated_inventory_path = None
+        self._pending_preparation = None
+        self._pending_review_outcome = None
+        self._authoritative_books = None
         self._window.show_home()
         self._set_inputs_enabled(False)
         self._set_status("Generating labels…", level="ok")
+        self._start_generation_job(job)
 
+    def _start_generation_job(self, job: GenerationJob) -> None:
+        """Start a background worker for one generation phase."""
         thread = QThread()
         worker = GenerationWorker(
             job,
@@ -415,11 +437,21 @@ class GuiController(QObject):
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.progress.connect(self._on_generation_progress)
+        worker.prepared.connect(self._on_generation_prepared)
         worker.completed.connect(self._on_generation_completed)
         worker.failed.connect(self._on_generation_failed)
+        worker.prepared.connect(thread.quit)
         worker.completed.connect(thread.quit)
         worker.failed.connect(thread.quit)
-        thread.finished.connect(self._on_generation_thread_finished)
+
+        def _cleanup_phase() -> None:
+            if self._active_thread is thread:
+                self._active_thread = None
+                self._active_worker = None
+            worker.deleteLater()
+            thread.deleteLater()
+
+        thread.finished.connect(_cleanup_phase)
 
         self._active_thread = thread
         self._active_worker = worker
@@ -434,6 +466,74 @@ class GuiController(QObject):
         self._set_status(progress.message, level="ok")
 
     @Slot(object)
+    def _on_generation_prepared(self, prepared: object) -> None:
+        """After import/enrichment: review if needed, then produce labels."""
+        assert isinstance(prepared, PreparedGeneration)
+        if not self._is_generating:
+            return
+        self._pending_preparation = prepared
+        self._set_status("Reviewing ISBN matches…", level="ok")
+
+        books = prepared.books
+        outcome: ReviewWizardOutcome | None = None
+        session = review_session_from_enrichment(prepared.enrichment)
+        if session is not None:
+            outcome = self._review_wizard_runner(
+                session,
+                self._save_updated_inventory_on_review,
+            )
+            if outcome is None:
+                self._logger.info("ISBN review wizard dismissed without Finish")
+            else:
+                self._last_review_result = outcome.review_result
+                self._save_updated_inventory_on_review = (
+                    outcome.save_updated_inventory
+                )
+                self._persist_preferences()
+                self._logger.info(
+                    "ISBN review finished: resolved=%s skipped=%s unresolved=%s "
+                    "save_inventory=%s",
+                    outcome.review_result.resolved_count,
+                    outcome.review_result.skipped_count,
+                    outcome.review_result.unresolved_count,
+                    outcome.save_updated_inventory,
+                )
+                books = books_with_review_applied(
+                    prepared.books,
+                    outcome.session,
+                    outcome.review_result,
+                )
+
+        self._pending_review_outcome = outcome
+        self._authoritative_books = tuple(books)
+        inventory = self._state.inventory_workbook
+        output = self._state.output_workbook
+        assert inventory is not None
+        assert output is not None
+        try:
+            settings = self.build_application_settings()
+        except ApplicationError as exc:
+            self._is_generating = False
+            self._set_status(exc.message, level="error")
+            self._set_inputs_enabled(True)
+            return
+
+        self._set_status("Generating labels…", level="ok")
+        produce_job = GenerationJob(
+            settings=settings,
+            workbook_path=inventory,
+            output_path=output,
+            phase=GenerationPhase.PRODUCE,
+            books=self._authoritative_books,
+            source_rows=prepared.source_rows,
+            enrichment=prepared.enrichment,
+            prior_warnings=prepared.warnings,
+            books_imported=prepared.books_imported,
+            started_at=prepared.started_at,
+        )
+        self._start_generation_job(produce_job)
+
+    @Slot(object)
     def _on_generation_completed(self, result: object) -> None:
         assert isinstance(result, WorkbookGenerationResult)
         self._is_generating = False
@@ -441,8 +541,26 @@ class GuiController(QObject):
             "Generation complete: %s",
             result.to_dict()["summary"],
         )
-        inventory_path = self._run_interactive_review_if_needed(result)
+        if self._pending_preparation is not None:
+            inventory_path = self._finalize_inventory_after_generation(result)
+        else:
+            # Legacy full-generate stubs (no prepare/produce).
+            inventory_path = self._run_interactive_review_if_needed(result)
+        self._pending_preparation = None
+        self._pending_review_outcome = None
+        self._authoritative_books = None
         self._show_ready_to_print(result, inventory_path)
+
+    def _finalize_inventory_after_generation(
+        self,
+        result: WorkbookGenerationResult,
+    ) -> Path | None:
+        """Write updated inventory from the post-review authoritative books."""
+        self._last_updated_inventory_path = None
+        outcome = self._pending_review_outcome
+        if outcome is None or not outcome.save_updated_inventory:
+            return None
+        return self._write_updated_inventory(result, outcome)
 
     def _show_ready_to_print(
         self,
@@ -605,18 +723,9 @@ class GuiController(QObject):
                 level="error",
             )
         self._set_inputs_enabled(True)
-
-    @Slot()
-    def _on_generation_thread_finished(self) -> None:
-        """Drop worker/thread references after the background thread stops."""
-        worker = self._active_worker
-        thread = self._active_thread
-        self._active_worker = None
-        self._active_thread = None
-        if worker is not None:
-            worker.deleteLater()
-        if thread is not None:
-            thread.deleteLater()
+        self._pending_preparation = None
+        self._pending_review_outcome = None
+        self._authoritative_books = None
 
     def _set_inputs_enabled(self, enabled: bool) -> None:
         window = self._window
