@@ -442,13 +442,13 @@ def test_gui_completion_includes_updated_inventory_summary() -> None:
     )
     text = gui_completion_status(
         result,
-        updated_inventory_path=Path("Inventory (Updated ISBNs).xlsx"),
+        updated_inventory_path=Path("Science Books (Updated ISBNs).xlsx"),
     )
     assert "Generation Complete" in text
     assert "✓ Label workbook created" in text
     assert "✓ Inventory workbook updated" in text
     assert "Library Labels.xlsx" in text
-    assert "Inventory (Updated ISBNs).xlsx" in text
+    assert "Science Books (Updated ISBNs).xlsx" in text
 
 
 def test_gui_preferences_round_trip_save_inventory_flag(tmp_path: Path) -> None:

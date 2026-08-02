@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Updated inventory filename derives from the original workbook
+  (`{stem} (Updated ISBNs){ext}` via `build_updated_inventory_filename`),
+  still saved beside the original with `unique_path` collision handling
+  (Version 1.4.3)
+- Review Wizard Manual ISBN section: compact form layout (label above field,
+  Apply ISBN right-aligned to field width), three UI states
+  (collapsed / editing / accepted), secondary styling to catalog matches
+  (Version 1.4.3)
+
 ### Fixed
 
 - Review Wizard Manual ISBN: Previous no longer dead-ends — restored accepted
@@ -37,7 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Review Wizard **Next** when the current book already has a decision
   (presentation; session `next()` unchanged) (Version 1.4.3)
-- Manual ISBN **Edit ISBN** / **Cancel Edit** and accepted-state restore
+- Manual ISBN **Edit ISBN** / **Back to Matches** and accepted-state restore
   (Version 1.4.3)
 - `gui/theme.py` shared presentation colors and typography helpers for Home
   and Ready to Print
@@ -92,7 +103,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Interactive review wizard (`ReviewWizardDialog`): thin Qt UI over
   `ReviewSession` after generation
 - Updated inventory workbook after review: `InventoryUpdateService` +
-  `OpenPyxlInventoryWorkbookUpdater` write `Inventory (Updated ISBNs).xlsx`
+  `OpenPyxlInventoryWorkbookUpdater` write a non-destructive copy beside
+  the source (filename via `build_updated_inventory_filename`)
   (unique suffix on collision); original inventory never overwritten;
   completion summary lists both saved workbooks
 - Cross-platform packaging: shared `scripts/build_release.py`, macOS

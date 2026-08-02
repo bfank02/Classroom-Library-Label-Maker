@@ -11,7 +11,7 @@ from pathlib import Path
 
 from classroom_library_label_maker.constants import (
     MISSING_ISBN_PLACEHOLDER,
-    UPDATED_INVENTORY_FILE_NAME,
+    UPDATED_INVENTORY_MARKER,
 )
 from classroom_library_label_maker.logger import get_logger
 from classroom_library_label_maker.models import (
@@ -92,9 +92,28 @@ class InventoryUpdateService:
         return written
 
 
+def build_updated_inventory_filename(source_path: Path) -> str:
+    """Build the updated inventory filename from the original workbook path.
+
+    Preserves the original stem and extension, appending
+    `` (Updated ISBNs)`` before the extension. Collision handling is left
+    to :func:`unique_path` via :func:`default_updated_inventory_path`.
+
+    Examples::
+
+        Science Books.xlsx → Science Books (Updated ISBNs).xlsx
+        Carrie's Library.xlsx → Carrie's Library (Updated ISBNs).xlsx
+    """
+    source = Path(source_path)
+    stem = source.stem or "Inventory"
+    suffix = source.suffix if source.suffix else ".xlsx"
+    return f"{stem} ({UPDATED_INVENTORY_MARKER}){suffix}"
+
+
 def default_updated_inventory_path(source_path: Path) -> Path:
     """Return a unique path beside ``source_path`` for the updated inventory."""
-    proposed = Path(source_path).parent / UPDATED_INVENTORY_FILE_NAME
+    source = Path(source_path)
+    proposed = source.parent / build_updated_inventory_filename(source)
     return unique_path(proposed)
 
 

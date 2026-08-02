@@ -470,13 +470,15 @@ Module: `classroom_library_label_maker.services.inventory_update_service`
 
 **Purpose:** After review, merge applied decisions into post-enrichment books
 and write a **new** inventory workbook via `InventoryWorkbookUpdater`. Never
-overwrites the original file. Default destination:
-`Inventory (Updated ISBNs).xlsx` beside the source (uses `unique_path` on
-collision).
+overwrites the original file. Default destination: beside the source,
+named `{original stem} (Updated ISBNs){ext}` via
+`build_updated_inventory_filename` (uses `unique_path` on collision).
 
-| Method | Inputs | Outputs |
-|--------|--------|---------|
+| Method / helper | Inputs | Outputs |
+|-----------------|--------|---------|
 | `write_updated_inventory(...)` | source path, settings, books, source_rows, session, review result | written `Path` |
+| `build_updated_inventory_filename(source)` | original inventory `Path` | filename string |
+| `default_updated_inventory_path(source)` | original inventory `Path` | unique destination `Path` |
 
 Auto-enriched and review-accepted ISBNs are written; missing-placeholder /
 skipped rows are left alone. OpenPyxl stays in
@@ -835,8 +837,9 @@ candidate clicks / Finish to the session.
 **Presentation (v1.4 Phase 4 + 1.4.3):** Clear section hierarchy, friendly amber
 guidance, **⭐ Recommended Match** with confidence beneath, stronger selected
 card styling, and **This book will be skipped.** when restoring a skip.
-Manual ISBN section matches candidate-card spacing; accepted state shows
-**Edit ISBN**.
+Manual ISBN is a secondary compact form (ISBN field sized for 13 digits,
+Apply right-aligned) with collapsed / editing / accepted states; **Edit ISBN**
+prefills the previous value; **Back to Matches** leaves editing.
 
 **Workflow (v1.4 Phase 2 + 1.4.3):** Skip / candidate / manual apply
 auto-advance after ~250 ms. **Next** appears when the current book already

@@ -158,6 +158,11 @@ def test_manual_entry_section_is_not_a_candidate_card(qapp) -> None:
     assert dialog.manual_editor_panel.isVisible() is False
     assert dialog.manual_accepted_panel.isVisible() is False
     assert dialog.findChild(object, "reviewManualIsbnSection") is not None
+    # Explicit light-surface styles (macOS dark mode otherwise ghosts button text).
+    sheet = dialog.findChild(object, "reviewManualIsbnSection").styleSheet()
+    assert "color: #1a1a1a" in sheet
+    assert "QLineEdit" in sheet
+    assert dialog.manual_isbn_edit.placeholderText() == ""
     dialog.close()
 
 
@@ -369,7 +374,7 @@ def test_edit_isbn_prefills_and_reapply(qapp) -> None:
     assert dialog.manual_editor_panel.isVisible() is True
     assert dialog.manual_accepted_panel.isVisible() is False
     assert dialog.manual_isbn_edit.text() == MANUAL_ISBN13
-    assert dialog.manual_cancel_edit_button.isVisible() is True
+    assert dialog.manual_toggle_button.text() == "Back to Matches"
     # Decision remains while editing — Next still available.
     assert dialog.next_button.isVisible() is True
 
@@ -381,10 +386,11 @@ def test_edit_isbn_prefills_and_reapply(qapp) -> None:
     assert session.current_decision_is_manual() is True
     assert session.decision_for_current().candidate.isbn13 == other
     assert dialog.manual_accepted_isbn.text() == other
+    assert dialog.manual_editor_panel.isVisible() is False
     dialog.close()
 
 
-def test_cancel_edit_restores_accepted_without_change(qapp) -> None:
+def test_back_to_matches_from_edit_restores_accepted_without_change(qapp) -> None:
     session = _two_book_session()
     dialog = ReviewWizardDialog(session, auto_advance_ms=5_000)
     dialog.show()
@@ -398,12 +404,46 @@ def test_cancel_edit_restores_accepted_without_change(qapp) -> None:
     dialog.manual_edit_button.click()
     QApplication.processEvents()
     dialog.manual_isbn_edit.setText("9780140328721")
-    dialog.manual_cancel_edit_button.click()
+    assert dialog.manual_toggle_button.text() == "Back to Matches"
+    dialog.manual_toggle_button.click()
     QApplication.processEvents()
 
     assert dialog.manual_accepted_panel.isVisible() is True
+    assert dialog.manual_editor_panel.isVisible() is False
     assert dialog.manual_accepted_isbn.text() == MANUAL_ISBN13
     assert session.decision_for_current().candidate.isbn13 == MANUAL_ISBN13
+    dialog.close()
+
+
+def test_manual_section_states_collapsed_editing_accepted(qapp) -> None:
+    session = _two_book_session()
+    dialog = ReviewWizardDialog(session, auto_advance_ms=5_000)
+    dialog.show()
+    QApplication.processEvents()
+
+    # Collapsed
+    assert dialog.manual_toggle_button.isVisible() is True
+    assert dialog.manual_toggle_button.text() == "Enter ISBN Manually"
+    assert dialog.manual_editor_panel.isVisible() is False
+    assert dialog.manual_accepted_panel.isVisible() is False
+
+    # Editing
+    dialog.manual_toggle_button.click()
+    QApplication.processEvents()
+    assert dialog.manual_toggle_button.text() == "Back to Matches"
+    assert dialog.manual_editor_panel.isVisible() is True
+    assert dialog.manual_isbn_field_label.text() == "ISBN"
+    assert dialog.manual_accepted_panel.isVisible() is False
+
+    # Accepted
+    dialog.manual_isbn_edit.setText(MANUAL_ISBN13)
+    dialog.manual_apply_button.click()
+    QApplication.processEvents()
+    assert dialog.manual_accepted_panel.isVisible() is True
+    assert dialog.manual_editor_panel.isVisible() is False
+    assert dialog.manual_toggle_button.isVisible() is False
+    assert "Manual ISBN Accepted" in dialog.manual_accepted_title.text()
+    assert dialog.manual_edit_button.isVisible() is True
     dialog.close()
 
 
@@ -419,8 +459,14 @@ def test_manual_section_layout_construction(qapp) -> None:
     dialog.manual_toggle_button.click()
     QApplication.processEvents()
     assert dialog.manual_toggle_button.text() == "Back to Matches"
-    assert dialog.manual_isbn_edit.maximumWidth() <= 320
-    assert dialog.manual_apply_button.maximumWidth() <= 140
+    # Label sits above the field; fixed width for ~13-digit ISBN.
+    assert dialog.manual_isbn_edit.width() <= 230
+    assert dialog.manual_isbn_edit.maximumWidth() <= 230 or (
+        dialog.manual_isbn_edit.minimumWidth()
+        == dialog.manual_isbn_edit.maximumWidth()
+    )
+    assert dialog.manual_help_label.width() <= 230
+    assert dialog.manual_apply_button.width() <= 120
     dialog.close()
 
 

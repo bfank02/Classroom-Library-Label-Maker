@@ -532,16 +532,16 @@ Ready to Print completion page (GuiCompletionSummary / CompletionView)
   light tint, subtle elevation, and a short checkmark fade (~150 ms).
   Recommended cards show **⭐ Recommended Match** with the confidence label
   beneath (e.g. Very High Match).
-* Below catalog matches, an alternative path **Can't find the correct
-  edition? / Enter ISBN Manually** expands an inline panel (ISBN field,
-  help text, **Apply ISBN**) — not a candidate card. Invalid values show an
-  inline message; valid ISBN-10/13 values become ordinary
-  `ReviewDecision`s via `ReviewSession.select_manual_isbn` (normalized to
-  ISBN-13), show **✓ Manual ISBN Accepted** with **Edit ISBN**, and
-  auto-advance like a card selection (~250 ms). Collapse control reads
-  **Back to Matches**. Previous restores the accepted manual ISBN (or the
-  expanded draft editor); **Next** (or **Finish Review** on the last book)
-  continues without requiring Don't Generate Label (Version 1.4.3).
+* Below catalog matches, a secondary form **Can't find the correct edition?**
+  with three UI states — collapsed (**Enter ISBN Manually**), editing
+  (ISBN label above a ~13-digit field, help text, **Apply ISBN** right-aligned
+  to the field; **Back to Matches**), and accepted (**✓ Manual ISBN Accepted**
+  + ISBN + **Edit ISBN**). Invalid values show an inline message; valid
+  ISBN-10/13 values become ordinary `ReviewDecision`s via
+  `ReviewSession.select_manual_isbn` (normalized to ISBN-13) and auto-advance
+  like a card selection (~250 ms). Previous restores the accepted manual ISBN
+  (or the expanded draft editor); **Next** (or **Finish Review** on the last
+  book) continues without requiring Don't Generate Label (Version 1.4.3).
 * **Don't Generate Label** (formerly Skip) records an intentional skip,
   shows **✓ Label will not be generated**, and auto-advances after ~250 ms
   like other resolutions. Skipped books remain in the updated inventory
@@ -557,10 +557,10 @@ Ready to Print completion page (GuiCompletionSummary / CompletionView)
   (teacher may still choose Don't Generate Label or change the choice).
 * Checkbox **Save updated inventory workbook when review is complete**
   (default on) is persisted in `GuiPreferences`. When checked on Finish,
-  `InventoryUpdateService` writes a new workbook
-  (`Inventory (Updated ISBNs).xlsx`, unique suffix on collision) beside the
-  original — never overwriting the teacher's file. Auto-enriched and
-  review-accepted ISBNs are written; skipped rows stay unchanged.
+  `InventoryUpdateService` writes a new workbook whose name derives from the
+  original stem (`{stem} (Updated ISBNs){ext}`, unique suffix on collision)
+  beside the original — never overwriting the teacher's file. Auto-enriched
+  and review-accepted ISBNs are written; skipped rows stay unchanged.
 * After review (or when no review is needed), the GUI shows a full-page
   **✔ Ready to Print** completion view (`CompletionView` +
   `build_gui_completion_summary`) with label/page counts, optional
@@ -582,14 +582,16 @@ InventoryUpdateService
 InventoryWorkbookUpdater (OpenPyxlInventoryWorkbookUpdater)
         │ save-as copy
         ▼
-Inventory (Updated ISBNs).xlsx
+{original stem} (Updated ISBNs).xlsx
+  (build_updated_inventory_filename + unique_path)
 ```
 
 * `WorkbookGenerationResult.books` / `source_rows` carry post-enrichment books
   and Excel row numbers so the updater can patch ISBN cells without
   re-importing or changing generation behavior.
 * OpenPyxl stays in the workbook adapter; the service only builds update
-  pairs and chooses a unique destination path (`utils.file_utils.unique_path`).
+  pairs, builds the destination filename from the source workbook, and
+  chooses a unique path (`utils.file_utils.unique_path`).
 
 **In-memory enrichment cache**
 

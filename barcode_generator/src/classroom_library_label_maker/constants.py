@@ -84,9 +84,10 @@ QUICK_START_FILE_NAME = "Quick Start.md"
 GUI_PREFERENCES_FILE_NAME = "gui_preferences.json"
 DEFAULT_LABEL_FILENAME = "library_labels.xlsx"
 
-# Default name for a copy of the inventory with review/enrichment ISBN updates.
-# Never overwrite the teacher's original workbook.
-UPDATED_INVENTORY_FILE_NAME = "Inventory (Updated ISBNs).xlsx"
+# Suffix marker inserted into updated inventory filenames
+# (e.g. "Science Books (Updated ISBNs).xlsx").
+# Filename generation: ``build_updated_inventory_filename``.
+UPDATED_INVENTORY_MARKER = "Updated ISBNs"
 
 # Provisional ISBN used when inventory rows omit ISBN and lookup is enabled.
 # Not a valid ISBN-13; enrichment replaces it on FOUND, otherwise validation

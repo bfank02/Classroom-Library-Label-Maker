@@ -87,8 +87,9 @@ pause). Use **Previous** to go back; your prior choice (or an unfinished manual
 entry) is restored. On the last book, **Finish Review** replaces **Don't
 Generate Label** once you have selected, entered, or opted out. Leave **Save
 updated inventory workbook when review is complete** checked to write a new
-`Inventory (Updated ISBNs).xlsx` next to your original inventory (your
-original file is never changed). Skipped books stay in that inventory with
+file next to your original inventory, named from your file (e.g.
+`Science Books (Updated ISBNs).xlsx`; your original file is never changed).
+Skipped books stay in that inventory with
 blank ISBNs and never appear on labels.
 
 When generation finishes, the main window shows a **✔ Ready to Print** page

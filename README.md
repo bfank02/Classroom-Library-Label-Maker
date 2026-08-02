@@ -21,9 +21,10 @@ Start here: [`docs/Quick Start.md`](docs/Quick%20Start.md)
    manually, or choose **Don't Generate Label** (only books with a resolved
    ISBN get barcodes/labels; skipped books stay in inventory). Selections
    advance automatically; Finish Review appears on the last book.
-   Optionally leave **Save updated inventory workbook** checked to create
-   `Inventory (Updated ISBNs).xlsx` beside your original (the original file
-   is never overwritten). When generation finishes, a **✔ Ready to Print**
+   Optionally leave **Save updated inventory workbook** checked to create a
+   new file beside your original named after that inventory, e.g.
+   `Science Books (Updated ISBNs).xlsx` (the original file is never
+   overwritten). When generation finishes, a **✔ Ready to Print**
    page lists what was created and lets you open the files or click **Done**
    to return Home. Then print the label workbook on Avery 5160 sheets.
 

@@ -100,7 +100,7 @@ def _seed_controller(
 
 def test_build_gui_completion_summary_details() -> None:
     output = Path("/tmp/Test Labels Carrie.xlsx")
-    inventory = Path("/tmp/Inventory (Updated ISBNs).xlsx")
+    inventory = Path("/tmp/Science Books (Updated ISBNs).xlsx")
     summary = build_gui_completion_summary(
         _result(
             output,
@@ -119,7 +119,7 @@ def test_build_gui_completion_summary_details() -> None:
     assert "21 ISBNs found automatically" in summary.detail_lines
     assert "5 books reviewed" in summary.detail_lines
     assert summary.label_workbook_name == "Test Labels Carrie.xlsx"
-    assert summary.updated_inventory_name == "Inventory (Updated ISBNs).xlsx"
+    assert summary.updated_inventory_name == "Science Books (Updated ISBNs).xlsx"
     assert summary.requires_attention is False
 
 
@@ -154,7 +154,7 @@ def test_completion_view_after_generation(qapp, tmp_path: Path) -> None:
 
 def test_updated_inventory_shown_conditionally(qapp, tmp_path: Path) -> None:
     output = tmp_path / "out" / "labels.xlsx"
-    inventory_out = tmp_path / "Inventory (Updated ISBNs).xlsx"
+    inventory_out = tmp_path / "Science Books (Updated ISBNs).xlsx"
     window = MainWindow()
     controller = _seed_controller(window, tmp_path, _result(output))
     controller._last_review_result = ReviewSessionResult(
@@ -233,7 +233,7 @@ def test_open_label_workbook_action(qapp, tmp_path: Path) -> None:
 
 def test_open_updated_inventory_action(qapp, tmp_path: Path) -> None:
     output = tmp_path / "out" / "labels.xlsx"
-    inventory_out = tmp_path / "Inventory (Updated ISBNs).xlsx"
+    inventory_out = tmp_path / "Science Books (Updated ISBNs).xlsx"
     opened: list[Path] = []
     window = MainWindow()
     controller = _seed_controller(

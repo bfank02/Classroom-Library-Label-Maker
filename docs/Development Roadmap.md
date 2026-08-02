@@ -123,6 +123,10 @@ Phase 3 is printing only.
 ## Version 1.4.3 — Review Wizard Manual ISBN polish
 
 - [x] Manual ISBN restored as a full review state (Next / Finish, Edit ISBN,
-      Back to Matches, layout aligned with candidate cards)
+      Back to Matches)
+- [x] Manual ISBN compact form layout (collapsed / editing / accepted) secondary
+      to catalog matches
+- [x] Updated inventory filename derived from original workbook stem
+  (`build_updated_inventory_filename`)
 
 See also: [`Architecture.md`](Architecture.md), [`../TASKS.md`](../TASKS.md).

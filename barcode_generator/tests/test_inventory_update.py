@@ -11,7 +11,6 @@ from classroom_library_label_maker.config import load_application_settings
 from classroom_library_label_maker.constants import (
     DEFAULT_LABEL_TEMPLATE_ID,
     MISSING_ISBN_PLACEHOLDER,
-    UPDATED_INVENTORY_FILE_NAME,
 )
 from classroom_library_label_maker.models import (
     Book,
@@ -25,6 +24,7 @@ from classroom_library_label_maker.services.book_review_service import (
 )
 from classroom_library_label_maker.services.inventory_update_service import (
     InventoryUpdateService,
+    build_updated_inventory_filename,
     default_updated_inventory_path,
     isbn_cell_updates,
 )
@@ -57,22 +57,45 @@ def _candidate(isbn13: str) -> ReviewCandidate:
 
 
 def test_unique_path_increments_when_file_exists(tmp_path: Path) -> None:
-    first = tmp_path / "Inventory (Updated ISBNs).xlsx"
+    first = tmp_path / "Science Books (Updated ISBNs).xlsx"
     first.write_text("x", encoding="utf-8")
     second = unique_path(first)
-    assert second == tmp_path / "Inventory (Updated ISBNs) (1).xlsx"
+    assert second == tmp_path / "Science Books (Updated ISBNs) (1).xlsx"
     second.write_text("y", encoding="utf-8")
     third = unique_path(first)
-    assert third == tmp_path / "Inventory (Updated ISBNs) (2).xlsx"
+    assert third == tmp_path / "Science Books (Updated ISBNs) (2).xlsx"
+
+
+def test_build_updated_inventory_filename_preserves_stem_and_extension() -> None:
+    assert (
+        build_updated_inventory_filename(Path("Science Books.xlsx"))
+        == "Science Books (Updated ISBNs).xlsx"
+    )
+    assert (
+        build_updated_inventory_filename(Path("/tmp/Carrie's Library.xlsx"))
+        == "Carrie's Library (Updated ISBNs).xlsx"
+    )
+    assert (
+        build_updated_inventory_filename(Path("notes.xlsm"))
+        == "notes (Updated ISBNs).xlsm"
+    )
+
+
+def test_default_updated_inventory_path_beside_source(tmp_path: Path) -> None:
+    source = tmp_path / "Science Books.xlsx"
+    source.write_text("x", encoding="utf-8")
+    path = default_updated_inventory_path(source)
+    assert path == tmp_path / "Science Books (Updated ISBNs).xlsx"
+    assert path.parent == source.parent
 
 
 def test_default_updated_inventory_path_avoids_collision(tmp_path: Path) -> None:
-    source = tmp_path / "books.xlsx"
+    source = tmp_path / "Science Books.xlsx"
     source.write_text("x", encoding="utf-8")
-    existing = tmp_path / UPDATED_INVENTORY_FILE_NAME
+    existing = tmp_path / "Science Books (Updated ISBNs).xlsx"
     existing.write_text("y", encoding="utf-8")
     path = default_updated_inventory_path(source)
-    assert path.name == "Inventory (Updated ISBNs) (1).xlsx"
+    assert path.name == "Science Books (Updated ISBNs) (1).xlsx"
     assert path.parent == tmp_path
 
 
@@ -137,7 +160,8 @@ def test_write_updated_inventory_preserves_original_and_formats(
         review_result=review_result,
     )
 
-    assert written.name == UPDATED_INVENTORY_FILE_NAME
+    assert written.name == "Teacher Books (Updated ISBNs).xlsx"
+    assert written.parent == source.parent
     assert written != source
     assert written.is_file()
 
