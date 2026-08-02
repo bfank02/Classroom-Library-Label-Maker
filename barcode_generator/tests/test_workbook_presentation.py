@@ -102,7 +102,7 @@ def test_workbook_properties_and_active_sheet(tmp_path: Path) -> None:
 
 
 def test_label_formatting_wraps_long_titles() -> None:
-    """Title cells should use wrapping centered alignment and title font."""
+    """Title cells use adaptive fitting, wrapping alignment, and title font."""
     target = OpenPyxlLabelSheetTarget()
     target.begin_page(1, template=AVERY_5160)
     long_title = (
@@ -122,14 +122,17 @@ def test_label_formatting_wraps_long_titles() -> None:
     )
     sheet = target.workbook[f"{LABEL_SHEET_PREFIX}1"]
     title_cell = sheet.cell(1, 1)
-    assert title_cell.value == long_title
+    assert isinstance(title_cell.value, str)
+    assert title_cell.value  # fitted text (may wrap / ellipsize)
+    assert title_cell.value.count("\n") <= 1
     assert title_cell.alignment.wrap_text is True
     assert title_cell.alignment.horizontal == "center"
     assert title_cell.font.bold is True
-    # Title spans two worksheet rows; author is the next text slot.
-    assert sheet.cell(3, 1).value == "Author Name"
-    assert sheet.cell(3, 1).alignment.wrap_text is True
-    assert sheet.cell(4, 1).value == "[barcode placeholder]"
+    assert title_cell.font.size <= 9
+    # Title spans three worksheet rows; author then barcode follow.
+    assert sheet.cell(4, 1).value == "Author Name"
+    assert sheet.cell(4, 1).alignment.wrap_text is True
+    assert sheet.cell(5, 1).value == "[barcode placeholder]"
 
 
 def test_barcode_image_is_sized_and_centered(tmp_path: Path) -> None:
@@ -180,13 +183,14 @@ def test_barcode_image_is_sized_and_centered(tmp_path: Path) -> None:
     assert anchor._from.colOff >= 0
     assert anchor._from.rowOff >= 0
 
-    # Default Title+Author+Barcode: title 2 + author 1 + barcode 5 → ~0.625".
+    # Default Title+Author+Barcode: title 3 + author 1 + barcode 4 → ~0.48".
     emu_per_inch = 914_400
     height_inches = anchor.ext.cy / emu_per_inch
     width_inches = anchor.ext.cx / emu_per_inch
-    assert 0.55 <= height_inches <= 0.70
+    assert 0.40 <= height_inches <= 0.55
     assert width_inches <= AVERY_5160.label_width
-    assert width_inches >= 1.5
+    # Height-limited SC2 aspect yields ~1.44" on the 4-row barcode band.
+    assert width_inches >= 1.3
 
 
 def test_apply_presentation_helpers_are_idempotent() -> None:

@@ -95,13 +95,14 @@ def test_form_state_requires_at_least_one_content_field(
 
 
 def test_distribute_row_spans_prefers_barcode_height() -> None:
-    # Title gets 2 rows so 9 pt bold is not clipped on the 8-row label grid.
+    # Title gets 3 rows so two lines of 9 pt bold are not clipped on the
+    # 8-row label grid; author stays 1; barcode keeps the remainder.
     assert _distribute_row_spans(["title", "author", "barcode"], 8) == [
-        (0, 2),
-        (2, 1),
-        (3, 5),
+        (0, 3),
+        (3, 1),
+        (4, 4),
     ]
-    assert _distribute_row_spans(["title", "barcode"], 8) == [(0, 2), (2, 6)]
+    assert _distribute_row_spans(["title", "barcode"], 8) == [(0, 3), (3, 5)]
     assert _distribute_row_spans(["barcode"], 8) == [(0, 8)]
     assert _distribute_row_spans(["title", "author"], 8) == [(0, 4), (4, 4)]
     # Tight grids fall back to one row per text field.
@@ -201,10 +202,11 @@ def test_title_barcode_layout_maximizes_print_footprint(tmp_path: Path) -> None:
     width_in = image.anchor.ext.cx / 914_400
     height_in = image.anchor.ext.cy / 914_400
     assert LABEL_WORKSHEET_ROWS_PER_LABEL == 8
-    # Standard SC2 barcodes are narrower than the label; height still fills the slot.
-    assert width_in >= 1.0
+    # Title uses 3 rows; barcode keeps 5/8 of the 1" Avery label.
+    # SC2 aspect ratio means width tracks the height-limited slot.
+    assert width_in >= 0.75
     assert width_in <= AVERY_5160.label_width
-    assert height_in >= 0.70
+    assert height_in >= 0.55
 
 
 def test_generation_respects_title_only_content(

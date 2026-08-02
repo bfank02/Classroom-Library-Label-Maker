@@ -107,10 +107,13 @@ Phase 3 is printing only.
 - [x] Intentional label skipping: Don't Generate Label; filter skipped books
       before produce; inventory retains rows; Ready to Print summary counts
 
-## Version 1.4.2 — Home stability
+## Version 1.4.2 — Home stability & label titles
 
 - [x] Home dirty-field tracking so Label File Name and future edits survive
       Options/UI refreshes; commit at Generate / editingFinished
 - [x] Home layout stability (minimum size, form row policy, no section overlap)
+- [x] Adaptive label title rendering: taller title band (3 rows with barcode),
+      font-metrics fit helper (`fit_label_title`), shrink then ellipsis,
+      Excel + PDF; max two lines without clipping/overlap
 
 See also: [`Architecture.md`](Architecture.md), [`../TASKS.md`](../TASKS.md).

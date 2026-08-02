@@ -259,7 +259,7 @@ def test_openpyxl_target_places_without_saving(
     assert "Labels 1" in target.workbook.sheetnames
     sheet = target.workbook["Labels 1"]
     assert sheet.cell(1, 1).value == "Demo"
-    assert sheet.cell(3, 1).value == "Author"
+    assert sheet.cell(4, 1).value == "Author"
     # Barcode slot is empty text when a PNG is present; ISBN is in the image.
-    assert sheet.cell(4, 1).value in (None, "")
+    assert sheet.cell(5, 1).value in (None, "")
     assert len(sheet._images) == 1

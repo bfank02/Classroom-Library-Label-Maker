@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Label titles: second wrapped line no longer clips — title band uses three
+  worksheet rows when a barcode is present, and Excel/PDF share font-metrics
+  adaptive fitting (shrink then ellipsis; max two lines) (Version 1.4.2)
 - Home Label File Name no longer reverts when changing template, label
   contents, or lookup options: editable controls use session dirty tracking
   so UI refreshes do not overwrite in-progress edits (Version 1.4.2)
@@ -22,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `fit_label_title` / `FittedTitle` reusable title-fitting helper
+  (`rendering/title_fitter.py`) for Excel and PDF label renderers
 - `DirtyFieldTracker` for generic Home editable-field dirty state
 - Manual ISBN entry in the Review Wizard: teachers can enter ISBN-10 or ISBN-13
   inline when catalog matches are wrong or missing; accepted values become

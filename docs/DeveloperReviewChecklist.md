@@ -41,6 +41,9 @@ Copy into a PR description or a filled
 - [ ] Don't Generate Label / manual ISBN / catalog selection are ordinary
       `ReviewSession` decisions; produce must not understand skip semantics
       beyond receiving the filtered eligible list
+- [ ] Label titles use `fit_label_title` (font metrics); geometry prefers
+      enough title-band height before shrink/ellipsis; max two lines; no
+      overlap with author or barcode
 - [ ] New work uses `WorkbookGenerationService` (or its collaborators),
       not deprecated `BatchProcessor` / `BarcodeGenerator`
 - [ ] Unexpected failures map to the existing exception hierarchy where

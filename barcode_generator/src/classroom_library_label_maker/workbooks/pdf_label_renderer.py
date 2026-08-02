@@ -16,6 +16,11 @@ from classroom_library_label_maker.constants import (
 )
 from classroom_library_label_maker.label_templates.label_template import LabelTemplate
 from classroom_library_label_maker.logger import get_logger
+from classroom_library_label_maker.rendering.title_fitter import (
+    DEFAULT_TITLE_SIZE_PT,
+    fit_label_title,
+    load_title_font,
+)
 from classroom_library_label_maker.utils.file_utils import ensure_directory
 from classroom_library_label_maker.workbooks.label_sheet_target import LabelPlacement
 from classroom_library_label_maker.workbooks.openpyxl_label_sheet_target import (
@@ -48,7 +53,7 @@ def write_labels_pdf(
     Returns:
         Resolved path written.
     """
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw
 
     if dpi <= 0:
         raise ValueError("dpi must be positive")
@@ -60,8 +65,8 @@ def write_labels_pdf(
         by_page[placement.page_number].append(placement)
 
     pages: list[Image.Image] = []
-    font_title = _load_font(bold=True, size_pt=9, dpi=dpi)
-    font_body = _load_font(bold=False, size_pt=8, dpi=dpi)
+    font_title = load_title_font(bold=True, size_pt=DEFAULT_TITLE_SIZE_PT, dpi=dpi)
+    font_body = load_title_font(bold=False, size_pt=8.0, dpi=dpi)
 
     for page_number in sorted(by_page):
         page = Image.new(
@@ -224,18 +229,31 @@ def _draw_clipped_label_text(
     band = Image.new("RGB", (band_w, band_h), (255, 255, 255))
     band_draw = ImageDraw.Draw(band)
 
-    fitted_font, wrapped = _fit_wrapped_text(
-        band_draw,
-        text=text,
-        font=font,
-        max_width=max(1, band_w - 4),
-        max_height=max(1, band_h - 2),
-        prefer_bold=prefer_bold,
+    start_pt = float(getattr(font, "size", DEFAULT_TITLE_SIZE_PT * dpi / 72.0))
+    start_pt = start_pt * 72.0 / float(dpi)
+    # Body text (author) starts near 8 pt; titles near 9 pt.
+    if not prefer_bold:
+        start_pt = min(start_pt, 8.0)
+    else:
+        start_pt = max(start_pt, DEFAULT_TITLE_SIZE_PT)
+
+    fitted = fit_label_title(
+        text,
+        max_width_in=width * (1.0 - 2.0 * pad),
+        max_height_in=height * (1.0 - 2.0 * pad),
+        start_size_pt=start_pt,
+        bold=prefer_bold,
+        dpi=dpi,
+        max_lines=2 if prefer_bold else 3,
+    )
+    fitted_font = load_title_font(
+        bold=prefer_bold,
+        size_pt=fitted.font_size_pt,
         dpi=dpi,
     )
     band_draw.multiline_text(
         (band_w // 2, band_h // 2),
-        wrapped,
+        fitted.text,
         font=fitted_font,
         fill=(0, 0, 0),
         anchor="mm",
@@ -246,163 +264,6 @@ def _draw_clipped_label_text(
     x = _inches_to_px(left + width * pad, dpi)
     y = _inches_to_px(top + height * pad, dpi)
     page.paste(band, (x, y))  # type: ignore[attr-defined]
-
-
-def _fit_wrapped_text(
-    draw: object,
-    *,
-    text: str,
-    font: object,
-    max_width: int,
-    max_height: int,
-    prefer_bold: bool,
-    dpi: int,
-) -> tuple[object, str]:
-    """Wrap ``text`` to ``max_width`` and shrink the font until it fits height."""
-    cleaned = " ".join(text.split())
-    if not cleaned:
-        return font, ""
-
-    # Try the provided font first, then step down a few point sizes.
-    base_size = max(8, int(getattr(font, "size", 18)))
-    size_pt_guess = base_size * 72.0 / float(dpi)
-    candidates_pt = [
-        size_pt_guess,
-        size_pt_guess - 1,
-        size_pt_guess - 2,
-        max(6.0, size_pt_guess - 3),
-    ]
-
-    chosen_font = font
-    chosen_text = cleaned
-    for size_pt in candidates_pt:
-        trial_font = _load_font(bold=prefer_bold, size_pt=size_pt, dpi=dpi)
-        wrapped = _wrap_text(draw, cleaned, trial_font, max_width)
-        bbox = draw.multiline_textbbox(  # type: ignore[attr-defined]
-            (0, 0),
-            wrapped,
-            font=trial_font,
-            spacing=2,
-            align="center",
-        )
-        text_h = bbox[3] - bbox[1]
-        text_w = bbox[2] - bbox[0]
-        chosen_font = trial_font
-        chosen_text = wrapped
-        if text_h <= max_height and text_w <= max_width:
-            return trial_font, wrapped
-
-    # Still too tall: keep as many lines as fit and ellipsize the last line.
-    lines = chosen_text.split("\n")
-    kept: list[str] = []
-    for index, line in enumerate(lines):
-        trial = "\n".join([*kept, line])
-        bbox = draw.multiline_textbbox(  # type: ignore[attr-defined]
-            (0, 0),
-            trial,
-            font=chosen_font,
-            spacing=2,
-            align="center",
-        )
-        if bbox[3] - bbox[1] <= max_height:
-            kept.append(line)
-            continue
-        if not kept:
-            kept.append(_ellipsize_line(draw, line, chosen_font, max_width))
-        else:
-            kept[-1] = _ellipsize_line(draw, kept[-1], chosen_font, max_width)
-        break
-    return chosen_font, "\n".join(kept) if kept else _ellipsize_line(
-        draw, cleaned, chosen_font, max_width
-    )
-
-
-def _wrap_text(draw: object, text: str, font: object, max_width: int) -> str:
-    """Word-wrap ``text`` so each line fits ``max_width`` pixels."""
-    words = text.split(" ")
-    if not words:
-        return ""
-
-    lines: list[str] = []
-    current = words[0]
-    for word in words[1:]:
-        trial = f"{current} {word}"
-        bbox = draw.textbbox((0, 0), trial, font=font)  # type: ignore[attr-defined]
-        if bbox[2] - bbox[0] <= max_width:
-            current = trial
-            continue
-        lines.append(current)
-        current = word
-        # Hard-break an oversized single token.
-        while True:
-            bbox = draw.textbbox((0, 0), current, font=font)  # type: ignore[attr-defined]
-            if bbox[2] - bbox[0] <= max_width or len(current) <= 1:
-                break
-            # Leave room for a hyphen when splitting long words.
-            split_at = max(1, len(current) // 2)
-            for end in range(len(current) - 1, 0, -1):
-                piece = current[:end] + "-"
-                piece_box = draw.textbbox((0, 0), piece, font=font)  # type: ignore[attr-defined]
-                if piece_box[2] - piece_box[0] <= max_width:
-                    split_at = end
-                    break
-            lines.append(current[:split_at] + "-")
-            current = current[split_at:]
-    lines.append(current)
-    return "\n".join(lines)
-
-
-def _ellipsize_line(draw: object, text: str, font: object, max_width: int) -> str:
-    """Truncate ``text`` with an ellipsis so it fits ``max_width``."""
-    if not text:
-        return ""
-    bbox = draw.textbbox((0, 0), text, font=font)  # type: ignore[attr-defined]
-    if bbox[2] - bbox[0] <= max_width:
-        return text
-    ellipsis = "…"
-    for end in range(len(text), 0, -1):
-        candidate = text[:end].rstrip() + ellipsis
-        box = draw.textbbox((0, 0), candidate, font=font)  # type: ignore[attr-defined]
-        if box[2] - box[0] <= max_width:
-            return candidate
-    return ellipsis
-
-
-def _load_font(*, bold: bool, size_pt: float, dpi: int) -> object:
-    from PIL import ImageFont
-
-    size_px = max(8, int(round(size_pt * dpi / 72.0)))
-    candidates: list[Path] = []
-    try:
-        import barcode as barcode_package
-
-        font_dir = Path(barcode_package.__file__).resolve().parent / "fonts"
-        candidates.append(font_dir / "DejaVuSansMono-Bold.ttf" if bold else font_dir / "DejaVuSansMono.ttf")
-        candidates.append(font_dir / "DejaVuSansMono.ttf")
-    except Exception:
-        pass
-    # Common macOS fonts for title readability.
-    if bold:
-        candidates.extend(
-            [
-                Path("/System/Library/Fonts/Supplemental/Arial Bold.ttf"),
-                Path("/Library/Fonts/Arial Bold.ttf"),
-            ]
-        )
-    candidates.extend(
-        [
-            Path("/System/Library/Fonts/Supplemental/Arial.ttf"),
-            Path("/Library/Fonts/Arial.ttf"),
-            Path("/System/Library/Fonts/Helvetica.ttc"),
-        ]
-    )
-    for candidate in candidates:
-        if candidate.is_file():
-            try:
-                return ImageFont.truetype(str(candidate), size=size_px)
-            except OSError:
-                continue
-    return ImageFont.load_default()
 
 
 def _inches_to_px(inches: float, dpi: int) -> int:

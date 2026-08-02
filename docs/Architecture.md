@@ -170,7 +170,7 @@ barcode_generator/src/classroom_library_label_maker/
 │   ├── protocols.py                  # BookEnrichmentProvider + progress / lookup hooks
 │   ├── lookups/         GoogleBooksEnrichmentProvider (+ future catalogs)
 │   └── covers/          Future cover downloads
-├── rendering/           Barcode image rendering (library-agnostic)
+├── rendering/           Barcode image rendering + adaptive title fitting
 │   ├── renderer.py      BarcodeRenderer protocol
 │   └── barcode_renderer.py  PythonBarcodeRenderer (EAN-13 PNG)
 ├── workbooks/           Spreadsheet / workbook I/O (library-agnostic)
@@ -222,7 +222,7 @@ Root package `__init__` exports a narrow public API (models + exceptions +
 | `logger` | Production logging setup (no import-time side effects) |
 | `services.*` | Validation, generation, batch, enrichment, import, layout, workbook generation |
 | `services.protocols` | Extension contracts for enrichment / lookups / covers / progress |
-| `rendering` | Library-agnostic barcode image rendering |
+| `rendering` | Library-agnostic barcode image rendering + title fitting |
 | `workbooks` | Library-agnostic spreadsheet read / label-sheet write |
 | `label_templates` | Immutable physical label-sheet specifications |
 | `utils.file_utils` | JSON + directory helpers |
@@ -272,9 +272,8 @@ manual developer tools — **not** part of the normal unit-test suite and must
 
 ## Rendering layer (`rendering/`)
 
-Barcode **image encoding** is isolated from business logic so the generation
-service can orchestrate skip rules and results without depending on a specific
-barcode library.
+Barcode **image encoding** and shared **label title fitting** live here so
+generation and workbook adapters stay free of Pillow layout details.
 
 ```
 Application (CLI / Excel / library callers)
@@ -299,6 +298,30 @@ Third-party barcode library (python-barcode + Pillow)
 * `BarcodeRenderer` — protocol: `render_to_file(data, output_path, *, symbology) -> Path`
 * `BarcodeSymbology` — `EAN13` (implemented), plus reserved `CODE128` / `QR`
 * `PythonBarcodeRenderer` — EAN-13 PNG backend via python-barcode + Pillow
+* `fit_label_title` / `FittedTitle` (`rendering/title_fitter.py`) — font-metrics
+  adaptive title layout shared by Excel and PDF label renderers
+
+### Adaptive label title rendering
+
+Classroom titles vary widely. Fitting uses **font metrics** (Pillow text
+bboxes), never character-count heuristics.
+
+**Geometry (Excel 8-row Avery grid, one row ≈ 9 pt):** With a barcode present,
+the title merge uses **3 rows** (~0.375″) so two lines of 9 pt bold Calibri fit
+without clipping descenders. Author keeps 1 row; the barcode band receives the
+remainder. Author and barcode placement order are unchanged.
+
+**Strategy (`fit_label_title`):**
+
+1. Wrap at the default title size (9 pt) if the text fits in at most two lines
+   and within the title band height/width.
+2. Otherwise reduce point size gradually (9 → 8 → 7); stop at the minimum.
+3. If it still cannot fit in two lines, ellipsize (e.g. `Horrible, No Good…`).
+
+Product guarantees: title stays inside the title area; ≤ 2 rendered lines; no
+clipped descenders; no overlap with author or barcode. Excel writes the fitted
+text and font size into the title cell; the PDF renderer draws the same fitted
+result into the title band.
 
 ### Renderer configuration (`ApplicationSettings`)
 
@@ -906,8 +929,10 @@ sheet set to the first `Labels N` worksheet.
 paper size / margins from `LabelTemplate`, print area covering the label grid,
 fit-to-page width, horizontal centering for print.
 
-**Label cells:** centered Calibri text; titles wrap (`wrap_text=True`) so long
-titles do not spill into neighboring labels. Layout geometry is unchanged.
+**Label cells:** centered Calibri text; titles use adaptive fitting
+(`fit_label_title`) so long titles wrap within two lines, may shrink to a
+minimum point size, then ellipsize — never overflow into author, barcode, or
+neighboring labels. With barcodes, titles occupy three worksheet rows.
 
 ### Excel import service (`services/excel_import_service.py`)
 

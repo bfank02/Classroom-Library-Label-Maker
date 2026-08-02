@@ -13,6 +13,10 @@ from typing import Any, Literal
 from classroom_library_label_maker.constants import LABEL_WORKSHEET_ROWS_PER_LABEL
 from classroom_library_label_maker.label_templates.label_template import LabelTemplate
 from classroom_library_label_maker.logger import get_logger
+from classroom_library_label_maker.rendering.title_fitter import (
+    DEFAULT_TITLE_SIZE_PT,
+    fit_label_title,
+)
 from classroom_library_label_maker.workbooks.label_sheet_target import LabelPlacement
 from classroom_library_label_maker.workbooks.workbook_presentation import (
     apply_worksheet_presentation,
@@ -35,9 +39,9 @@ _BARCODE_SLOT_FILL = 0.96
 _BARCODE_SLOT_FILL_TITLE_BARCODE = 0.98
 
 # With LABEL_WORKSHEET_ROWS_PER_LABEL=8, one row is only 9 pt tall — too short for
-# 9 pt bold titles when printing. Prefer two rows for the title when a barcode
-# is present so Excel does not clip the top of the text.
-_TITLE_ROWS_WITH_BARCODE = 2
+# 9 pt bold titles when printing. Prefer three rows for the title when a barcode
+# is present so two wrapped lines fit without clipping descenders.
+_TITLE_ROWS_WITH_BARCODE = 3
 
 # Consistent sheet title prefix (page number appended).
 LABEL_SHEET_PREFIX = "Labels "
@@ -126,9 +130,22 @@ class OpenPyxlLabelSheetTarget:
                 )
 
             if kind == "title":
-                cell = sheet.cell(row=cell_row, column=start_col, value=value)
+                band_height_in = template.label_height * (
+                    row_span / float(block_rows)
+                )
+                fitted = fit_label_title(
+                    value or "",
+                    max_width_in=template.label_width * 0.98,
+                    max_height_in=band_height_in * 0.92,
+                    start_size_pt=DEFAULT_TITLE_SIZE_PT,
+                )
+                cell = sheet.cell(
+                    row=cell_row,
+                    column=start_col,
+                    value=fitted.text,
+                )
                 cell.alignment = label_title_alignment()
-                cell.font = label_title_font()
+                cell.font = label_title_font(size=fitted.font_size_pt)
             elif kind == "author":
                 cell = sheet.cell(row=cell_row, column=start_col, value=value)
                 cell.alignment = label_body_alignment()
@@ -260,9 +277,9 @@ def _distribute_row_spans(
 
     When a barcode slot is present last, text fields keep compact row counts and
     the barcode receives the remaining height so scan targets stay large. The
-    title prefers two rows (print-safe for 9 pt bold on an 8-row label grid);
-    other text fields keep one row. Without a barcode, extra rows prefer
-    earlier text slots (titles).
+    title prefers three rows (print-safe for two lines of 9 pt bold on an
+    8-row label grid); other text fields keep one row. Without a barcode,
+    extra rows prefer earlier text slots (titles).
     """
     slot_count = len(slot_kinds)
     if slot_count <= 0:
@@ -300,8 +317,8 @@ def _text_row_counts_with_barcode(
     block_rows: int,
 ) -> list[int] | None:
     """Return per-text-field row counts, or ``None`` if barcode cannot fit."""
-    # Two title rows only on the production 8-row grid (1 row ≈ 9 pt, too short
-    # for 9 pt bold). Smaller test/custom grids keep one row per text field.
+    # Three title rows on the production 8-row grid (1 row ≈ 9 pt). Two title
+    # rows were too short for a second wrapped line of 9 pt bold without clipping.
     title_rows = _TITLE_ROWS_WITH_BARCODE if block_rows >= 8 else 1
     counts: list[int] = []
     for kind in text_kinds:

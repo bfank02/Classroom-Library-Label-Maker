@@ -146,11 +146,15 @@ def label_body_alignment() -> Any:
     return Alignment(horizontal="center", vertical="center", wrap_text=True)
 
 
-def label_title_font() -> Any:
-    """Font used for book titles on labels."""
+def label_title_font(*, size: float | int | None = None) -> Any:
+    """Font used for book titles on labels.
+
+    ``size`` overrides the default 9 pt when adaptive fitting chooses a
+    smaller point size.
+    """
     from openpyxl.styles import Font
 
-    return Font(name="Calibri", size=9, bold=True)
+    return Font(name="Calibri", size=float(size) if size is not None else 9, bold=True)
 
 
 def label_body_font() -> Any:

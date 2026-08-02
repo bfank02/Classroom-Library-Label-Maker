@@ -95,8 +95,13 @@ def test_long_title_stays_inside_label_band(tmp_path: Path) -> None:
         color=(255, 255, 255),
     )
     draw = ImageDraw.Draw(page)
-    font_title = pdf_mod._load_font(bold=True, size_pt=9, dpi=dpi)
-    font_body = pdf_mod._load_font(bold=False, size_pt=8, dpi=dpi)
+    from classroom_library_label_maker.rendering.title_fitter import (
+        DEFAULT_TITLE_SIZE_PT,
+        load_title_font,
+    )
+
+    font_title = load_title_font(bold=True, size_pt=DEFAULT_TITLE_SIZE_PT, dpi=dpi)
+    font_body = load_title_font(bold=False, size_pt=8.0, dpi=dpi)
     pdf_mod._draw_label(
         page,
         draw,
@@ -111,8 +116,9 @@ def test_long_title_stays_inside_label_band(tmp_path: Path) -> None:
     # next label — must stay white (no spilled title ink).
     label_right = AVERY_5160.left_margin + AVERY_5160.label_width
     gap_x = int(round((label_right + AVERY_5160.horizontal_gap / 2.0) * dpi))
+    # Title+Barcode: title occupies 3 of 8 worksheet rows.
     title_band_bottom = int(
-        round((AVERY_5160.top_margin + AVERY_5160.label_height * (2 / 8)) * dpi)
+        round((AVERY_5160.top_margin + AVERY_5160.label_height * (3 / 8)) * dpi)
     )
     ink = 0
     for y in range(0, title_band_bottom + 4):

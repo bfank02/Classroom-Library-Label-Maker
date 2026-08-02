@@ -366,6 +366,18 @@ types inside the rendering layer.
 **External use:** Prefer depending on `BarcodeRenderer` in services; construct
 `PythonBarcodeRenderer` only when injecting a concrete backend.
 
+### `fit_label_title` / `FittedTitle` — Experimental — External
+
+Module: `classroom_library_label_maker.rendering.title_fitter`
+
+**Purpose:** Font-metrics adaptive fitting for label titles (wrap → shrink →
+ellipsis; max two lines). Used by Excel and PDF label placement.
+
+| API | Inputs | Outputs |
+|-----|--------|---------|
+| `fit_label_title(title, *, max_width_in, max_height_in, …)` | Title + band size (inches) | `FittedTitle` |
+| `FittedTitle` | — | `text`, `font_size_pt`, `line_count`, `used_ellipsis`, `reduced_font` |
+
 ---
 
 ## Services
@@ -698,7 +710,8 @@ optional barcode path, and placeholder flag.
 ### `OpenPyxlLabelSheetTarget` — Stable — External (default write backend)
 
 **Purpose:** Place centered title/author/ISBN (and optional barcode image) onto
-openpyxl worksheets with wrapping title text and worksheet print presentation.
+openpyxl worksheets. Titles use `fit_label_title` (wrap / shrink / ellipsis)
+with a three-row title band when barcodes are shown.
 Persisting the workbook is the job of `OpenPyxlWorkbookWriter` /
 `WorkbookWriter.save`.
 
